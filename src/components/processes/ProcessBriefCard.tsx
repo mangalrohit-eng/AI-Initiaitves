@@ -18,6 +18,7 @@ import { MetricPill } from "@/components/ui/MetricPill";
 import { EvidenceSection } from "@/components/evidence/EvidenceSection";
 import { formatHours, slugify } from "@/lib/utils";
 import { TIER_STYLES } from "@/lib/priority";
+import { ChangedSinceBadge } from "@/components/collab/ChangedSinceBadge";
 
 function priorityBadge(priority: AIProcessBrief["aiPriority"]) {
   const styles = TIER_STYLES[priority];
@@ -80,9 +81,12 @@ export function ProcessBriefCard({
             </Link>
           ) : null}
         </div>
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">
-          {brief.name}
-        </h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">
+            {brief.name}
+          </h1>
+          <ChangedSinceBadge kind="brief" id={brief.id} lastUpdated={brief.lastUpdated} />
+        </div>
         {brief.description ? (
           <p className="max-w-4xl text-sm leading-relaxed text-forge-body">{brief.description}</p>
         ) : null}

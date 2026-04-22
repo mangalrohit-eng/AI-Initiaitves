@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { BookOpen } from "lucide-react";
+import { SignOutButton } from "./SignOutButton";
+import { NavActions } from "./NavActions";
 
 export function TopNav() {
   return (
@@ -28,6 +30,10 @@ export function TopNav() {
             <BookOpen className="h-4 w-4" aria-hidden />
             Glossary
           </Link>
+          <div className="ml-1 h-5 w-px bg-forge-border" aria-hidden />
+          <NavActions />
+          <div className="h-5 w-px bg-forge-border" aria-hidden />
+          <SignOutButton />
         </nav>
       </div>
     </header>

@@ -5,6 +5,7 @@ import type { Tower } from "@/data/types";
 import { formatHours, operatingModelTotals } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
+import { ChangedSinceBadge } from "@/components/collab/ChangedSinceBadge";
 
 function Sparkline({ tower }: { tower: Tower }) {
   const values = tower.processes.map((p) => p.estimatedAnnualHoursSaved);
@@ -39,8 +40,16 @@ export function TowerCard({ tower, index }: { tower: Tower; index: number }) {
       <Link href={`/tower/${tower.id}`} className="group block">
         <div className="rounded-2xl border border-forge-border bg-forge-surface p-5 shadow-card transition hover:border-accent-purple hover:shadow-md">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="font-display text-lg font-semibold text-forge-ink">{tower.name}</div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <div className="font-display text-lg font-semibold text-forge-ink">{tower.name}</div>
+                <ChangedSinceBadge
+                  kind="tower"
+                  id={tower.id}
+                  lastUpdated={tower.lastUpdated}
+                  variant="dot"
+                />
+              </div>
               <div className="mt-1 text-xs text-forge-subtle">Versant: {tower.versantLeads.join(", ")}</div>
               <div className="text-xs text-forge-hint">Accenture: {tower.accentureLeads.join(", ")}</div>
             </div>

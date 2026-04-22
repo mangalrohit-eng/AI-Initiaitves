@@ -61,6 +61,7 @@ export function BusinessCase({ process }: { process: Process }) {
   return (
     <section
       aria-label="Business case"
+      data-annot-anchor="business-case"
       className="rounded-2xl border border-forge-border bg-gradient-to-br from-accent-purple/5 via-forge-surface to-forge-surface p-5 shadow-card sm:p-6"
     >
       <header className="flex flex-wrap items-start justify-between gap-3">

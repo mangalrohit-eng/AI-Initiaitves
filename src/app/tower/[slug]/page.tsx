@@ -7,6 +7,7 @@ import { AiRoadmap } from "@/components/operatingModel/AiRoadmap";
 import { TowerHeader } from "@/components/towers/TowerHeader";
 import { TowerOpportunities } from "@/components/towers/TowerOpportunities";
 import { ShareBar } from "@/components/ui/ShareBar";
+import { ViewTracker } from "@/components/collab/ViewTracker";
 import { towers } from "@/data/towers";
 import { getTowerBySlug } from "@/lib/utils";
 
@@ -25,8 +26,22 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: tower.name }]} />
-          <ShareBar title={tower.name} />
+          <ShareBar
+            title={tower.name}
+            pin={{
+              kind: "tower",
+              id: tower.id,
+              href: `/tower/${tower.id}`,
+              title: tower.name,
+            }}
+          />
         </div>
+        <ViewTracker
+          kind="tower"
+          id={tower.id}
+          href={`/tower/${tower.id}`}
+          title={tower.name}
+        />
 
         <div className="mt-6">
           <TowerHeader tower={tower} />

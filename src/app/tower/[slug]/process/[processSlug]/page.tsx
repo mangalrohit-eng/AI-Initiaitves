@@ -8,6 +8,7 @@ import { BusinessCase } from "@/components/processes/BusinessCase";
 import { ShareBar } from "@/components/ui/ShareBar";
 import { ViewTracker } from "@/components/collab/ViewTracker";
 import { AnnotationOverlay } from "@/components/collab/AnnotationOverlay";
+import { ChangedSinceBadge } from "@/components/collab/ChangedSinceBadge";
 import { towers } from "@/data/towers";
 import { getEvidenceForProcess, getProcessBySlugs, slugify } from "@/lib/utils";
 
@@ -51,9 +52,16 @@ export default function ProcessPage({ params }: { params: { slug: string; proces
         <AnnotationOverlay />
 
         <div className="mt-6 space-y-4">
-          <h1 className="font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">
-            {hit.process.name}
-          </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">
+              {hit.process.name}
+            </h1>
+            <ChangedSinceBadge
+              kind="initiative"
+              id={hit.process.id}
+              lastUpdated={hit.process.lastUpdated}
+            />
+          </div>
           <p className="max-w-4xl text-sm leading-relaxed text-forge-body">{hit.process.description}</p>
           <ProcessMetrics process={hit.process} />
         </div>

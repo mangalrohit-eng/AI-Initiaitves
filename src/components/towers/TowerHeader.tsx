@@ -1,6 +1,7 @@
 import type { Tower } from "@/data/types";
 import { formatHours, operatingModelTotals } from "@/lib/utils";
 import { MetricPill } from "@/components/ui/MetricPill";
+import { ChangedSinceBadge } from "@/components/collab/ChangedSinceBadge";
 
 export function TowerHeader({ tower }: { tower: Tower }) {
   const agentsModeled = tower.processes.reduce((n, p) => n + p.agents.length, 0);
@@ -8,7 +9,10 @@ export function TowerHeader({ tower }: { tower: Tower }) {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">{tower.name}</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">{tower.name}</h1>
+          <ChangedSinceBadge kind="tower" id={tower.id} lastUpdated={tower.lastUpdated} />
+        </div>
         {tower.narrativeSummary ? (
           <p className="mt-3 max-w-4xl text-base font-medium leading-relaxed text-forge-ink">
             {tower.narrativeSummary}

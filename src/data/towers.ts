@@ -1,4 +1,4 @@
-import type { Tower } from "./types";
+import type { Tower, TowerSlice } from "./types";
 import { financeTower } from "./slices/finance";
 import {
   corpTower,
@@ -14,6 +14,14 @@ import {
   serviceTower,
   techTower,
 } from "./slices/remaining";
+import { workCategoriesByTower } from "./operating-models";
+
+function withWorkCategories(tower: TowerSlice): Tower {
+  return {
+    ...tower,
+    workCategories: workCategoriesByTower[tower.id] ?? [],
+  };
+}
 
 export const towers: Tower[] = [
   financeTower,
@@ -29,4 +37,4 @@ export const towers: Tower[] = [
   editorialTower,
   productionTower,
   programmingTower,
-];
+].map(withWorkCategories);

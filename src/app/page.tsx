@@ -2,10 +2,13 @@ import { TowerGrid } from "@/components/towers/TowerGrid";
 import { PageShell } from "@/components/PageShell";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { towers } from "@/data/towers";
-import { aggregateTotals } from "@/lib/utils";
+import { aggregateTotals, towerAiEligibility } from "@/lib/utils";
 
 export default function HomePage() {
   const totals = aggregateTotals();
+  const eligibility = towerAiEligibility();
+  const totalProcesses = eligibility.reduce((n, r) => n + r.total, 0);
+  const totalAiEligible = eligibility.reduce((n, r) => n + r.aiEligible, 0);
 
   return (
     <PageShell>
@@ -16,8 +19,11 @@ export default function HomePage() {
           </div>
           <h1 className="mt-5 font-display text-4xl font-semibold tracking-tight text-forge-ink sm:text-5xl">Tower Explorer</h1>
           <p className="mt-4 text-base leading-relaxed text-forge-body">
-            Versant Media Group — <span className="font-medium text-forge-ink">13 functional towers</span> with drill-down processes,
-            four-lens transformation views, and agent orchestration maps for executive working sessions.
+            Versant Media Group — <span className="font-medium text-forge-ink">13 functional towers</span>,{" "}
+            <span className="font-medium text-forge-ink">{totalProcesses} mapped processes</span>, and{" "}
+            <span className="font-medium text-accent-purple-dark">{totalAiEligible} AI initiatives</span>.
+            Each tower&apos;s full operating model — work categories, every process (AI and human-led),
+            priority overlay, and four-lens agent design — in one executive-ready explorer.
           </p>
         </div>
 
@@ -29,9 +35,10 @@ export default function HomePage() {
             </div>
           </div>
           <div className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-sm">
-            <div className="text-xs uppercase tracking-wide text-forge-hint">AI processes</div>
+            <div className="text-xs uppercase tracking-wide text-forge-hint">AI / total processes</div>
             <div className="mt-2 font-mono text-2xl font-semibold text-accent-purple-dark">
-              <AnimatedNumber value={totals.aiProcesses} />
+              <AnimatedNumber value={totalAiEligible} />
+              <span className="text-forge-subtle"> / {totalProcesses}</span>
             </div>
           </div>
           <div className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-sm">

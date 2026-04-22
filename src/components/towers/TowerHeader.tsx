@@ -1,9 +1,10 @@
 import type { Tower } from "@/data/types";
-import { formatHours } from "@/lib/utils";
+import { formatHours, operatingModelTotals } from "@/lib/utils";
 import { MetricPill } from "@/components/ui/MetricPill";
 
 export function TowerHeader({ tower }: { tower: Tower }) {
   const agentsModeled = tower.processes.reduce((n, p) => n + p.agents.length, 0);
+  const om = operatingModelTotals(tower);
   return (
     <div className="space-y-4">
       <div>
@@ -11,7 +12,10 @@ export function TowerHeader({ tower }: { tower: Tower }) {
         <p className="mt-3 max-w-4xl text-sm leading-relaxed text-forge-body">{tower.description}</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricPill label="AI-eligible processes" value={`${tower.aiEligibleProcesses} / ${tower.totalProcesses}`} />
+        <MetricPill
+          label="Processes (AI / total)"
+          value={`${om.aiEligibleCount} / ${om.processCount}`}
+        />
         <MetricPill label="Agents modeled" value={`${agentsModeled}`} />
         <MetricPill label="Annual hours saved" value={`${formatHours(tower.estimatedAnnualSavingsHours)} hrs`} />
         <MetricPill label="Top opportunity" value={tower.topOpportunityHeadline} className="sm:col-span-2 lg:col-span-1" />

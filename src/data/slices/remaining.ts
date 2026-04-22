@@ -1,7 +1,7 @@
-import type { Tower } from "../types";
+import type { TowerSlice } from "../types";
 import { agent, digitalCore, orchestration, processShell, role, tool, workState } from "../helpers";
 
-export const hrTower: Tower = {
+export const hrTower: TowerSlice = {
   id: "hr",
   name: "HR & Talent",
   versantLeads: ["Jeff Massa", "Christina Noval"],
@@ -555,7 +555,7 @@ export const hrTower: Tower = {
   ],
 };
 
-export const researchTower: Tower = {
+export const researchTower: TowerSlice = {
   id: "research-analytics",
   name: "Research & Analytics",
   versantLeads: ["Ashley Matts"],
@@ -1039,7 +1039,7 @@ export const researchTower: Tower = {
   ],
 };
 
-export const legalTower: Tower = {
+export const legalTower: TowerSlice = {
   id: "legal",
   name: "Legal & Business Affairs",
   versantLeads: ["Jonathan Gottlieb"],
@@ -1531,7 +1531,7 @@ export const legalTower: Tower = {
   ],
 };
 
-export const corpTower: Tower = {
+export const corpTower: TowerSlice = {
   id: "corp-services",
   name: "Corporate Services",
   versantLeads: ["Rina Patel", "Mike Lukan"],
@@ -1909,7 +1909,7 @@ export const corpTower: Tower = {
   ],
 };
 
-export const techTower: Tower = {
+export const techTower: TowerSlice = {
   id: "tech-engineering",
   name: "Technology & Engineering",
   versantLeads: ["Mike Cagnazzi", "Steve McElwee", "Deep Bagchee"],
@@ -2396,7 +2396,7 @@ export const techTower: Tower = {
   ],
 };
 
-export const opsTower: Tower = {
+export const opsTower: TowerSlice = {
   id: "operations-technology",
   name: "Operations & Technology",
   versantLeads: ["Nate Balogh"],
@@ -2715,7 +2715,7 @@ export const opsTower: Tower = {
   ],
 };
 
-export const salesTower: Tower = {
+export const salesTower: TowerSlice = {
   id: "sales",
   name: "Sales",
   versantLeads: ["Tom Winlarald", "Becky Mason"],
@@ -3066,7 +3066,7 @@ export const salesTower: Tower = {
   ],
 };
 
-export const marketingTower: Tower = {
+export const marketingTower: TowerSlice = {
   id: "marketing-comms",
   name: "Marketing & Communications",
   versantLeads: ["Frank Tanki", "Tom Clendenin", "Amanda Norvell", "Claire Ripsteen"],
@@ -3471,7 +3471,7 @@ export const marketingTower: Tower = {
   ],
 };
 
-export const serviceTower: Tower = {
+export const serviceTower: TowerSlice = {
   id: "service",
   name: "Service",
   versantLeads: ["Todd Triplett"],
@@ -3707,7 +3707,7 @@ export const serviceTower: Tower = {
   ],
 };
 
-export const editorialTower: Tower = {
+export const editorialTower: TowerSlice = {
   id: "editorial-news",
   name: "Editorial & News",
   versantLeads: ["Brian Carovillano (MS NOW)", "Brad Quick (CNBC)"],
@@ -4183,7 +4183,7 @@ export const editorialTower: Tower = {
   ],
 };
 
-export const productionTower: Tower = {
+export const productionTower: TowerSlice = {
   id: "production",
   name: "Production",
   versantLeads: ["Jeff Behnke", "Janice Ferrell", "Brad Wall"],
@@ -4513,7 +4513,7 @@ export const productionTower: Tower = {
   ],
 };
 
-export const programmingTower: Tower = {
+export const programmingTower: TowerSlice = {
   id: "programming-dev",
   name: "Programming & Development",
   versantLeads: ["Rebecca Vazquez-Rhodes", "Cort Abraham", "Janice Ferrell"],

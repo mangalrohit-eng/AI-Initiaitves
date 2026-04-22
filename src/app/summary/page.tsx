@@ -5,6 +5,7 @@ import { ReadinessHeatmap } from "@/components/charts/ReadinessHeatmap";
 import { AgentTypesPie } from "@/components/charts/AgentTypesPie";
 import { OrchestrationPatternBars } from "@/components/charts/OrchestrationPatternBars";
 import { ProcessTimelineTable } from "@/components/charts/ProcessTimelineTable";
+import { AiEligibilityByTower } from "@/components/charts/AiEligibilityByTower";
 import { towers } from "@/data/towers";
 import {
   aggregateTotals,
@@ -13,6 +14,7 @@ import {
   hoursByTower,
   orchestrationPatternCounts,
   readinessHeatmapPoints,
+  towerAiEligibility,
 } from "@/lib/utils";
 
 export default function SummaryPage() {
@@ -22,6 +24,12 @@ export default function SummaryPage() {
   const patterns = orchestrationPatternCounts();
   const timelines = allProcessTimelines();
   const totals = aggregateTotals();
+  const eligibility = towerAiEligibility();
+  const totalOperatingProcesses = eligibility.reduce((n, r) => n + r.total, 0);
+  const totalAiEligible = eligibility.reduce((n, r) => n + r.aiEligible, 0);
+  const eligibilityPct = totalOperatingProcesses === 0
+    ? 0
+    : Math.round((totalAiEligible / totalOperatingProcesses) * 100);
 
   return (
     <PageShell>
@@ -30,8 +38,9 @@ export default function SummaryPage() {
         <div className="mt-6 max-w-3xl">
           <h1 className="font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">Executive summary</h1>
           <p className="mt-3 text-sm leading-relaxed text-forge-body">
-            Portfolio-level view of modeled hours, readiness signals, agent taxonomy mix, orchestration patterns across all{" "}
-            {totals.aiProcesses} AI-eligible processes, and implementation pacing from each process&apos;s timeline.
+            Portfolio-level view covering {totalOperatingProcesses} mapped tower processes,{" "}
+            {totalAiEligible} AI-eligible initiatives ({eligibilityPct}%), modeled hours, readiness
+            signals, agent taxonomy, orchestration patterns, and implementation pacing.
           </p>
         </div>
 
@@ -42,8 +51,12 @@ export default function SummaryPage() {
             <p className="mt-1 text-xs text-forge-subtle">Exact count from the static dataset</p>
           </div>
           <div className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-sm">
-            <div className="text-xs uppercase tracking-wide text-forge-hint">AI processes</div>
-            <div className="mt-2 font-mono text-2xl font-semibold text-accent-purple-dark">{totals.aiProcesses}</div>
+            <div className="text-xs uppercase tracking-wide text-forge-hint">Processes (AI / total)</div>
+            <div className="mt-2 font-mono text-2xl font-semibold text-accent-purple-dark">
+              {totalAiEligible}
+              <span className="text-forge-subtle"> / {totalOperatingProcesses}</span>
+            </div>
+            <p className="mt-1 text-xs text-forge-subtle">{eligibilityPct}% AI-eligible across 13 towers</p>
           </div>
           <div className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-sm">
             <div className="text-xs uppercase tracking-wide text-forge-hint">Towers</div>
@@ -56,6 +69,22 @@ export default function SummaryPage() {
         </section>
 
         <section className="mt-10 space-y-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold text-forge-ink">AI eligibility by tower</h2>
+              <p className="mt-1 text-sm text-forge-subtle">
+                {totalAiEligible} of {totalOperatingProcesses} tower processes ({eligibilityPct}%) are
+                AI-eligible — the rest are deliberately human-led where judgment, relationships, or
+                creativity are irreplaceable.
+              </p>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-forge-border bg-forge-surface p-5 shadow-card">
+            <AiEligibilityByTower data={eligibility} />
+          </div>
+        </section>
+
+        <section className="mt-12 space-y-3">
           <h2 className="font-display text-lg font-semibold text-forge-ink">Waterfall: hours saved by tower</h2>
           <p className="text-sm text-forge-subtle">Each bar increments cumulative modeled annual hours.</p>
           <div className="min-w-0 rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-card">

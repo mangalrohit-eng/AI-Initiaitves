@@ -10,6 +10,67 @@ export type Tower = {
   estimatedAnnualSavingsHours: number;
   topOpportunityHeadline: string;
   processes: Process[];
+  workCategories: WorkCategory[];
+};
+
+// Used by tower slice files — `workCategories` is merged in at composition time.
+export type TowerSlice = Omit<Tower, "workCategories">;
+
+export type WorkCategory = {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  processes: TowerProcess[];
+};
+
+export type TowerProcessFrequency =
+  | "Continuous"
+  | "Daily"
+  | "Weekly"
+  | "Monthly"
+  | "Quarterly"
+  | "Annual"
+  | "Event-driven"
+  | "Seasonal"
+  | "Per hire"
+  | "Per episode"
+  | "Per event"
+  | "Per departure"
+  | "Per production"
+  | "Per listen"
+  | "Bi-weekly"
+  | "Semi-annual";
+
+export type TowerProcessCriticality =
+  | "Mission-critical"
+  | "High"
+  | "Medium"
+  | "Low";
+
+export type TowerProcessMaturity =
+  | "Manual"
+  | "Semi-automated"
+  | "Automated"
+  | "Not yet established";
+
+export type AiPriority =
+  | "P1 — Immediate (0-6mo)"
+  | "P2 — Near-term (6-12mo)"
+  | "P3 — Medium-term (12-24mo)";
+
+export type TowerProcess = {
+  id: string;
+  name: string;
+  description?: string;
+  frequency: TowerProcessFrequency;
+  criticality: TowerProcessCriticality;
+  currentMaturity: TowerProcessMaturity;
+  aiEligible: boolean;
+  aiPriority?: AiPriority;
+  aiRationale: string;
+  aiInitiativeId?: string;
+  aiInitiativeRelation?: "primary" | "sub-process" | "related" | "governance";
 };
 
 export type Process = {

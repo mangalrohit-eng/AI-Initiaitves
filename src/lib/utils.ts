@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { AgentOrchestration, Process, Tower } from "@/data/types";
+import type { AgentOrchestration, Process, Tower, TowerProcess } from "@/data/types";
 import { towers } from "@/data/towers";
 
 export function cn(...inputs: ClassValue[]) {
@@ -106,6 +106,37 @@ export function orchestrationPatternCounts() {
     }
   }
   return PATTERN_ORDER.map((pattern) => ({ pattern, count: map.get(pattern) ?? 0 }));
+}
+
+export function operatingModelTotals(tower: Tower) {
+  const categories = tower.workCategories;
+  const processes = categories.flatMap((c) => c.processes);
+  const aiEligible = processes.filter((p) => p.aiEligible).length;
+  return {
+    categoryCount: categories.length,
+    processCount: processes.length,
+    aiEligibleCount: aiEligible,
+    notEligibleCount: processes.length - aiEligible,
+  };
+}
+
+export function towerAiEligibility() {
+  return towers.map((t) => {
+    const totals = operatingModelTotals(t);
+    const pct = totals.processCount === 0 ? 0 : (totals.aiEligibleCount / totals.processCount) * 100;
+    return {
+      id: t.id,
+      name: t.name,
+      aiEligible: totals.aiEligibleCount,
+      total: totals.processCount,
+      percent: Math.round(pct),
+    };
+  });
+}
+
+export function findAiInitiative(tower: Tower, tp: TowerProcess): Process | undefined {
+  if (!tp.aiInitiativeId) return undefined;
+  return tower.processes.find((p) => p.id === tp.aiInitiativeId);
 }
 
 export function allProcessTimelines() {

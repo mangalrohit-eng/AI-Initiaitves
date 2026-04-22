@@ -1,4 +1,4 @@
-import type { Tower } from "../types";
+import type { TowerSlice } from "../types";
 import {
   agent,
   digitalCore,
@@ -885,7 +885,7 @@ const finProcurement = processShell("fin-5", "Procurement Optimization & Vendor 
   ),
 });
 
-export const financeTower: Tower = {
+export const financeTower: TowerSlice = {
   id: "finance",
   name: "Finance",
   versantLeads: ["Greg Wright", "Andre Hale"],

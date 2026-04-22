@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Tower } from "@/data/types";
-import { formatHours } from "@/lib/utils";
+import { formatHours, operatingModelTotals } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 
@@ -28,6 +28,8 @@ function agentCountForTower(tower: Tower) {
 
 export function TowerCard({ tower, index }: { tower: Tower; index: number }) {
   const agents = agentCountForTower(tower);
+  const om = operatingModelTotals(tower);
+  const pct = om.processCount === 0 ? 0 : Math.round((om.aiEligibleCount / om.processCount) * 100);
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -49,8 +51,10 @@ export function TowerCard({ tower, index }: { tower: Tower; index: number }) {
 
           <div className="mt-5 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
             <div>
-              <div className="text-forge-hint">AI processes</div>
-              <div className="font-mono text-sm text-forge-ink">{tower.aiEligibleProcesses}</div>
+              <div className="text-forge-hint">AI / total</div>
+              <div className="font-mono text-sm text-forge-ink">
+                {om.aiEligibleCount} / {om.processCount}
+              </div>
             </div>
             <div>
               <div className="text-forge-hint">Agents</div>
@@ -63,6 +67,19 @@ export function TowerCard({ tower, index }: { tower: Tower; index: number }) {
             <div>
               <div className="text-forge-hint">Hours mix</div>
               <Sparkline tower={tower} />
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="flex items-center justify-between text-[11px] text-forge-hint">
+              <span>AI coverage</span>
+              <span className="font-mono text-forge-body">{pct}%</span>
+            </div>
+            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-forge-well">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-accent-purple/70 to-accent-purple"
+                style={{ width: `${pct}%` }}
+              />
             </div>
           </div>
         </div>

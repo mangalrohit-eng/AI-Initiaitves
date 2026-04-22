@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { HoursSavedBar } from "@/components/charts/HoursSavedBar";
 import { PageShell } from "@/components/PageShell";
-import { ProcessList } from "@/components/processes/ProcessList";
+import { OperatingModelSection } from "@/components/operatingModel/OperatingModelSection";
 import { TowerHeader } from "@/components/towers/TowerHeader";
 import { towers } from "@/data/towers";
 import { getTowerBySlug } from "@/lib/utils";
@@ -25,17 +25,20 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
           <TowerHeader tower={tower} />
         </div>
 
-        <section className="mt-10 space-y-3">
-          <h2 className="font-display text-lg font-semibold text-forge-ink">Hours saved by process</h2>
-          <p className="text-sm text-forge-subtle">Modeled annual hours — click a process to open the four-lens view.</p>
+        <div className="mt-12">
+          <OperatingModelSection tower={tower} />
+        </div>
+
+        <section className="mt-14 space-y-3">
+          <h2 className="font-display text-lg font-semibold text-forge-ink">
+            Modeled hours saved by AI initiative
+          </h2>
+          <p className="text-sm text-forge-subtle">
+            Annual hours reclaimed by each agentic initiative in this tower.
+          </p>
           <div className="min-w-0 rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-card">
             <HoursSavedBar data={chartData} />
           </div>
-        </section>
-
-        <section className="mt-10 space-y-4">
-          <h2 className="font-display text-lg font-semibold text-forge-ink">Processes</h2>
-          <ProcessList towerSlug={tower.id} processes={tower.processes} />
         </section>
       </div>
     </PageShell>

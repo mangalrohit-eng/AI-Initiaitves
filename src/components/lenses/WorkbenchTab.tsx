@@ -40,8 +40,8 @@ export function WorkbenchTab({ process }: { process: Process }) {
   return (
     <div className="space-y-5">
       <div className="grid gap-5 lg:grid-cols-2">
-        <Column title="Pre-state workbench" tools={workbench.pre} tone="legacy" />
-        <Column title="Post-state workbench" tools={workbench.post} tone="ai" />
+        <Column title="Tools today" tools={workbench.pre} tone="legacy" />
+        <Column title="Tools with agentic AI" tools={workbench.post} tone="ai" />
       </div>
       <div>
         <div className="text-xs font-semibold uppercase tracking-wide text-forge-hint">Key shifts</div>

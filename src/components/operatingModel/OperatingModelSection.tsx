@@ -8,7 +8,13 @@ import { ProcessLandscape } from "./ProcessLandscape";
 import { AiRoadmap } from "./AiRoadmap";
 import { operatingModelTotals } from "@/lib/utils";
 
-export function OperatingModelSection({ tower }: { tower: Tower }) {
+export function OperatingModelSection({
+  tower,
+  showRoadmap = true,
+}: {
+  tower: Tower;
+  showRoadmap?: boolean;
+}) {
   const [activeId, setActiveId] = useState<string>(tower.workCategories[0]?.id ?? "");
   const totals = operatingModelTotals(tower);
   const active = tower.workCategories.find((c) => c.id === activeId) ?? tower.workCategories[0];
@@ -86,18 +92,20 @@ export function OperatingModelSection({ tower }: { tower: Tower }) {
         </section>
       ) : null}
 
-      <section className="space-y-3">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <h3 className="font-display text-lg font-semibold text-forge-ink">AI transformation roadmap</h3>
-            <p className="mt-1 text-sm text-forge-subtle">
-              AI-eligible processes from every work category, sequenced by readiness and impact. Each
-              card links to the four-lens initiative detail.
-            </p>
+      {showRoadmap ? (
+        <section className="space-y-3">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <h3 className="font-display text-lg font-semibold text-forge-ink">AI transformation roadmap</h3>
+              <p className="mt-1 text-sm text-forge-subtle">
+                AI-eligible processes from every work category, sequenced by readiness and impact. Each
+                card links to the four-lens initiative detail.
+              </p>
+            </div>
           </div>
-        </div>
-        <AiRoadmap tower={tower} />
-      </section>
+          <AiRoadmap tower={tower} />
+        </section>
+      ) : null}
     </div>
   );
 }

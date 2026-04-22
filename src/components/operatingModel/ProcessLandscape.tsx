@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
 import type { Tower, TowerProcess, WorkCategory } from "@/data/types";
 import { cn, findAiInitiative, slugify } from "@/lib/utils";
+import { TIER_STYLES, priorityTier } from "@/lib/priority";
 
 function resolveIcon(name: string): LucideIcon {
   const lib = Icons as unknown as Record<string, LucideIcon>;
@@ -37,32 +38,6 @@ const MATURITY_ACCENT: Record<string, string> = {
   Automated: "border-accent-teal/55 bg-accent-teal/15 text-emerald-900",
 };
 
-function priorityTier(p?: TowerProcess["aiPriority"]) {
-  if (!p) return null;
-  if (p.startsWith("P1")) return "P1";
-  if (p.startsWith("P2")) return "P2";
-  if (p.startsWith("P3")) return "P3";
-  return null;
-}
-
-const PRIORITY_STYLES: Record<string, { badge: string; row: string; dot: string }> = {
-  P1: {
-    badge: "border-[#FF3D00]/40 bg-[#FF3D00]/10 text-[#B8290A]",
-    row: "bg-[#FF3D00]/[0.04]",
-    dot: "bg-[#FF3D00]",
-  },
-  P2: {
-    badge: "border-[#FFB300]/50 bg-[#FFB300]/15 text-amber-900",
-    row: "bg-[#FFB300]/[0.05]",
-    dot: "bg-[#FFB300]",
-  },
-  P3: {
-    badge: "border-[#00BFA5]/45 bg-[#00BFA5]/10 text-emerald-900",
-    row: "bg-[#00BFA5]/[0.05]",
-    dot: "bg-[#00BFA5]",
-  },
-};
-
 function ProcessRow({ tower, process }: { tower: Tower; process: TowerProcess }) {
   const tier = priorityTier(process.aiPriority);
   const initiative = findAiInitiative(tower, process);
@@ -83,7 +58,7 @@ function ProcessRow({ tower, process }: { tower: Tower; process: TowerProcess })
       className={cn(
         "grid grid-cols-12 items-center gap-3 px-4 py-3 text-sm transition",
         borderClass,
-        tier ? PRIORITY_STYLES[tier].row : "bg-transparent",
+        tier ? TIER_STYLES[tier].row : "bg-transparent",
         isClickable ? "hover:bg-accent-purple/5" : "",
       )}
     >
@@ -91,7 +66,7 @@ function ProcessRow({ tower, process }: { tower: Tower; process: TowerProcess })
         <div className="flex items-start gap-2">
           {tier ? (
             <span
-              className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", PRIORITY_STYLES[tier].dot)}
+              className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", TIER_STYLES[tier].dot)}
               aria-hidden
             />
           ) : (
@@ -154,7 +129,7 @@ function ProcessRow({ tower, process }: { tower: Tower; process: TowerProcess })
             <span
               className={cn(
                 "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold",
-                PRIORITY_STYLES[tier].badge,
+                TIER_STYLES[tier].badge,
               )}
             >
               {tier}

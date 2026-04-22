@@ -9,6 +9,11 @@ export function TowerHeader({ tower }: { tower: Tower }) {
     <div className="space-y-4">
       <div>
         <h1 className="font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">{tower.name}</h1>
+        {tower.narrativeSummary ? (
+          <p className="mt-3 max-w-4xl text-base font-medium leading-relaxed text-forge-ink">
+            {tower.narrativeSummary}
+          </p>
+        ) : null}
         <p className="mt-3 max-w-4xl text-sm leading-relaxed text-forge-body">{tower.description}</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

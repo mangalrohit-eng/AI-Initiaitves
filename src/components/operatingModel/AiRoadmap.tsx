@@ -2,46 +2,10 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowUpRight, Rocket, Clock, Target } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import type { Tower, TowerProcess } from "@/data/types";
 import { cn, findAiInitiative, slugify } from "@/lib/utils";
-
-type Tier = "P1" | "P2" | "P3";
-
-function tierOf(p: TowerProcess): Tier | null {
-  if (!p.aiPriority) return null;
-  if (p.aiPriority.startsWith("P1")) return "P1";
-  if (p.aiPriority.startsWith("P2")) return "P2";
-  if (p.aiPriority.startsWith("P3")) return "P3";
-  return null;
-}
-
-const TIER_META: Record<
-  Tier,
-  { label: string; window: string; color: string; ring: string; icon: typeof Rocket }
-> = {
-  P1: {
-    label: "Immediate",
-    window: "0–6 months",
-    color: "from-[#FF3D00] to-[#FF6A3D]",
-    ring: "border-[#FF3D00]/30 bg-[#FF3D00]/5",
-    icon: Rocket,
-  },
-  P2: {
-    label: "Near-term",
-    window: "6–12 months",
-    color: "from-[#FFB300] to-[#FFD64A]",
-    ring: "border-[#FFB300]/35 bg-[#FFB300]/5",
-    icon: Clock,
-  },
-  P3: {
-    label: "Medium-term",
-    window: "12–24 months",
-    color: "from-[#00BFA5] to-[#4DD4BE]",
-    ring: "border-[#00BFA5]/35 bg-[#00BFA5]/5",
-    icon: Target,
-  },
-};
+import { TIER_META, priorityTier, type Tier } from "@/lib/priority";
 
 function RoadmapCard({
   tower,
@@ -112,7 +76,7 @@ export function AiRoadmap({ tower }: { tower: Tower }) {
   const flat: TowerProcess[] = tower.workCategories.flatMap((c) => c.processes);
   const grouped: Record<Tier, TowerProcess[]> = { P1: [], P2: [], P3: [] };
   for (const p of flat) {
-    const t = tierOf(p);
+    const t = priorityTier(p.aiPriority);
     if (t) grouped[t].push(p);
   }
   const totalAi = grouped.P1.length + grouped.P2.length + grouped.P3.length;
@@ -134,7 +98,7 @@ export function AiRoadmap({ tower }: { tower: Tower }) {
                 <span
                   className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br text-white shadow-sm",
-                    meta.color,
+                    meta.gradient,
                   )}
                 >
                   <Icon className="h-4 w-4" />

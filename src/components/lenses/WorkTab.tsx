@@ -79,8 +79,8 @@ export function WorkTab({ process }: { process: Process }) {
   return (
     <div className="space-y-5">
       <div className="grid gap-5 lg:grid-cols-2">
-        <Steps label="Pre-state" tone="muted" description={work.pre.description} steps={work.pre.steps} meta={work.pre} />
-        <Steps label="Post-state" tone="vibrant" description={work.post.description} steps={work.post.steps} meta={work.post} />
+        <Steps label="Today" tone="muted" description={work.pre.description} steps={work.pre.steps} meta={work.pre} />
+        <Steps label="With agentic AI" tone="vibrant" description={work.post.description} steps={work.post.steps} meta={work.post} />
       </div>
       <div className="hidden items-center justify-center text-accent-purple lg:flex">
         <div className="flex items-center gap-2 rounded-full border border-forge-border bg-forge-well px-4 py-2 text-xs text-forge-body">

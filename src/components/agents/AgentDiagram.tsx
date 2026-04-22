@@ -3,6 +3,24 @@
 import type { Agent, AgentFlow, AgentOrchestration } from "@/data/types";
 import { motion } from "framer-motion";
 import * as React from "react";
+import { TermTip } from "@/components/ui/TermTip";
+
+function patternTermKey(p: AgentOrchestration["pattern"]): string {
+  switch (p) {
+    case "Hub-and-Spoke":
+      return "hub-and-spoke";
+    case "Hierarchical":
+      return "hierarchical";
+    case "Pipeline":
+      return "pipeline";
+    case "Parallel":
+      return "parallel";
+    case "Sequential":
+      return "sequential";
+    default:
+      return "orchestration-pattern";
+  }
+}
 
 const typeColor: Record<Agent["type"], string> = {
   Orchestrator: "#A100FF",
@@ -180,8 +198,12 @@ export function AgentDiagram({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-forge-hint">Orchestration pattern</div>
-          <div className="mt-1 font-mono text-sm text-forge-ink">{patternLabel}</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-forge-hint">
+            <TermTip termKey="orchestration-pattern" label="Orchestration pattern" />
+          </div>
+          <div className="mt-1 font-mono text-sm text-forge-ink">
+            <TermTip termKey={patternTermKey(pattern)} label={patternLabel} />
+          </div>
           <p className="mt-2 max-w-3xl text-sm text-forge-body">{patternDescription}</p>
         </div>
         <div className="rounded-full border border-forge-border bg-forge-well px-3 py-1 text-xs text-forge-subtle">

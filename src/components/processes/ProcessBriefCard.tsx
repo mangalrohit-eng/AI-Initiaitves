@@ -16,22 +16,16 @@ import {
 import type { AIProcessBrief, Process, Tower } from "@/data/types";
 import { MetricPill } from "@/components/ui/MetricPill";
 import { formatHours, slugify } from "@/lib/utils";
+import { TIER_STYLES } from "@/lib/priority";
 
 function priorityBadge(priority: AIProcessBrief["aiPriority"]) {
-  const cls =
-    priority === "P1"
-      ? "border-[#FF3D00]/40 bg-[#FF3D00]/10 text-[#B8290A]"
-      : "border-[#FFB300]/50 bg-[#FFB300]/15 text-amber-900";
+  const styles = TIER_STYLES[priority];
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${cls}`}
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${styles.badge}`}
     >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${priority === "P1" ? "bg-[#FF3D00]" : "bg-[#FFB300]"}`}
-        aria-hidden
-      />
-      {priority} —{" "}
-      {priority === "P1" ? "Immediate (0-6mo)" : "Near-term (6-12mo)"}
+      <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} aria-hidden />
+      {priority} — {priority === "P1" ? "Immediate (0-6mo)" : "Near-term (6-12mo)"}
     </span>
   );
 }
@@ -98,8 +92,8 @@ export function ProcessBriefCard({
           label="Annual hours saved"
           value={`${formatHours(brief.estimatedAnnualHoursSaved)} hrs`}
         />
-        <MetricPill label="Pre-state cycle" value={brief.preState.typicalCycleTime || "—"} />
-        <MetricPill label="Post-state cycle" value={brief.postState.newCycleTime || "—"} />
+        <MetricPill label="Cycle today" value={brief.preState.typicalCycleTime || "—"} />
+        <MetricPill label="Cycle with agentic AI" value={brief.postState.newCycleTime || "—"} />
       </section>
 
       {/* Pre / Post comparison */}
@@ -107,7 +101,7 @@ export function ProcessBriefCard({
         <div className="rounded-2xl border border-forge-border bg-forge-well/80 p-5 shadow-sm">
           <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-forge-hint">
             <span className="h-2 w-2 rounded-full bg-accent-amber" aria-hidden />
-            Pre-state — today
+            Today
           </div>
           <p className="mt-3 text-sm leading-relaxed text-forge-body">{brief.preState.summary}</p>
           {brief.preState.painPoints.length ? (
@@ -141,7 +135,7 @@ export function ProcessBriefCard({
         <div className="rounded-2xl border border-accent-purple/30 bg-gradient-to-b from-accent-purple/10 to-forge-surface p-5 shadow-sm">
           <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-accent-purple-dark">
             <span className="h-2 w-2 rounded-full bg-accent-purple" aria-hidden />
-            Post-state — with agentic AI
+            With agentic AI
           </div>
           <p className="mt-3 text-sm leading-relaxed text-forge-body">{brief.postState.summary}</p>
           {brief.postState.keyImprovements.length ? (

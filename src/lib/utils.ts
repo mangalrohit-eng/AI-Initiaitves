@@ -4,6 +4,7 @@ import type {
   AgentOrchestration,
   AIProcessBrief,
   Process,
+  TopOpportunity,
   Tower,
   TowerProcess,
 } from "@/data/types";
@@ -159,6 +160,23 @@ export function aiEligibleDetailCount() {
   const initiativeCount = towers.reduce((n, t) => n + t.processes.length, 0);
   const briefCount = processBriefsBySlug.size;
   return { initiativeCount, briefCount, total: initiativeCount + briefCount };
+}
+
+// Returns up to 3 "top opportunities" for a tower. If the tower has curated
+// `topOpportunities` authored, those win. Otherwise the helper derives the top
+// AI-eligible initiatives by modeled annual hours saved so the tower page
+// always has meaningful content without content authoring.
+export function deriveTopOpportunities(tower: Tower, limit = 3): TopOpportunity[] {
+  if (tower.topOpportunities?.length) return tower.topOpportunities.slice(0, limit);
+  const ranked = [...tower.processes]
+    .filter((p) => p.isAiEligible)
+    .sort((a, b) => b.estimatedAnnualHoursSaved - a.estimatedAnnualHoursSaved)
+    .slice(0, limit);
+  return ranked.map((p) => ({
+    headline: p.name,
+    impact: `${formatHours(p.estimatedAnnualHoursSaved)} hrs/yr · ${p.estimatedTimeSavingsPercent}% time saved`,
+    processId: p.id,
+  }));
 }
 
 export function allProcessTimelines() {

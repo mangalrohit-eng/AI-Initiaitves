@@ -3,7 +3,10 @@ import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { HoursSavedBar } from "@/components/charts/HoursSavedBar";
 import { PageShell } from "@/components/PageShell";
 import { OperatingModelSection } from "@/components/operatingModel/OperatingModelSection";
+import { AiRoadmap } from "@/components/operatingModel/AiRoadmap";
 import { TowerHeader } from "@/components/towers/TowerHeader";
+import { TowerOpportunities } from "@/components/towers/TowerOpportunities";
+import { ShareBar } from "@/components/ui/ShareBar";
 import { towers } from "@/data/towers";
 import { getTowerBySlug } from "@/lib/utils";
 
@@ -20,13 +23,34 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
   return (
     <PageShell>
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: tower.name }]} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: tower.name }]} />
+          <ShareBar title={tower.name} />
+        </div>
+
         <div className="mt-6">
           <TowerHeader tower={tower} />
         </div>
 
         <div className="mt-12">
-          <OperatingModelSection tower={tower} />
+          <TowerOpportunities tower={tower} />
+        </div>
+
+        <section className="mt-14 space-y-3">
+          <div>
+            <h2 className="font-display text-xl font-semibold text-forge-ink">
+              AI transformation roadmap
+            </h2>
+            <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
+              AI-eligible initiatives sequenced by readiness and impact — now (0–6mo), next
+              (6–12mo), later (12–24mo). Click any card for the full four-lens design.
+            </p>
+          </div>
+          <AiRoadmap tower={tower} />
+        </section>
+
+        <div className="mt-14">
+          <OperatingModelSection tower={tower} showRoadmap={false} />
         </div>
 
         <section className="mt-14 space-y-3">

@@ -29,4 +29,80 @@ body {
   .no-scrollbar {
     scrollbar-width: none;
   }
+
+  /* Print-only container: rendered off-screen normally, visible only when printing. */
+  .print-only {
+    display: none;
+  }
+}
+
+@media print {
+  /* Use a standard letter-ish margin for corporate PDFs. */
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #111 !important;
+  }
+
+  /* Drop interactive chrome from the printed view. */
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  /* Force-open collapsibles as a safety net (the JS handler is primary). */
+  details > summary {
+    list-style: none;
+  }
+  details[open] > summary,
+  details > summary {
+    pointer-events: none;
+  }
+  details {
+    break-inside: avoid;
+  }
+
+  /* Make link URLs visible in the PDF. */
+  a[href]::after {
+    content: " (" attr(href) ")";
+    color: #555;
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+  a[href^="#"]::after,
+  a[href^="javascript:"]::after,
+  a[aria-label*="Copy" i]::after,
+  a[aria-label*="Print" i]::after {
+    content: "";
+  }
+
+  /* Remove shadows and backgrounds that bleed ink unnecessarily. */
+  .shadow-sm,
+  .shadow-card,
+  .shadow-lg,
+  .shadow-inner {
+    box-shadow: none !important;
+  }
+
+  /* Avoid awkward page-breaks inside sections, cards, and tables. */
+  section,
+  article,
+  table,
+  figure {
+    break-inside: avoid;
+  }
+
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
 }

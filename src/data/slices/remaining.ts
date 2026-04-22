@@ -3711,7 +3711,7 @@ export const editorialTower: TowerSlice = {
   id: "editorial-news",
   name: "Editorial & News",
   versantLeads: ["Brian Carovillano (MS NOW)", "Brad Quick (CNBC)"],
-  accentureLeads: ["Noor Chowla"],
+  accentureLeads: ["Noor Chawla"],
   description:
     "Newsroom operations, editorial standards, content production pipeline for MS NOW (political news) and CNBC (business news). Brian Carovillano leads standards and editorial partnerships.",
   currentState:

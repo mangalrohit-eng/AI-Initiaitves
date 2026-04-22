@@ -14,6 +14,9 @@ export type Tower = {
   // P0 additions — optional, safe to omit on existing slices
   narrativeSummary?: string;
   topOpportunities?: TopOpportunity[];
+  // P1 — ISO date string of the last content-meaningful update. Used by RSS
+  // feed, /changelog page, and "Updated since your last visit" badges.
+  lastUpdated?: string;
 };
 
 export type TopOpportunity = {
@@ -85,6 +88,28 @@ export type TowerProcess = {
   briefSlug?: string;
 };
 
+// Research-backed evidence that a given P1/P2 initiative is grounded in
+// real-world deployments — a named case study, a commercial vendor delivering
+// the capability today, or an adjacent-industry use case that maps directly
+// onto the Versant context.
+export type FeasibilityEvidenceType = "case-study" | "vendor" | "adjacent-use-case";
+
+export type FeasibilityEvidence = {
+  type: FeasibilityEvidenceType;
+  title: string;
+  source: string;
+  description: string;
+  metric?: string;
+  url?: string;
+  year: string;
+};
+
+export type EvidenceCluster = {
+  id: string;
+  label: string;
+  evidence: FeasibilityEvidence[];
+};
+
 // Lightweight pre/post detail for a P1/P2 sub-process that doesn't
 // warrant a full 4-lens initiative page.
 export type AIProcessBrief = {
@@ -114,6 +139,8 @@ export type AIProcessBrief = {
   keyMetric: string;
   dependencies: string[];
   rolesImpacted: { role: string; impact: string }[];
+  // P1 — see Tower.lastUpdated
+  lastUpdated?: string;
 };
 
 export type Process = {
@@ -135,6 +162,8 @@ export type Process = {
   // P0 additions — optional, graceful empty states in UI if omitted
   businessCase?: BusinessCase;
   confidence?: "Modeled" | "Validated";
+  // P1 — see Tower.lastUpdated
+  lastUpdated?: string;
 };
 
 export type BusinessCase = {

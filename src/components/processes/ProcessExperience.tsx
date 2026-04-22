@@ -1,6 +1,6 @@
 "use client";
 
-import type { Process } from "@/data/types";
+import type { FeasibilityEvidence, Process } from "@/data/types";
 import { TabGroup } from "@/components/ui/TabGroup";
 import { WorkTab } from "@/components/lenses/WorkTab";
 import { WorkforceTab } from "@/components/lenses/WorkforceTab";
@@ -8,6 +8,7 @@ import { WorkbenchTab } from "@/components/lenses/WorkbenchTab";
 import { DigitalCoreTab } from "@/components/lenses/DigitalCoreTab";
 import { AgentDiagram } from "@/components/agents/AgentDiagram";
 import { AgentDetail } from "@/components/agents/AgentDetail";
+import { EvidenceSection } from "@/components/evidence/EvidenceSection";
 import { ChevronRight } from "lucide-react";
 import * as React from "react";
 
@@ -15,15 +16,22 @@ const LENSES: {
   id: string;
   label: string;
   sub: string;
+  anchor: "lens-work" | "lens-team" | "lens-tools" | "lens-platform";
   render: (p: Process) => React.ReactNode;
 }[] = [
-  { id: "work", label: "The work", sub: "Steps, handoffs, cycle time", render: (p) => <WorkTab process={p} /> },
-  { id: "workforce", label: "The team", sub: "Roles, time, skills", render: (p) => <WorkforceTab process={p} /> },
-  { id: "workbench", label: "Tools & apps", sub: "What people and agents use", render: (p) => <WorkbenchTab process={p} /> },
-  { id: "digital", label: "Platform", sub: "Data, integrations, build effort", render: (p) => <DigitalCoreTab process={p} /> },
+  { id: "work", label: "The work", sub: "Steps, handoffs, cycle time", anchor: "lens-work", render: (p) => <WorkTab process={p} /> },
+  { id: "workforce", label: "The team", sub: "Roles, time, skills", anchor: "lens-team", render: (p) => <WorkforceTab process={p} /> },
+  { id: "workbench", label: "Tools & apps", sub: "What people and agents use", anchor: "lens-tools", render: (p) => <WorkbenchTab process={p} /> },
+  { id: "digital", label: "Platform", sub: "Data, integrations, build effort", anchor: "lens-platform", render: (p) => <DigitalCoreTab process={p} /> },
 ];
 
-export function ProcessExperience({ process }: { process: Process }) {
+export function ProcessExperience({
+  process,
+  evidence = [],
+}: {
+  process: Process;
+  evidence?: FeasibilityEvidence[];
+}) {
   const [selected, setSelected] = React.useState<Process["agents"][number] | null>(
     process.agents[0] ?? null,
   );
@@ -70,13 +78,25 @@ export function ProcessExperience({ process }: { process: Process }) {
 
         <div className="no-print">
           <TabGroup
-            tabs={LENSES.map((l) => ({ id: l.id, label: l.label, content: l.render(process) }))}
+            tabs={LENSES.map((l) => ({
+              id: l.id,
+              label: l.label,
+              content: (
+                <div data-annot-anchor={l.anchor} className="scroll-mt-24">
+                  {l.render(process)}
+                </div>
+              ),
+            }))}
           />
         </div>
 
         <div className="print-only space-y-8">
           {LENSES.map((l) => (
-            <div key={l.id} className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-card sm:p-6">
+            <div
+              key={l.id}
+              data-annot-anchor={l.anchor}
+              className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-card sm:p-6"
+            >
               <div className="mb-4 border-b border-forge-border pb-3">
                 <div className="font-display text-lg font-semibold text-forge-ink">{l.label}</div>
                 <div className="text-xs text-forge-subtle">{l.sub}</div>
@@ -87,7 +107,9 @@ export function ProcessExperience({ process }: { process: Process }) {
         </div>
       </section>
 
-      <section aria-labelledby="arch-heading" className="space-y-3">
+      {evidence.length > 0 ? <EvidenceSection evidence={evidence} /> : null}
+
+      <section aria-labelledby="arch-heading" data-annot-anchor="technical-arch" className="scroll-mt-24 space-y-3">
         <details className="group rounded-2xl border border-forge-border bg-forge-surface shadow-sm">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl p-5 transition hover:bg-forge-well/60">
             <div>

@@ -1,6 +1,8 @@
 import { towers } from "../src/data/towers";
 import { processBriefs } from "../src/data/processBriefs";
 import { briefRowMap } from "../src/data/briefMap";
+import { evidenceClusters, evidenceClustersById } from "../src/data/evidence";
+import { briefEvidenceMap, processEvidenceMap } from "../src/data/evidenceMap";
 
 const PATTERN_ORDER = [
   "Pipeline",
@@ -132,3 +134,54 @@ for (const brief of processBriefs) {
   }
 }
 if (slugMismatches === 0) console.log("All brief towerSlug values consistent with their mapped rows.");
+
+console.log("\n=== Feasibility Evidence ===");
+console.log(`Clusters: ${evidenceClusters.length}`);
+
+// Every cluster must have at least one piece of evidence.
+const emptyClusters = evidenceClusters.filter((c) => c.evidence.length === 0);
+if (emptyClusters.length) {
+  console.log(
+    `WARN: ${emptyClusters.length} evidence clusters have no entries:`,
+    emptyClusters.map((c) => c.id),
+  );
+}
+
+// Every cluster id referenced from process/brief maps must resolve.
+const referencedIds = new Set<string>();
+Object.values(processEvidenceMap).forEach((ids) => ids.forEach((id) => referencedIds.add(id)));
+Object.values(briefEvidenceMap).forEach((ids) => ids.forEach((id) => referencedIds.add(id)));
+const unknownRefs = [...referencedIds].filter((id) => !evidenceClustersById.has(id));
+if (unknownRefs.length) {
+  console.log(`WARN: ${unknownRefs.length} referenced cluster IDs unknown:`, unknownRefs);
+}
+
+// Every process ID in processEvidenceMap must be a real Process.
+const processIds = new Set<string>(
+  towers.flatMap((t) => t.processes.map((p) => p.id)),
+);
+const unknownProcessIds = Object.keys(processEvidenceMap).filter((id) => !processIds.has(id));
+if (unknownProcessIds.length) {
+  console.log(
+    `WARN: ${unknownProcessIds.length} processEvidenceMap keys have no matching Process:`,
+    unknownProcessIds,
+  );
+}
+
+// Every brief ID in briefEvidenceMap must be a real brief.
+const briefIds = new Set<string>(processBriefs.map((b) => b.id));
+const unknownBriefIds = Object.keys(briefEvidenceMap).filter((id) => !briefIds.has(id));
+if (unknownBriefIds.length) {
+  console.log(
+    `WARN: ${unknownBriefIds.length} briefEvidenceMap keys have no matching brief:`,
+    unknownBriefIds,
+  );
+}
+
+const totalEvidenceItems = evidenceClusters.reduce((n, c) => n + c.evidence.length, 0);
+console.log(
+  `Evidence: ${totalEvidenceItems} research-backed references across ${evidenceClusters.length} clusters`,
+);
+console.log(
+  `Coverage: ${Object.keys(processEvidenceMap).length} full initiatives + ${Object.keys(briefEvidenceMap).length} briefs carry evidence (${Object.keys(processEvidenceMap).length + Object.keys(briefEvidenceMap).length} total)`,
+);

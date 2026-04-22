@@ -6,8 +6,10 @@ import { ProcessExperience } from "@/components/processes/ProcessExperience";
 import { ProcessMetrics } from "@/components/processes/ProcessMetrics";
 import { BusinessCase } from "@/components/processes/BusinessCase";
 import { ShareBar } from "@/components/ui/ShareBar";
+import { ViewTracker } from "@/components/collab/ViewTracker";
+import { AnnotationOverlay } from "@/components/collab/AnnotationOverlay";
 import { towers } from "@/data/towers";
-import { getProcessBySlugs, slugify } from "@/lib/utils";
+import { getEvidenceForProcess, getProcessBySlugs, slugify } from "@/lib/utils";
 
 export function generateStaticParams() {
   return towers.flatMap((t) => t.processes.map((p) => ({ slug: t.id, processSlug: slugify(p.name) })));
@@ -28,8 +30,25 @@ export default function ProcessPage({ params }: { params: { slug: string; proces
               { label: hit.process.name },
             ]}
           />
-          <ShareBar title={hit.process.name} />
+          <ShareBar
+            title={hit.process.name}
+            pin={{
+              kind: "initiative",
+              id: hit.process.id,
+              href: `/tower/${hit.tower.id}/process/${slugify(hit.process.name)}`,
+              title: hit.process.name,
+              subtitle: hit.tower.name,
+            }}
+          />
         </div>
+        <ViewTracker
+          kind="initiative"
+          id={hit.process.id}
+          href={`/tower/${hit.tower.id}/process/${slugify(hit.process.name)}`}
+          title={hit.process.name}
+          subtitle={hit.tower.name}
+        />
+        <AnnotationOverlay />
 
         <div className="mt-6 space-y-4">
           <h1 className="font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">
@@ -42,6 +61,7 @@ export default function ProcessPage({ params }: { params: { slug: string; proces
         {hit.process.currentPainPoints?.length ? (
           <section
             aria-label="Why this matters now"
+            data-annot-anchor="pain-points"
             className="mt-10 rounded-2xl border border-accent-amber/40 bg-amber-50/80 p-5 shadow-sm sm:p-6"
           >
             <div className="flex flex-wrap items-center gap-2">
@@ -72,7 +92,10 @@ export default function ProcessPage({ params }: { params: { slug: string; proces
         </div>
 
         <div className="mt-12">
-          <ProcessExperience process={hit.process} />
+          <ProcessExperience
+            process={hit.process}
+            evidence={getEvidenceForProcess(hit.process.id)}
+          />
         </div>
       </div>
     </PageShell>

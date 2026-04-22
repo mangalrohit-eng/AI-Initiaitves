@@ -3,6 +3,7 @@ import { twMerge } from "tailwind-merge";
 import type {
   AgentOrchestration,
   AIProcessBrief,
+  FeasibilityEvidence,
   Process,
   TopOpportunity,
   Tower,
@@ -10,6 +11,11 @@ import type {
 } from "@/data/types";
 import { towers } from "@/data/towers";
 import { processBriefsBySlug } from "@/data/processBriefs";
+import {
+  briefEvidenceMap,
+  processEvidenceMap,
+  resolveEvidence,
+} from "@/data/evidenceMap";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -153,6 +159,24 @@ export function findAiInitiative(tower: Tower, tp: TowerProcess): Process | unde
 
 export function findProcessBrief(slug: string): AIProcessBrief | undefined {
   return processBriefsBySlug.get(slug);
+}
+
+// Feasibility evidence lookups — returned as already-resolved evidence items
+// (clusters flattened, de-duplicated, capped at 4 entries for readability).
+export function getEvidenceForProcess(processId: string): FeasibilityEvidence[] {
+  return resolveEvidence(processEvidenceMap[processId]);
+}
+
+export function getEvidenceForBrief(briefId: string): FeasibilityEvidence[] {
+  return resolveEvidence(briefEvidenceMap[briefId]);
+}
+
+// Total number of P1/P2 surfaces that carry feasibility evidence — used on
+// the executive summary page.
+export function evidenceCoverage() {
+  const processHits = Object.keys(processEvidenceMap).length;
+  const briefHits = Object.keys(briefEvidenceMap).length;
+  return { processHits, briefHits, total: processHits + briefHits };
 }
 
 // Total AI-eligible clickable surface — full initiatives + briefs.

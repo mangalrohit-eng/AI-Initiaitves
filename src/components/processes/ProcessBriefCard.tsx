@@ -13,8 +13,9 @@ import {
   UserCog,
   Wrench,
 } from "lucide-react";
-import type { AIProcessBrief, Process, Tower } from "@/data/types";
+import type { AIProcessBrief, FeasibilityEvidence, Process, Tower } from "@/data/types";
 import { MetricPill } from "@/components/ui/MetricPill";
+import { EvidenceSection } from "@/components/evidence/EvidenceSection";
 import { formatHours, slugify } from "@/lib/utils";
 import { TIER_STYLES } from "@/lib/priority";
 
@@ -52,10 +53,12 @@ export function ProcessBriefCard({
   brief,
   tower,
   parentInitiative,
+  evidence = [],
 }: {
   brief: AIProcessBrief;
   tower: Tower;
   parentInitiative?: Process;
+  evidence?: FeasibilityEvidence[];
 }) {
   return (
     <article className="space-y-8">
@@ -267,6 +270,8 @@ export function ProcessBriefCard({
           )}
         </div>
       </section>
+
+      {evidence.length > 0 ? <EvidenceSection evidence={evidence} variant="compact" /> : null}
 
       {/* Footer — view full initiative */}
       {parentInitiative ? (

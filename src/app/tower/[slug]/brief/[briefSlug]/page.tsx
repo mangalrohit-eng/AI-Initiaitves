@@ -3,8 +3,9 @@ import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PageShell } from "@/components/PageShell";
 import { ProcessBriefCard } from "@/components/processes/ProcessBriefCard";
 import { ShareBar } from "@/components/ui/ShareBar";
+import { ViewTracker } from "@/components/collab/ViewTracker";
 import { processBriefs } from "@/data/processBriefs";
-import { getTowerBySlug, findProcessBrief } from "@/lib/utils";
+import { findProcessBrief, getEvidenceForBrief, getTowerBySlug } from "@/lib/utils";
 
 export function generateStaticParams() {
   return processBriefs.map((b) => ({ slug: b.towerSlug, briefSlug: b.id }));
@@ -32,10 +33,31 @@ export default function ProcessBriefPage({
               { label: brief.name },
             ]}
           />
-          <ShareBar title={brief.name} />
+          <ShareBar
+            title={brief.name}
+            pin={{
+              kind: "brief",
+              id: brief.id,
+              href: `/tower/${tower.id}/brief/${brief.id}`,
+              title: brief.name,
+              subtitle: tower.name,
+            }}
+          />
         </div>
+        <ViewTracker
+          kind="brief"
+          id={brief.id}
+          href={`/tower/${tower.id}/brief/${brief.id}`}
+          title={brief.name}
+          subtitle={tower.name}
+        />
         <div className="mt-6">
-          <ProcessBriefCard brief={brief} tower={tower} parentInitiative={parentInitiative} />
+          <ProcessBriefCard
+            brief={brief}
+            tower={tower}
+            parentInitiative={parentInitiative}
+            evidence={getEvidenceForBrief(brief.id)}
+          />
         </div>
       </div>
     </PageShell>

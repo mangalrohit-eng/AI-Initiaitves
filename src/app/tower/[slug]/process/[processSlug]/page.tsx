@@ -26,8 +26,8 @@ export default function ProcessPage({ params }: { params: { slug: string; proces
         />
 
         <div className="mt-6 space-y-4">
-          <h1 className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl">{hit.process.name}</h1>
-          <p className="max-w-4xl text-sm leading-relaxed text-white/70">{hit.process.description}</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">{hit.process.name}</h1>
+          <p className="max-w-4xl text-sm leading-relaxed text-forge-body">{hit.process.description}</p>
           <ProcessMetrics process={hit.process} />
         </div>
 
@@ -36,9 +36,9 @@ export default function ProcessPage({ params }: { params: { slug: string; proces
         </div>
 
         {hit.process.currentPainPoints?.length ? (
-          <section className="mt-10 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-            <h2 className="font-display text-lg font-semibold text-white">Current pain points</h2>
-            <ul className="mt-3 space-y-2 text-sm text-white/70">
+          <section className="mt-10 rounded-2xl border border-forge-border bg-forge-well/90 p-6 shadow-sm">
+            <h2 className="font-display text-lg font-semibold text-forge-ink">Current pain points</h2>
+            <ul className="mt-3 space-y-2 text-sm text-forge-body">
               {hit.process.currentPainPoints.map((p) => (
                 <li key={p} className="flex gap-2">
                   <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-amber" />

@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { Process, Tower } from "@/data/types";
+import type { AgentOrchestration, Process, Tower } from "@/data/types";
 import { towers } from "@/data/towers";
 
 export function cn(...inputs: ClassValue[]) {
@@ -88,3 +88,34 @@ export function agentTypeCounts() {
   }
   return Object.entries(map).map(([type, count]) => ({ type, count }));
 }
+
+const PATTERN_ORDER: AgentOrchestration["pattern"][] = [
+  "Pipeline",
+  "Hub-and-Spoke",
+  "Parallel",
+  "Sequential",
+  "Hierarchical",
+];
+
+export function orchestrationPatternCounts() {
+  const map = new Map<AgentOrchestration["pattern"], number>();
+  for (const t of towers) {
+    for (const p of t.processes) {
+      const k = p.agentOrchestration.pattern;
+      map.set(k, (map.get(k) ?? 0) + 1);
+    }
+  }
+  return PATTERN_ORDER.map((pattern) => ({ pattern, count: map.get(pattern) ?? 0 }));
+}
+
+export function allProcessTimelines() {
+  const rows: { tower: string; process: string; months: number }[] = [];
+  for (const t of towers) {
+    for (const p of t.processes) {
+      rows.push({ tower: t.name, process: p.name, months: p.timelineMonths });
+    }
+  }
+  rows.sort((a, b) => b.months - a.months || a.tower.localeCompare(b.tower));
+  return rows;
+}
+

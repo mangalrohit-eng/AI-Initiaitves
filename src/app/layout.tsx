@@ -35,17 +35,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body
-        className={`${dmSans.variable} ${ibmPlex.variable} ${jetbrains.variable} font-sans antialiased chevron-bg`}
+        className={`${dmSans.variable} ${ibmPlex.variable} ${jetbrains.variable} min-h-screen bg-forge-page font-sans text-forge-ink antialiased`}
       >
-        <div className="relative min-h-screen">
-          <div className="pointer-events-none absolute inset-0 bg-hero-glow opacity-70" />
-          <div className="relative z-10 flex min-h-screen flex-col">
-            <TopNav />
-            <main className="flex-1">{children}</main>
-            <Footer />
-          </div>
+        <div className="relative z-10 flex min-h-screen flex-col">
+          <TopNav />
+          <main className="flex-1">{children}</main>
+          <Footer />
         </div>
       </body>
     </html>

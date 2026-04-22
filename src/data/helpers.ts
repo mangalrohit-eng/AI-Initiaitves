@@ -3,6 +3,7 @@ import type {
   AgentFlow,
   AgentOrchestration,
   DigitalCoreLens,
+  PlatformRequirement,
   Process,
   RoleState,
   ToolState,
@@ -102,6 +103,15 @@ export function agent(
     llmRequired,
     toolsUsed,
   };
+}
+
+export function platform(
+  p: string,
+  purpose: string,
+  priority: PlatformRequirement["priority"],
+  examples: string[],
+): PlatformRequirement {
+  return { platform: p, purpose, priority, examples };
 }
 
 export function processShell(

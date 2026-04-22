@@ -12,6 +12,19 @@ const config: Config = {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+        forge: {
+          canvas: "#FFFFFF",
+          page: "#F5F5F5",
+          surface: "#FFFFFF",
+          well: "#F0F0F0",
+          "well-strong": "#E8E8E8",
+          border: "#E0E0E0",
+          "border-strong": "#D0D0D0",
+          ink: "#1A1A2E",
+          body: "#3D3D4A",
+          subtle: "#6B6B78",
+          hint: "#8E8E9A",
+        },
         accent: {
           purple: "#A100FF",
           "purple-dark": "#7500C0",
@@ -30,14 +43,9 @@ const config: Config = {
         sans: ["var(--font-ibm-plex)", "system-ui", "sans-serif"],
         mono: ["var(--font-jetbrains)", "ui-monospace", "monospace"],
       },
-      backgroundImage: {
-        "hero-glow":
-          "radial-gradient(ellipse at 20% 0%, rgba(161,0,255,0.35), transparent 55%), radial-gradient(ellipse at 80% 20%, rgba(0,191,165,0.12), transparent 50%)",
-        "card-border":
-          "linear-gradient(135deg, rgba(161,0,255,0.9), rgba(0,191,165,0.35), rgba(161,0,255,0.55))",
-      },
       boxShadow: {
-        glow: "0 0 40px rgba(161,0,255,0.25)",
+        glow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+        card: "0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.04)",
       },
     },
   },

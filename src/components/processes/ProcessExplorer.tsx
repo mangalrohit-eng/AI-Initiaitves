@@ -10,6 +10,7 @@ import { AgentDiagram } from "@/components/agents/AgentDiagram";
 import { AgentDetail } from "@/components/agents/AgentDetail";
 import * as React from "react";
 
+/** Alternate shell kept in sync with ProcessExperience (not wired to a route). */
 export function ProcessExplorer({ process }: { process: Process }) {
   const [selected, setSelected] = React.useState<Process["agents"][number] | null>(process.agents[0] ?? null);
 
@@ -30,13 +31,14 @@ export function ProcessExplorer({ process }: { process: Process }) {
 
       <section className="space-y-4">
         <div>
-          <h2 className="font-display text-xl font-semibold text-white">Agent architecture</h2>
-          <p className="mt-1 text-sm text-white/60">Interactive orchestration map — select nodes to inspect data contracts.</p>
+          <h2 className="font-display text-xl font-semibold text-forge-ink">Agent architecture</h2>
+          <p className="mt-1 text-sm text-forge-subtle">Interactive orchestration map — select nodes to inspect data contracts.</p>
         </div>
 
         <AgentDiagram
           agents={process.agents}
           flows={process.agentOrchestration.flow}
+          pattern={process.agentOrchestration.pattern}
           patternLabel={process.agentOrchestration.pattern}
           patternDescription={process.agentOrchestration.description}
           selected={selected}
@@ -45,10 +47,10 @@ export function ProcessExplorer({ process }: { process: Process }) {
 
         <AgentDetail agent={selected} />
 
-        <div className="rounded-2xl border border-accent-teal/20 bg-accent-teal/[0.06] p-4 text-sm text-white/75">
-          <span className="font-semibold text-white">Transformation outcome: </span>
-          up to <span className="font-mono text-accent-teal">{process.estimatedTimeSavingsPercent}%</span> cycle time reduction with{" "}
-          <span className="font-mono text-white">{process.estimatedAnnualHoursSaved.toLocaleString()}</span> annual hours saved (estimated).
+        <div className="rounded-2xl border border-forge-border border-l-4 border-l-accent-purple bg-forge-well p-4 text-sm text-forge-body">
+          <span className="font-semibold text-forge-ink">Transformation outcome: </span>
+          up to <span className="font-mono font-medium text-accent-purple-dark">{process.estimatedTimeSavingsPercent}%</span> cycle time reduction with{" "}
+          <span className="font-mono text-forge-ink">{process.estimatedAnnualHoursSaved.toLocaleString()}</span> annual hours saved (estimated).
         </div>
       </section>
     </div>

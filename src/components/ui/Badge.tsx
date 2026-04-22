@@ -1,12 +1,12 @@
 import { cn } from "@/lib/utils";
 
 const styles: Record<string, string> = {
-  Low: "border-accent-teal/40 bg-accent-teal/10 text-accent-teal",
-  Medium: "border-accent-amber/40 bg-accent-amber/10 text-accent-amber",
-  High: "border-accent-red/40 bg-accent-red/10 text-accent-red",
-  Critical: "border-accent-red/40 bg-accent-red/10 text-accent-red",
-  Important: "border-accent-amber/40 bg-accent-amber/10 text-accent-amber",
-  "Nice-to-have": "border-white/20 bg-white/5 text-white/70",
+  Low: "border-accent-teal/45 bg-accent-teal/10 text-emerald-800",
+  Medium: "border-accent-amber/50 bg-amber-50 text-amber-900",
+  High: "border-accent-red/45 bg-red-50 text-red-900",
+  Critical: "border-accent-red/45 bg-red-50 text-red-900",
+  Important: "border-accent-amber/50 bg-amber-50 text-amber-900",
+  "Nice-to-have": "border-forge-border bg-forge-well text-forge-body",
 };
 
 export function Badge({

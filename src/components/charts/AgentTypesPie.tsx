@@ -11,15 +11,16 @@ export function AgentTypesPie({ data }: { data: { type: string; count: number }[
         <PieChart>
           <Pie data={data} dataKey="count" nameKey="type" innerRadius={70} outerRadius={110} paddingAngle={2}>
             {data.map((_, i) => (
-              <Cell key={i} fill={palette[i % palette.length]} stroke="rgba(0,0,0,0.35)" />
+              <Cell key={i} fill={palette[i % palette.length]} stroke="rgba(26,26,46,0.08)" />
             ))}
           </Pie>
           <Tooltip
             contentStyle={{
-              background: "#121225",
-              border: "1px solid rgba(255,255,255,0.12)",
+              background: "#ffffff",
+              border: "1px solid #d5c8e2",
               borderRadius: 12,
-              color: "#fff",
+              color: "#1a1a2e",
+              boxShadow: "0 8px 24px rgba(26,26,46,0.08)",
             }}
           />
         </PieChart>

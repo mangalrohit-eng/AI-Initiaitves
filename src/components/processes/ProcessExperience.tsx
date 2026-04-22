@@ -32,8 +32,8 @@ export function ProcessExperience({ process }: { process: Process }) {
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="font-display text-xl font-semibold text-white">Agent architecture</h2>
-            <p className="mt-1 text-sm text-white/60">Interactive orchestration map — select nodes to inspect contracts.</p>
+            <h2 className="font-display text-xl font-semibold text-forge-ink">Agent architecture</h2>
+            <p className="mt-1 text-sm text-forge-subtle">Interactive orchestration map — select nodes to inspect contracts.</p>
           </div>
           <MetricPill label="Time savings (process)" value={`${process.estimatedTimeSavingsPercent}%`} />
         </div>
@@ -41,6 +41,7 @@ export function ProcessExperience({ process }: { process: Process }) {
         <AgentDiagram
           agents={process.agents}
           flows={process.agentOrchestration.flow}
+          pattern={process.agentOrchestration.pattern}
           patternLabel={process.agentOrchestration.pattern}
           patternDescription={process.agentOrchestration.description}
           selected={selected}

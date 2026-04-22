@@ -38,8 +38,8 @@ export function TabGroup({ tabs, className }: { tabs: TabItem[]; className?: str
               className={cn(
                 "whitespace-nowrap rounded-full border px-4 py-2 text-sm transition",
                 selected
-                  ? "border-accent-purple/60 bg-accent-purple/15 text-white shadow-glow"
-                  : "border-white/10 bg-white/[0.02] text-white/65 hover:border-white/20 hover:text-white",
+                  ? "border-accent-purple bg-forge-surface font-medium text-accent-purple-dark shadow-sm ring-1 ring-accent-purple/20"
+                  : "border-forge-border bg-forge-well text-forge-body hover:border-forge-border-strong hover:text-forge-ink",
               )}
             >
               {t.label}
@@ -56,7 +56,7 @@ export function TabGroup({ tabs, className }: { tabs: TabItem[]; className?: str
           exit={{ opacity: 0, x: index % 2 === 0 ? 12 : -12 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
           role="tabpanel"
-          className="rounded-2xl border border-white/10 bg-[#121225]/60 p-4 sm:p-6"
+          className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-card sm:p-6"
         >
           {activeTab?.content}
         </motion.div>

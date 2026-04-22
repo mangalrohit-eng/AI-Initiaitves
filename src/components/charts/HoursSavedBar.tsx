@@ -11,6 +11,10 @@ import {
   YAxis,
 } from "recharts";
 
+const grid = "rgba(26, 26, 46, 0.08)";
+const axis = "rgba(26, 26, 46, 0.35)";
+const tick = "#45405C";
+
 export function HoursSavedBar({
   data,
 }: {
@@ -20,22 +24,17 @@ export function HoursSavedBar({
     <div className="h-[320px] w-full min-w-0">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16, top: 8, bottom: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-          <XAxis type="number" stroke="rgba(255,255,255,0.35)" tickFormatter={(v) => formatHours(Number(v))} />
-          <YAxis
-            type="category"
-            dataKey="name"
-            width={140}
-            tick={{ fill: "rgba(255,255,255,0.65)", fontSize: 11 }}
-            stroke="rgba(255,255,255,0.15)"
-          />
+          <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+          <XAxis type="number" stroke={axis} tick={{ fill: tick, fontSize: 11 }} tickFormatter={(v) => formatHours(Number(v))} />
+          <YAxis type="category" dataKey="name" width={140} tick={{ fill: tick, fontSize: 11 }} stroke={axis} />
           <Tooltip
             cursor={{ fill: "rgba(161,0,255,0.08)" }}
             contentStyle={{
-              background: "#121225",
-              border: "1px solid rgba(255,255,255,0.12)",
+              background: "#ffffff",
+              border: "1px solid #d5c8e2",
               borderRadius: 12,
-              color: "#fff",
+              color: "#1a1a2e",
+              boxShadow: "0 8px 24px rgba(26,26,46,0.08)",
             }}
             formatter={(value) => [`${formatHours(Number(value))} hrs / yr`, "Hours saved"]}
           />

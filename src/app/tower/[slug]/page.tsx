@@ -26,15 +26,15 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
         </div>
 
         <section className="mt-10 space-y-3">
-          <h2 className="font-display text-lg font-semibold text-white">Hours saved by process</h2>
-          <p className="text-sm text-white/60">Modeled annual hours — click a process to open the four-lens view.</p>
-          <div className="min-w-0 rounded-2xl border border-white/10 bg-[#121225]/50 p-4">
+          <h2 className="font-display text-lg font-semibold text-forge-ink">Hours saved by process</h2>
+          <p className="text-sm text-forge-subtle">Modeled annual hours — click a process to open the four-lens view.</p>
+          <div className="min-w-0 rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-card">
             <HoursSavedBar data={chartData} />
           </div>
         </section>
 
         <section className="mt-10 space-y-4">
-          <h2 className="font-display text-lg font-semibold text-white">Processes</h2>
+          <h2 className="font-display text-lg font-semibold text-forge-ink">Processes</h2>
           <ProcessList towerSlug={tower.id} processes={tower.processes} />
         </section>
       </div>

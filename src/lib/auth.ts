@@ -8,7 +8,7 @@ export const AUTH_COOKIE_NAME = "forge_session";
 export const AUTH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 12; // 12 hours
 
 const DEFAULT_USERNAME = "Towerlead";
-const DEFAULT_PASSWORD = "ACN2025";
+const DEFAULT_PASSWORD = "ACN2026";
 const DEFAULT_SECRET = "forge-tower-explorer-default-secret-change-me";
 
 export function getExpectedCredentials(): { username: string; password: string; secret: string } {

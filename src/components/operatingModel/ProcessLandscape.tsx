@@ -66,15 +66,25 @@ const PRIORITY_STYLES: Record<string, { badge: string; row: string; dot: string 
 function ProcessRow({ tower, process }: { tower: Tower; process: TowerProcess }) {
   const tier = priorityTier(process.aiPriority);
   const initiative = findAiInitiative(tower, process);
+  const hasBrief = !initiative && Boolean(process.briefSlug);
+  const isClickable = Boolean(initiative || hasBrief);
+  // Solid purple border = full 4-lens initiative.
+  // Dashed purple border = lightweight process brief.
+  // Transparent = not AI-eligible.
+  const borderClass = !process.aiEligible
+    ? "border-l-[3px] border-l-transparent"
+    : initiative
+      ? "border-l-[3px] border-l-accent-purple"
+      : hasBrief
+        ? "border-l-[3px] border-l-accent-purple/70 border-dashed"
+        : "border-l-[3px] border-l-accent-purple/40";
   const content = (
     <div
       className={cn(
         "grid grid-cols-12 items-center gap-3 px-4 py-3 text-sm transition",
-        process.aiEligible
-          ? "border-l-[3px] border-accent-purple/80"
-          : "border-l-[3px] border-transparent",
+        borderClass,
         tier ? PRIORITY_STYLES[tier].row : "bg-transparent",
-        initiative ? "hover:bg-accent-purple/5" : "",
+        isClickable ? "hover:bg-accent-purple/5" : "",
       )}
     >
       <div className="col-span-12 min-w-0 md:col-span-5">
@@ -159,7 +169,7 @@ function ProcessRow({ tower, process }: { tower: Tower; process: TowerProcess })
             Human-led
           </span>
         )}
-        {initiative ? (
+        {isClickable ? (
           <Icons.ChevronRight className="h-4 w-4 text-forge-hint transition group-hover:text-accent-purple" />
         ) : null}
       </div>
@@ -171,12 +181,31 @@ function ProcessRow({ tower, process }: { tower: Tower; process: TowerProcess })
       <Link
         href={`/tower/${tower.id}/process/${slugify(initiative.name)}`}
         className="group block border-b border-forge-border last:border-b-0"
+        title="Open full 4-lens initiative"
       >
         {content}
       </Link>
     );
   }
-  return <div className="border-b border-forge-border last:border-b-0">{content}</div>;
+  if (hasBrief && process.briefSlug) {
+    return (
+      <Link
+        href={`/tower/${tower.id}/brief/${process.briefSlug}`}
+        className="group block border-b border-forge-border last:border-b-0"
+        title="Open process brief"
+      >
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <div
+      className="border-b border-forge-border last:border-b-0"
+      title={!process.aiEligible ? process.aiRationale : undefined}
+    >
+      {content}
+    </div>
+  );
 }
 
 export function ProcessLandscape({

@@ -48,7 +48,7 @@ export function OperatingModelSection({ tower }: { tower: Tower }) {
 
       {active ? (
         <section className="space-y-3">
-          <div className="flex items-end justify-between gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h3 className="font-display text-lg font-semibold text-forge-ink">Process landscape</h3>
               <p className="mt-1 text-sm text-forge-subtle">
@@ -56,6 +56,23 @@ export function OperatingModelSection({ tower }: { tower: Tower }) {
                 frequency, criticality, maturity, and AI priority. Non-AI processes show the analytical
                 rationale.
               </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-forge-subtle">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-4 w-[3px] rounded-sm bg-accent-purple" aria-hidden />
+                Full initiative
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  className="h-4 w-[3px] rounded-sm border-l-2 border-dashed border-accent-purple/70"
+                  aria-hidden
+                />
+                Process brief
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-4 w-[3px] rounded-sm bg-forge-border" aria-hidden />
+                Human-led
+              </span>
             </div>
           </div>
           <motion.div

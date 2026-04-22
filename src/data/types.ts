@@ -11,6 +11,15 @@ export type Tower = {
   topOpportunityHeadline: string;
   processes: Process[];
   workCategories: WorkCategory[];
+  // P0 additions — optional, safe to omit on existing slices
+  narrativeSummary?: string;
+  topOpportunities?: TopOpportunity[];
+};
+
+export type TopOpportunity = {
+  headline: string;
+  impact?: string;
+  processId?: string;
 };
 
 // Used by tower slice files — `workCategories` is merged in at composition time.
@@ -71,6 +80,40 @@ export type TowerProcess = {
   aiRationale: string;
   aiInitiativeId?: string;
   aiInitiativeRelation?: "primary" | "sub-process" | "related" | "governance";
+  // Slug of an AI Process Brief when this row has its own lightweight
+  // pre/post + agents detail page (attached at tower composition time).
+  briefSlug?: string;
+};
+
+// Lightweight pre/post detail for a P1/P2 sub-process that doesn't
+// warrant a full 4-lens initiative page.
+export type AIProcessBrief = {
+  id: string;
+  name: string;
+  towerSlug: string;
+  parentProcessId: string;
+  // Exact or partial name match used to attach this brief to a
+  // TowerProcess row in the operating model at composition time.
+  matchRowName: string;
+  aiPriority: "P1" | "P2";
+  description?: string;
+  estimatedTimeSavingsPercent: number;
+  estimatedAnnualHoursSaved: number;
+  preState: {
+    summary: string;
+    painPoints: string[];
+    typicalCycleTime: string;
+  };
+  postState: {
+    summary: string;
+    keyImprovements: string[];
+    newCycleTime: string;
+  };
+  agentsInvolved: { agentName: string; roleInProcess: string }[];
+  toolsRequired: { tool: string; purpose: string }[];
+  keyMetric: string;
+  dependencies: string[];
+  rolesImpacted: { role: string; impact: string }[];
 };
 
 export type Process = {
@@ -89,6 +132,18 @@ export type Process = {
   digitalCore: DigitalCoreLens;
   agents: Agent[];
   agentOrchestration: AgentOrchestration;
+  // P0 additions — optional, graceful empty states in UI if omitted
+  businessCase?: BusinessCase;
+  confidence?: "Modeled" | "Validated";
+};
+
+export type BusinessCase = {
+  investmentEstimate?: string;
+  paybackPeriod?: string;
+  kpis?: string[];
+  risks?: string[];
+  decisionsRequired?: string[];
+  changeImpact?: string;
 };
 
 export type WorkLens = {

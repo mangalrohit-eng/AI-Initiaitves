@@ -10,6 +10,7 @@ import { towers } from "@/data/towers";
 import {
   aggregateTotals,
   agentTypeCounts,
+  aiEligibleDetailCount,
   allProcessTimelines,
   hoursByTower,
   orchestrationPatternCounts,
@@ -24,6 +25,7 @@ export default function SummaryPage() {
   const patterns = orchestrationPatternCounts();
   const timelines = allProcessTimelines();
   const totals = aggregateTotals();
+  const detailSurface = aiEligibleDetailCount();
   const eligibility = towerAiEligibility();
   const totalOperatingProcesses = eligibility.reduce((n, r) => n + r.total, 0);
   const totalAiEligible = eligibility.reduce((n, r) => n + r.aiEligible, 0);
@@ -39,12 +41,14 @@ export default function SummaryPage() {
           <h1 className="font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">Executive summary</h1>
           <p className="mt-3 text-sm leading-relaxed text-forge-body">
             Portfolio-level view covering {totalOperatingProcesses} mapped tower processes,{" "}
-            {totalAiEligible} AI-eligible initiatives ({eligibilityPct}%), modeled hours, readiness
-            signals, agent taxonomy, orchestration patterns, and implementation pacing.
+            {totalAiEligible} AI-eligible initiatives ({eligibilityPct}%), and{" "}
+            {detailSurface.total} deeply-specified process details ({detailSurface.initiativeCount} full
+            four-lens initiatives + {detailSurface.briefCount} process briefs) — plus modeled hours,
+            readiness signals, agent taxonomy, orchestration patterns, and implementation pacing.
           </p>
         </div>
 
-        <section className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-sm">
             <div className="text-xs uppercase tracking-wide text-forge-hint">Total agents</div>
             <div className="mt-2 font-mono text-2xl font-semibold text-accent-purple-dark">{totals.agentCount}</div>
@@ -57,6 +61,17 @@ export default function SummaryPage() {
               <span className="text-forge-subtle"> / {totalOperatingProcesses}</span>
             </div>
             <p className="mt-1 text-xs text-forge-subtle">{eligibilityPct}% AI-eligible across 13 towers</p>
+          </div>
+          <div className="rounded-2xl border border-accent-purple/30 bg-gradient-to-b from-accent-purple/10 to-forge-surface p-4 shadow-sm">
+            <div className="text-xs uppercase tracking-wide text-accent-purple-dark/80">
+              Clickable AI details
+            </div>
+            <div className="mt-2 font-mono text-2xl font-semibold text-accent-purple-dark">
+              {detailSurface.total}
+            </div>
+            <p className="mt-1 text-xs text-forge-subtle">
+              {detailSurface.initiativeCount} full initiatives + {detailSurface.briefCount} briefs
+            </p>
           </div>
           <div className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-sm">
             <div className="text-xs uppercase tracking-wide text-forge-hint">Towers</div>

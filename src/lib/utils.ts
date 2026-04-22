@@ -1,7 +1,14 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { AgentOrchestration, Process, Tower, TowerProcess } from "@/data/types";
+import type {
+  AgentOrchestration,
+  AIProcessBrief,
+  Process,
+  Tower,
+  TowerProcess,
+} from "@/data/types";
 import { towers } from "@/data/towers";
+import { processBriefsBySlug } from "@/data/processBriefs";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -134,9 +141,24 @@ export function towerAiEligibility() {
   });
 }
 
+// Returns the full 4-lens initiative ONLY when this row is the "primary"
+// representation of an initiative. Sub-process / related / governance rows
+// resolve via their `briefSlug` instead (see `findProcessBrief`).
 export function findAiInitiative(tower: Tower, tp: TowerProcess): Process | undefined {
   if (!tp.aiInitiativeId) return undefined;
+  if (tp.aiInitiativeRelation && tp.aiInitiativeRelation !== "primary") return undefined;
   return tower.processes.find((p) => p.id === tp.aiInitiativeId);
+}
+
+export function findProcessBrief(slug: string): AIProcessBrief | undefined {
+  return processBriefsBySlug.get(slug);
+}
+
+// Total AI-eligible clickable surface — full initiatives + briefs.
+export function aiEligibleDetailCount() {
+  const initiativeCount = towers.reduce((n, t) => n + t.processes.length, 0);
+  const briefCount = processBriefsBySlug.size;
+  return { initiativeCount, briefCount, total: initiativeCount + briefCount };
 }
 
 export function allProcessTimelines() {

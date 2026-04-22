@@ -12,7 +12,7 @@ export function WaterfallChart({ data }: { data: { name: string; hours: number }
   });
 
   return (
-    <div className="h-[360px] w-full">
+    <div className="h-[360px] w-full min-w-0">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={rows} margin={{ left: 8, right: 16, top: 8, bottom: 48 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
@@ -25,8 +25,8 @@ export function WaterfallChart({ data }: { data: { name: string; hours: number }
               borderRadius: 12,
               color: "#fff",
             }}
-            formatter={(value: number, name) => [
-              `${formatHours(value)} hrs`,
+            formatter={(value, name) => [
+              `${formatHours(Number(value))} hrs`,
               name === "base" ? "Carry-in (cumulative)" : "Tower contribution",
             ]}
           />

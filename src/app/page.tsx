@@ -2,7 +2,7 @@ import { TowerGrid } from "@/components/towers/TowerGrid";
 import { PageShell } from "@/components/PageShell";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { towers } from "@/data/towers";
-import { aggregateTotals, formatHours } from "@/lib/utils";
+import { aggregateTotals } from "@/lib/utils";
 
 export default function HomePage() {
   const totals = aggregateTotals();
@@ -40,7 +40,7 @@ export default function HomePage() {
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <div className="text-xs uppercase tracking-wide text-white/45">Annual hours saved</div>
             <div className="mt-2 font-mono text-2xl font-semibold text-transparent bg-gradient-to-r from-accent-purple-light to-white bg-clip-text">
-              <AnimatedNumber value={totals.hours} formatter={(n) => `${formatHours(n)}`} />
+              <AnimatedNumber value={totals.hours} variant="hours" />
             </div>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">

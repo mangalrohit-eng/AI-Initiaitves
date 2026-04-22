@@ -2,7 +2,7 @@
 
 import type { Agent } from "@/data/types";
 import { Badge } from "@/components/ui/Badge";
-import { Cpu, Inbox, Outbox, Wrench } from "lucide-react";
+import { Cpu, Inbox, Send, Wrench } from "lucide-react";
 
 export function AgentDetail({ agent }: { agent: Agent | null }) {
   if (!agent) {
@@ -40,7 +40,7 @@ export function AgentDetail({ agent }: { agent: Agent | null }) {
         </div>
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/45">
-            <Outbox className="h-4 w-4 text-accent-purple-light" />
+            <Send className="h-4 w-4 text-accent-purple-light" />
             Outputs
           </div>
           <ul className="mt-2 space-y-1 text-sm text-white/70">

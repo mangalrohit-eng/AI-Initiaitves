@@ -31,7 +31,7 @@ export default function SummaryPage() {
         <section className="mt-10 space-y-3">
           <h2 className="font-display text-lg font-semibold text-white">Waterfall: hours saved by tower</h2>
           <p className="text-sm text-white/60">Each bar increments cumulative modeled annual hours.</p>
-          <div className="rounded-2xl border border-white/10 bg-[#121225]/50 p-4">
+          <div className="min-w-0 rounded-2xl border border-white/10 bg-[#121225]/50 p-4">
             <WaterfallChart data={wf} />
           </div>
         </section>
@@ -48,7 +48,7 @@ export default function SummaryPage() {
           <div className="space-y-3">
             <h2 className="font-display text-lg font-semibold text-white">Agents by type</h2>
             <p className="text-sm text-white/60">Aggregated across all processes in the static dataset.</p>
-            <div className="rounded-2xl border border-white/10 bg-[#121225]/50 p-4">
+            <div className="min-w-0 rounded-2xl border border-white/10 bg-[#121225]/50 p-4">
               <AgentTypesPie data={pie} />
             </div>
           </div>

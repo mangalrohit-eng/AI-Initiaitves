@@ -28,7 +28,7 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
         <section className="mt-10 space-y-3">
           <h2 className="font-display text-lg font-semibold text-white">Hours saved by process</h2>
           <p className="text-sm text-white/60">Modeled annual hours — click a process to open the four-lens view.</p>
-          <div className="rounded-2xl border border-white/10 bg-[#121225]/50 p-4">
+          <div className="min-w-0 rounded-2xl border border-white/10 bg-[#121225]/50 p-4">
             <HoursSavedBar data={chartData} />
           </div>
         </section>

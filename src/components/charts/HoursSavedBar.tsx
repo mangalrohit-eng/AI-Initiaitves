@@ -17,7 +17,7 @@ export function HoursSavedBar({
   data: { name: string; hours: number }[];
 }) {
   return (
-    <div className="h-[320px] w-full">
+    <div className="h-[320px] w-full min-w-0">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16, top: 8, bottom: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
@@ -37,7 +37,7 @@ export function HoursSavedBar({
               borderRadius: 12,
               color: "#fff",
             }}
-            formatter={(value: number) => [`${formatHours(value)} hrs / yr`, "Hours saved"]}
+            formatter={(value) => [`${formatHours(Number(value))} hrs / yr`, "Hours saved"]}
           />
           <Bar dataKey="hours" fill="#A100FF" radius={[0, 8, 8, 0]} />
         </BarChart>

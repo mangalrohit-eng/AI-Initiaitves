@@ -6,7 +6,7 @@ const palette = ["#A100FF", "#00BFA5", "#FFB300", "#D966FF", "#00C853"];
 
 export function AgentTypesPie({ data }: { data: { type: string; count: number }[] }) {
   return (
-    <div className="h-[320px] w-full">
+    <div className="h-[320px] w-full min-w-0">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie data={data} dataKey="count" nameKey="type" innerRadius={70} outerRadius={110} paddingAngle={2}>

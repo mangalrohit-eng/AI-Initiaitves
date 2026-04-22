@@ -3,6 +3,7 @@ import { DM_Sans, IBM_Plex_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { TopNav } from "@/components/layout/TopNav";
 import { Footer } from "@/components/layout/Footer";
+import { ChromeGate } from "@/components/layout/ChromeGate";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -40,9 +41,13 @@ export default function RootLayout({
         className={`${dmSans.variable} ${ibmPlex.variable} ${jetbrains.variable} min-h-screen bg-forge-page font-sans text-forge-ink antialiased`}
       >
         <div className="relative z-10 flex min-h-screen flex-col">
-          <TopNav />
+          <ChromeGate>
+            <TopNav />
+          </ChromeGate>
           <main className="flex-1">{children}</main>
-          <Footer />
+          <ChromeGate>
+            <Footer />
+          </ChromeGate>
         </div>
       </body>
     </html>

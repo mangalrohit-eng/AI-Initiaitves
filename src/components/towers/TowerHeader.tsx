@@ -1,5 +1,5 @@
 import type { Tower } from "@/data/types";
-import { formatHours, operatingModelTotals } from "@/lib/utils";
+import { operatingModelTotals } from "@/lib/utils";
 import { MetricPill } from "@/components/ui/MetricPill";
 import { ChangedSinceBadge } from "@/components/collab/ChangedSinceBadge";
 
@@ -26,7 +26,7 @@ export function TowerHeader({ tower }: { tower: Tower }) {
           value={`${om.aiEligibleCount} / ${om.processCount}`}
         />
         <MetricPill label="Agents modeled" value={`${agentsModeled}`} />
-        <MetricPill label="Annual hours saved" value={`${formatHours(tower.estimatedAnnualSavingsHours)} hrs`} />
+        <MetricPill label="Modeled impact (tower)" value={tower.impactTier} />
         <MetricPill label="Top opportunity" value={tower.topOpportunityHeadline} className="sm:col-span-2 lg:col-span-1" />
       </div>
       <details className="rounded-xl border border-forge-border bg-forge-well/80 p-4 text-sm text-forge-body shadow-sm">

@@ -15,28 +15,24 @@ const PATTERN_ORDER = [
 const pmap = new Map<string, number>();
 let tp = 0;
 let ta = 0;
-let thTower = 0;
-let thProc = 0;
 
 for (const t of towers) {
   let a = 0;
-  let h = 0;
+  const tierTally = { High: 0, Medium: 0, Low: 0 as const };
   for (const p of t.processes) {
     a += p.agents.length;
-    h += p.estimatedAnnualHoursSaved;
+    tierTally[p.impactTier] += 1;
     const k = p.agentOrchestration.pattern;
     pmap.set(k, (pmap.get(k) ?? 0) + 1);
   }
   console.log(
-    `${t.id} | proc ${t.processes.length} | agents ${a} | sumProcHours ${h} | tower.estHours ${t.estimatedAnnualSavingsHours} | aiElig ${t.aiEligibleProcesses}`,
+    `${t.id} | proc ${t.processes.length} | agents ${a} | H/M/L ${tierTally.High}/${tierTally.Medium}/${tierTally.Low} | tower tier ${t.impactTier} | aiElig ${t.aiEligibleProcesses}`,
   );
   tp += t.processes.length;
   ta += a;
-  thTower += t.estimatedAnnualSavingsHours;
-  thProc += h;
 }
 
-console.log("TOTAL proc", tp, "agents", ta, "tower hours sum", thTower, "process hours sum", thProc);
+console.log("TOTAL proc", tp, "agents", ta, "(impact tiers: see per-tower H/M/L lines)");
 console.log(
   "patterns",
   PATTERN_ORDER.map((p) => `${p}:${pmap.get(p) ?? 0}`).join(" "),

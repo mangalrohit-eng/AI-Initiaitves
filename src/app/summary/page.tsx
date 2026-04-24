@@ -13,7 +13,7 @@ import {
   aiEligibleDetailCount,
   allProcessTimelines,
   evidenceCoverage,
-  hoursByTower,
+  impactByTower,
   orchestrationPatternCounts,
   readinessHeatmapPoints,
   towerAiEligibility,
@@ -21,7 +21,7 @@ import {
 import { evidenceClusters } from "@/data/evidenceMap";
 
 export default function SummaryPage() {
-  const wf = hoursByTower();
+  const wf = impactByTower();
   const heat = readinessHeatmapPoints();
   const pie = agentTypeCounts();
   const patterns = orchestrationPatternCounts();
@@ -48,7 +48,7 @@ export default function SummaryPage() {
             {detailSurface.total} deeply-specified process details ({detailSurface.initiativeCount} full
             four-lens initiatives + {detailSurface.briefCount} process briefs) — each backed by
             real-world feasibility evidence across {evidenceClusters.length} research-validated
-            clusters. Plus modeled hours, readiness signals, agent taxonomy, orchestration
+            clusters. Plus qualitative impact tiers, readiness signals, agent taxonomy, orchestration
             patterns, and implementation pacing.
           </p>
         </div>
@@ -83,8 +83,13 @@ export default function SummaryPage() {
             <div className="mt-2 font-mono text-2xl font-semibold text-accent-purple-dark">{totals.totalTowers}</div>
           </div>
           <div className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-sm">
-            <div className="text-xs uppercase tracking-wide text-forge-hint">Annual hours saved (modeled)</div>
-            <div className="mt-2 font-mono text-2xl font-semibold text-accent-purple-dark">{totals.hours.toLocaleString()}</div>
+            <div className="text-xs uppercase tracking-wide text-forge-hint">High-tier initiatives (modeled)</div>
+            <div className="mt-2 font-mono text-2xl font-semibold text-accent-purple-dark">
+              {totals.initiativeTiers.high}
+            </div>
+            <p className="mt-1 text-xs text-forge-subtle">
+              {totals.initiativeTiers.medium} med · {totals.initiativeTiers.low} low
+            </p>
           </div>
         </section>
 
@@ -105,8 +110,8 @@ export default function SummaryPage() {
         </section>
 
         <section className="mt-12 space-y-3">
-          <h2 className="font-display text-lg font-semibold text-forge-ink">Waterfall: hours saved by tower</h2>
-          <p className="text-sm text-forge-subtle">Each bar increments cumulative modeled annual hours.</p>
+          <h2 className="font-display text-lg font-semibold text-forge-ink">Waterfall: impact score by tower</h2>
+          <p className="text-sm text-forge-subtle">Each step adds a 1–3 score from the tower&rsquo;s qualitative impact tier (not hours or dollars).</p>
           <div className="min-w-0 rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-card">
             <WaterfallChart data={wf} />
           </div>
@@ -114,7 +119,7 @@ export default function SummaryPage() {
 
         <section className="mt-12 space-y-3">
           <h2 className="font-display text-lg font-semibold text-forge-ink">AI readiness heatmap (all processes)</h2>
-          <p className="text-sm text-forge-subtle">Impact bar reflects annual hours saved per process; columns reflect complexity tier vs savings intensity.</p>
+          <p className="text-sm text-forge-subtle">Impact bar reflects H/M/L tier per process; right column encodes complexity vs impact tier.</p>
           <div className="max-h-[520px] overflow-y-auto pr-1">
             <ReadinessHeatmap points={heat} />
           </div>

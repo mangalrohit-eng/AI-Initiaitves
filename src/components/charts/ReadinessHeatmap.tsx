@@ -1,16 +1,16 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn, impactTierScore } from "@/lib/utils";
+import type { ImpactTier } from "@/data/types";
 
 const complexityRank: Record<string, number> = { Low: 0, Medium: 1, High: 2 };
 
 export function ReadinessHeatmap({
   points,
 }: {
-  points: { tower: string; process: string; complexity: "Low" | "Medium" | "High"; hours: number; savingsPct: number }[];
+  points: { tower: string; process: string; complexity: "Low" | "Medium" | "High"; impactTier: ImpactTier }[];
 }) {
-  const maxHours = Math.max(1, ...points.map((p) => p.hours));
-  const maxPct = 100;
+  const maxScore = 3;
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-sm">
@@ -18,14 +18,15 @@ export function ReadinessHeatmap({
         <div className="grid grid-cols-[220px_1fr] gap-3 text-xs text-forge-hint">
           <div>Process</div>
           <div className="grid grid-cols-2 gap-3">
-            <div>Impact (hours saved)</div>
-            <div>Complexity vs savings %</div>
+            <div>Modeled impact (H / M / L)</div>
+            <div>Complexity vs impact tier</div>
           </div>
         </div>
         <div className="mt-3 space-y-2">
           {points.map((p) => {
-            const impact = p.hours / maxHours;
-            const savings = p.savingsPct / maxPct;
+            const score = impactTierScore(p.impactTier);
+            const impact = score / maxScore;
+            const savings = score / maxScore;
             const cx = complexityRank[p.complexity] ?? 1;
             return (
               <div
@@ -41,7 +42,7 @@ export function ReadinessHeatmap({
                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-forge-well-strong">
                       <div className="h-full bg-accent-purple" style={{ width: `${impact * 100}%`, opacity: 0.85 }} />
                     </div>
-                    <div className="w-16 text-right font-mono text-xs text-forge-body">{Math.round(p.hours).toLocaleString()}</div>
+                    <div className="w-16 text-right font-mono text-xs text-forge-body">{p.impactTier}</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="flex h-8 w-full items-end gap-1">
@@ -50,11 +51,11 @@ export function ReadinessHeatmap({
                           key={i}
                           className={cn("h-full flex-1 rounded-md", i === cx ? "bg-accent-purple" : "bg-forge-border")}
                           style={{ opacity: 0.35 + savings * (i === cx ? 0.65 : 0.12) }}
-                          title={`${p.complexity} · ${p.savingsPct}%`}
+                          title={`${p.complexity} · ${p.impactTier}`}
                         />
                       ))}
                     </div>
-                    <div className="w-12 text-right font-mono text-xs text-forge-body">{p.savingsPct}%</div>
+                    <div className="w-12 text-right font-mono text-xs text-forge-body">{p.impactTier[0]}</div>
                   </div>
                 </div>
               </div>

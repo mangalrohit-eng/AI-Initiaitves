@@ -1,3 +1,6 @@
+/** Modeled potential impact — qualitative only until discovery validates sizing. */
+export type ImpactTier = "High" | "Medium" | "Low";
+
 export type Tower = {
   id: string;
   name: string;
@@ -7,7 +10,7 @@ export type Tower = {
   currentState: string;
   totalProcesses: number;
   aiEligibleProcesses: number;
-  estimatedAnnualSavingsHours: number;
+  impactTier: ImpactTier;
   topOpportunityHeadline: string;
   processes: Process[];
   workCategories: WorkCategory[];
@@ -122,8 +125,7 @@ export type AIProcessBrief = {
   matchRowName: string;
   aiPriority: "P1" | "P2";
   description?: string;
-  estimatedTimeSavingsPercent: number;
-  estimatedAnnualHoursSaved: number;
+  impactTier: ImpactTier;
   preState: {
     summary: string;
     painPoints: string[];
@@ -150,8 +152,7 @@ export type Process = {
   isAiEligible: boolean;
   complexity: "Low" | "Medium" | "High";
   timelineMonths: number;
-  estimatedTimeSavingsPercent: number;
-  estimatedAnnualHoursSaved: number;
+  impactTier: ImpactTier;
   currentPainPoints: string[];
   work: WorkLens;
   workforce: WorkforceLens;
@@ -201,7 +202,8 @@ export type WorkforceLens = {
   pre: RoleState[];
   post: RoleState[];
   keyShifts: string[];
-  netFTEImpact: string;
+  workforceImpactTier: ImpactTier;
+  workforceImpactSummary: string;
 };
 
 export type RoleState = {

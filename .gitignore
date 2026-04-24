@@ -18,6 +18,9 @@
 
 # misc
 .DS_Store
+
+# script output (xlsx/csv from export-tower-opportunities)
+/exports/
 *.pem
 
 # debug

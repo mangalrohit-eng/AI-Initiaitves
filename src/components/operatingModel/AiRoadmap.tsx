@@ -52,7 +52,7 @@ function RoadmapCard({
       {initiative ? (
         <div className="mt-3 flex items-center gap-2 text-[11px] text-forge-subtle">
           <span className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5 font-mono">
-            {initiative.estimatedTimeSavingsPercent}% saved
+            Impact: {initiative.impactTier}
           </span>
           <span className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5">
             {initiative.agents.length} agents

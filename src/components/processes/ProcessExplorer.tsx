@@ -49,8 +49,7 @@ export function ProcessExplorer({ process }: { process: Process }) {
 
         <div className="rounded-2xl border border-forge-border border-l-4 border-l-accent-purple bg-forge-well p-4 text-sm text-forge-body">
           <span className="font-semibold text-forge-ink">Transformation outcome: </span>
-          up to <span className="font-mono font-medium text-accent-purple-dark">{process.estimatedTimeSavingsPercent}%</span> cycle time reduction with{" "}
-          <span className="font-mono text-forge-ink">{process.estimatedAnnualHoursSaved.toLocaleString()}</span> annual hours saved (estimated).
+          Modeled impact tier <span className="font-mono font-medium text-accent-purple-dark">{process.impactTier}</span> (qualitative until discovery sizes cycle-time and capacity).
         </div>
       </section>
     </div>

@@ -19,7 +19,7 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
   const tower = getTowerBySlug(params.slug);
   if (!tower) notFound();
 
-  const chartData = tower.processes.map((p) => ({ name: p.name, hours: p.estimatedAnnualHoursSaved }));
+  const chartData = tower.processes.map((p) => ({ name: p.name, impactTier: p.impactTier }));
 
   return (
     <PageShell>
@@ -70,10 +70,10 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
 
         <section className="mt-14 space-y-3">
           <h2 className="font-display text-lg font-semibold text-forge-ink">
-            Modeled hours saved by AI initiative
+            Modeled impact by AI initiative
           </h2>
           <p className="text-sm text-forge-subtle">
-            Annual hours reclaimed by each agentic initiative in this tower.
+            Qualitative High / Medium / Low tiers per initiative (not financial, hours, or FTE precision).
           </p>
           <div className="min-w-0 rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-card">
             <HoursSavedBar data={chartData} />

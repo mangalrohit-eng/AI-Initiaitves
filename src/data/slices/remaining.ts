@@ -12,7 +12,7 @@ export const hrTower: TowerSlice = {
     "Versant is in hyper-hiring mode — standing up every function from scratch while competing with Disney, Netflix, WBD, and tech companies for talent. Building a new culture around 'trust, teamwork, transparency.' Employee count 1,000-5,000 with rapid growth. Separating from Comcast HR systems and policies. On-air talent (anchors, hosts, correspondents) are the most expensive and strategically important assets.",
   totalProcesses: 5,
   aiEligibleProcesses: 5,
-  estimatedAnnualSavingsHours: 27500,
+  impactTier: "Medium",
   topOpportunityHeadline: "Talent acquisition at scale",
   processes: [
     processShell("hr-1", "Talent Acquisition & Recruiting", {
@@ -20,8 +20,7 @@ export const hrTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 6,
-      estimatedTimeSavingsPercent: 55,
-      estimatedAnnualHoursSaved: 12000,
+      impactTier: "High",
       currentPainPoints: [
         "Hiring across every function simultaneously during company standup",
         "Competing with larger media companies and tech for same talent pools",
@@ -79,7 +78,8 @@ export const hrTower: TowerSlice = {
           "Coordinators absorbed into AI-assisted workflow; repositioned as recruiting ops analysts",
           "Recruiters spend 60% on relationships, 25% on AI oversight, 15% on offer strategy",
         ],
-        netFTEImpact: "8-10 FTE equivalents freed; reinvested into talent branding and passive pipeline",
+        workforceImpactTier: "High",
+        workforceImpactSummary: "Reinvested into talent branding and passive pipeline; transactional recruiting load reduced.",
       },
       workbench: {
         pre: [
@@ -149,8 +149,7 @@ export const hrTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Low",
       timelineMonths: 4,
-      estimatedTimeSavingsPercent: 65,
-      estimatedAnnualHoursSaved: 5000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Day-1 readiness fails for ~15% of hires due to missing accounts, badges, or gear",
         "Manual IT tickets queue behind other work during hyper-hiring surges",
@@ -207,7 +206,8 @@ export const hrTower: TowerSlice = {
           "HR ops shifts from ticket work to journey and culture design",
           "IT moves from manual provisioning to identity engineering",
         ],
-        netFTEImpact: "3-4 FTE equivalents redeployed to new-hire experience and analytics",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [
@@ -268,8 +268,7 @@ export const hrTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 12,
-      estimatedTimeSavingsPercent: 70,
-      estimatedAnnualHoursSaved: 4000,
+      impactTier: "Low",
       currentPainPoints: [
         "Performance signals for anchors, hosts, and correspondents live in Nielsen, digital analytics, social, ad sales, and DTC systems with no unified view",
         "Contract negotiations rely on static comps — no modeled value of the talent's audience contribution",
@@ -321,7 +320,8 @@ export const hrTower: TowerSlice = {
           role("Talent Analytics Lead", "1-2 FTEs", ["model governance", "comp strategy"], ["ML literacy", "econometrics"], { "model governance": 55, "comp strategy": 45 }),
         ],
         keyShifts: ["Relations staff spend more time on the relationship, less on data assembly"],
-        netFTEImpact: "2-3 FTE equivalents saved; analytics resource repointed to strategy",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "analytics resource repointed to strategy.",
       },
       workbench: {
         pre: [
@@ -385,8 +385,7 @@ export const hrTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 45,
-      estimatedAnnualHoursSaved: 3500,
+      impactTier: "Low",
       currentPainPoints: [
         "Annual spreadsheet cycles disconnected from live hiring and finance signals",
         "Limited scenario modeling for freezes, surges, and location mixes",
@@ -432,7 +431,8 @@ export const hrTower: TowerSlice = {
           role("HRBPs", "7-8 FTEs", ["coaching", "exceptions", "change"], ["AI summaries", "HRIS"], { coaching: 40, exceptions: 35, change: 25 }),
         ],
         keyShifts: ["HRBPs spend less time reconciling tables and more time on talent decisions"],
-        netFTEImpact: "1-2 FTEs equivalent absorbed by automation while improving cycle time",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [tool("HRIS exports", "HR Systems", "Headcount"), tool("Excel models", "Analytics", "Scenarios")],
@@ -473,8 +473,7 @@ export const hrTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Low",
       timelineMonths: 4,
-      estimatedTimeSavingsPercent: 50,
-      estimatedAnnualHoursSaved: 3000,
+      impactTier: "Low",
       currentPainPoints: [
         "One-size curricula misaligned to role-specific AI and data needs",
         "Low completion telemetry hides where learners stall",
@@ -519,7 +518,8 @@ export const hrTower: TowerSlice = {
           role("SMEs", "5-6 FTEs", ["complex labs", "exceptions"], ["sandboxes", "office hours"], { "complex labs": 60, exceptions: 40 }),
         ],
         keyShifts: ["SME time shifts to high-touch moments while agents handle baseline Q&A"],
-        netFTEImpact: "≈1 FTE equivalent reinvested into leadership programs",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [tool("LMS catalogs", "Learning", "Modules"), tool("Email nudges", "Comms", "Reminders")],
@@ -565,7 +565,7 @@ export const researchTower: TowerSlice = {
     "Audience data is fragmented across linear (Nielsen), digital (per-brand web analytics), social platforms, Fandango, Rotten Tomatoes, GolfNow, SportsEngine. No unified audience identity or cross-platform analytics capability. Research team serves programming, ad sales, and strategy but lacks connected data infrastructure.",
   totalProcesses: 4,
   aiEligibleProcesses: 4,
-  estimatedAnnualSavingsHours: 26000,
+  impactTier: "Medium",
   topOpportunityHeadline: "Unified audience identity",
   processes: [
     processShell("ra-1", "Cross-Platform Audience Measurement & Identity Resolution", {
@@ -573,8 +573,7 @@ export const researchTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 15,
-      estimatedTimeSavingsPercent: 60,
-      estimatedAnnualHoursSaved: 10000,
+      impactTier: "High",
       currentPainPoints: [
         "Nielsen for linear, separate digital analytics per brand, no connection between them",
         "A CNBC.com visitor who also uses GolfNow and Fandango is 3 separate profiles today",
@@ -630,7 +629,8 @@ export const researchTower: TowerSlice = {
           "Analysts shift from deck assembly to modeling and insight quality",
           "New data product org owns identity graph as an internal platform",
         ],
-        netFTEImpact: "4-5 FTE equivalents released; reallocated to modeling, governance, and product",
+        workforceImpactTier: "High",
+        workforceImpactSummary: "reallocated to modeling, governance, and product.",
       },
       workbench: {
         pre: [
@@ -700,8 +700,7 @@ export const researchTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 55,
-      estimatedAnnualHoursSaved: 7000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Brand teams wait for weekly reports to see programming performance",
         "Anomalies (drop-off, viral lift) caught hours or days after they happen",
@@ -751,7 +750,8 @@ export const researchTower: TowerSlice = {
           role("Platform Engineers", "3-4 FTEs", ["streaming", "lineage", "governance"], ["Kafka", "dbt", "catalog APIs"], { streaming: 45, lineage: 30, governance: 25 }),
         ],
         keyShifts: ["Analysts become insight curators; engineering invests in streaming platform"],
-        netFTEImpact: "3-4 FTE equivalents released; reinvested into platform + model governance",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "reinvested into platform + model governance.",
       },
       workbench: {
         pre: [
@@ -815,8 +815,7 @@ export const researchTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Low",
       timelineMonths: 4,
-      estimatedTimeSavingsPercent: 70,
-      estimatedAnnualHoursSaved: 4000,
+      impactTier: "Low",
       currentPainPoints: [
         "Analysts manually track competitor schedules, pricing, and content moves across Disney, WBD, Netflix, YouTube, etc.",
         "Coverage is inconsistent — some competitors get deep attention, others miss entirely",
@@ -866,7 +865,8 @@ export const researchTower: TowerSlice = {
           role("Knowledge Engineer", "1 FTE", ["intel graph governance"], ["graph modeling", "LLM ops"], { "graph governance": 100 }),
         ],
         keyShifts: ["Analysts shift from sweeping to curating; a knowledge engineer owns the graph"],
-        netFTEImpact: "1-2 FTE equivalents released; reinvested in deeper strategic framing",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "reinvested in deeper strategic framing.",
       },
       workbench: {
         pre: [
@@ -925,8 +925,7 @@ export const researchTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 50,
-      estimatedAnnualHoursSaved: 5000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Every RFP kicks off a custom audience build — 3-5 days to assemble slides",
         "No pre-packaged cross-brand audiences; ad sales has to sell each brand separately",
@@ -978,7 +977,8 @@ export const researchTower: TowerSlice = {
           role("Seller Enablement", "2-3 FTEs", ["tailoring", "advertiser coaching"], ["platform", "content marketing"], { tailoring: 55, coaching: 45 }),
         ],
         keyShifts: ["Analysts become governors of the segment library; sales enablement owns tailoring"],
-        netFTEImpact: "2-3 FTE equivalents released; reallocated to deeper advertiser research",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "reallocated to deeper advertiser research.",
       },
       workbench: {
         pre: [
@@ -1050,7 +1050,7 @@ export const legalTower: TowerSlice = {
     "Navigating first year as public company (SEC), FCC broadcast compliance, hundreds of content licensing agreements inherited from NBCU era, carriage negotiations with MVPDs, sports rights (USGA through 2032, WNBA), talent contracts for on-air personalities, and active M&A pipeline (Free TV Networks, Indy Cinema Group, StockStory, potentially Vox Media).",
   totalProcesses: 4,
   aiEligibleProcesses: 4,
-  estimatedAnnualSavingsHours: 30000,
+  impactTier: "Medium",
   topOpportunityHeadline: "Content rights management",
   processes: [
     processShell("leg-1", "Content Rights Management & Compliance", {
@@ -1059,8 +1059,7 @@ export const legalTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 12,
-      estimatedTimeSavingsPercent: 55,
-      estimatedAnnualHoursSaved: 15000,
+      impactTier: "High",
       currentPainPoints: [
         "Hundreds of legacy content deals inherited from NBCU era with varying terms",
         "Kardashians content: on-air rights retained but streaming sold to Hulu — complex split rights",
@@ -1116,7 +1115,8 @@ export const legalTower: TowerSlice = {
           "Rights coordinators become governors of the rights graph",
           "Legal refocuses on negotiation strategy and novel rights issues",
         ],
-        netFTEImpact: "5-6 FTE equivalents released; reallocated to rights strategy and new-deal negotiation",
+        workforceImpactTier: "High",
+        workforceImpactSummary: "reallocated to rights strategy and new-deal negotiation.",
       },
       workbench: {
         pre: [
@@ -1182,8 +1182,7 @@ export const legalTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 50,
-      estimatedAnnualHoursSaved: 8000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Turnaround on third-party papers ranges 5-10 business days, blocking commercial deals",
         "Inconsistent clause usage across brands and deal types — no enforced playbook",
@@ -1235,7 +1234,8 @@ export const legalTower: TowerSlice = {
           role("Legal Operations", "2-3 FTEs", ["playbook governance", "metrics", "CLM administration"], ["CLM admin", "process design"], { "playbook governance": 50, metrics: 25, CLM: 25 }),
         ],
         keyShifts: ["Lawyers move upstream into strategy; legal ops owns the playbook and metrics"],
-        netFTEImpact: "3-4 FTE equivalents released; reinvested into commercial deal velocity",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "reinvested into commercial deal velocity.",
       },
       workbench: {
         pre: [
@@ -1297,8 +1297,7 @@ export const legalTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 45,
-      estimatedAnnualHoursSaved: 3000,
+      impactTier: "Low",
       currentPainPoints: [
         "VDRs contain thousands of documents; manual review misses signals",
         "Diligence workstreams (legal, financial, ops) operate in silos with late integration",
@@ -1351,7 +1350,8 @@ export const legalTower: TowerSlice = {
           role("Diligence Ops", "1-2 FTEs", ["agent tuning", "DD playbook"], ["LLM ops", "process"], { "agent tuning": 55, playbook: 45 }),
         ],
         keyShifts: ["Deal teams shift from sampling and synthesis to adjudication and negotiation"],
-        netFTEImpact: "2-3 FTE equivalents saved per deal; team focus shifts to higher-risk issues",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "team focus shifts to higher-risk issues.",
       },
       workbench: {
         pre: [
@@ -1417,8 +1417,7 @@ export const legalTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 6,
-      estimatedTimeSavingsPercent: 40,
-      estimatedAnnualHoursSaved: 4000,
+      impactTier: "Low",
       currentPainPoints: [
         "Versant as an independent public company takes on SEC reporting obligations from Day 1",
         "FCC compliance spans broadcast licensing, political advertising, and EEO reporting",
@@ -1470,7 +1469,8 @@ export const legalTower: TowerSlice = {
           role("Legal + Finance partners", "4-5 FTEs", ["strategic review", "filing sign-off"], ["domain expertise"], { "strategic review": 55, "filing sign-off": 45 }),
         ],
         keyShifts: ["Compliance officers shift from monitoring to oversight of automated monitoring"],
-        netFTEImpact: "1-2 FTE equivalents saved; external counsel reliance reduced",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "external counsel reliance reduced.",
       },
       workbench: {
         pre: [
@@ -1542,7 +1542,7 @@ export const corpTower: TowerSlice = {
     "Separating from Comcast facilities and shared services. Establishing independent corporate operations. Managing lease transition for DC bureau space from NBC. Building security operations for high-profile news organization.",
   totalProcesses: 3,
   aiEligibleProcesses: 3,
-  estimatedAnnualSavingsHours: 10500,
+  impactTier: "Low",
   topOpportunityHeadline: "Facilities automation",
   processes: [
     processShell("corp-1", "Intelligent Facilities & Space Management", {
@@ -1550,8 +1550,7 @@ export const corpTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Low",
       timelineMonths: 6,
-      estimatedTimeSavingsPercent: 40,
-      estimatedAnnualHoursSaved: 3000,
+      impactTier: "Low",
       currentPainPoints: [
         "Work orders are reactive — occupants report broken HVAC, lights, plumbing after it fails",
         "Occupancy is estimated from badge swipes with no real utilization insight for hybrid planning",
@@ -1604,7 +1603,8 @@ export const corpTower: TowerSlice = {
           role("Real Estate Strategists", "2-3 FTEs", ["modeled scenarios", "portfolio strategy"], ["scenario modeling"], { scenarios: 55, strategy: 45 }),
         ],
         keyShifts: ["Maintenance shifts from reactive fires to planned work; real estate makes data-driven decisions"],
-        netFTEImpact: "1-2 FTE equivalents released; reinvested in portfolio strategy",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "reinvested in portfolio strategy.",
       },
       workbench: {
         pre: [
@@ -1666,8 +1666,7 @@ export const corpTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 35,
-      estimatedAnnualHoursSaved: 4000,
+      impactTier: "Low",
       currentPainPoints: [
         "Physical security (cameras, badges) and cyber SOC operate on separate tools with little correlation",
         "A high-profile news organization attracts targeted physical + cyber threats (journalists, executives)",
@@ -1723,7 +1722,8 @@ export const corpTower: TowerSlice = {
           "Converged operations; security engineering becomes a first-class discipline",
           "Physical security staff refocus on judgment and VIP protection",
         ],
-        netFTEImpact: "3-4 FTE equivalents released; reinvested in detection engineering",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "reinvested in detection engineering.",
       },
       workbench: {
         pre: [
@@ -1791,8 +1791,7 @@ export const corpTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Low",
       timelineMonths: 6,
-      estimatedTimeSavingsPercent: 45,
-      estimatedAnnualHoursSaved: 3500,
+      impactTier: "Low",
       currentPainPoints: [
         "Procurement catalogs are fragmented across legacy Comcast systems and new Versant vendors",
         "Renewals surprise budget owners — autorenew clauses fire without review",
@@ -1846,7 +1845,8 @@ export const corpTower: TowerSlice = {
           role("AP Analysts", "2-3 FTEs", ["exception analytics", "controls"], ["SOX", "analytics"], { analytics: 55, controls: 45 }),
         ],
         keyShifts: ["Shift from transactional buyers to strategic category managers; AP becomes exception-handling focused"],
-        netFTEImpact: "4-5 FTE equivalents released; reinvested in category strategy",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "reinvested in category strategy.",
       },
       workbench: {
         pre: [
@@ -1920,7 +1920,7 @@ export const techTower: TowerSlice = {
     "Separating from Comcast technology infrastructure. Tech stack includes legacy elements (WordPress, PHP, Cloudflare per ZoomInfo). Building independent cloud infrastructure. StockStory acquisition brings small AI/ML team. No visible cloud strategy declaration. No unified data platform. Heavy reliance on Comcast-era TSAs for technology.",
   totalProcesses: 4,
   aiEligibleProcesses: 4,
-  estimatedAnnualSavingsHours: 53000,
+  impactTier: "High",
   topOpportunityHeadline: "Software dev lifecycle",
   processes: [
     processShell("tech-1", "Cloud-Native Infrastructure Design & Migration", {
@@ -1928,8 +1928,7 @@ export const techTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 18,
-      estimatedTimeSavingsPercent: 40,
-      estimatedAnnualHoursSaved: 15000,
+      impactTier: "High",
       currentPainPoints: [
         "Heavy reliance on Comcast infrastructure via TSAs with expiration deadlines",
         "Legacy tech stack (WordPress, PHP) not suited for AI-native architecture",
@@ -1985,7 +1984,8 @@ export const techTower: TowerSlice = {
           role("SREs", "5-6 FTEs", ["reliability engineering", "DR validation"], ["chaos tools", "SRE"], { reliability: 60, DR: 40 }),
         ],
         keyShifts: ["Teams move from toil to platform engineering as the cloud matures"],
-        netFTEImpact: "4-6 FTE equivalents released; reinvested in platform + product engineering",
+        workforceImpactTier: "High",
+        workforceImpactSummary: "reinvested in platform + product engineering.",
       },
       workbench: {
         pre: [
@@ -2053,8 +2053,7 @@ export const techTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 6,
-      estimatedTimeSavingsPercent: 45,
-      estimatedAnnualHoursSaved: 20000,
+      impactTier: "High",
       currentPainPoints: [
         "PR review queues slow feature delivery; senior engineers spend hours on routine review",
         "Flaky tests erode trust in CI; teams merge despite yellow signals",
@@ -2107,7 +2106,8 @@ export const techTower: TowerSlice = {
           role("Platform + DevEx Engineers", "10-12 FTEs", ["developer productivity", "agent tuning"], ["platform eng", "LLM ops"], { DevEx: 55, tuning: 45 }),
         ],
         keyShifts: ["Engineers spend less time on routine review, more on architecture; on-call time drops"],
-        netFTEImpact: "15-20 FTE equivalents released via productivity gains; reinvested in product",
+        workforceImpactTier: "High",
+        workforceImpactSummary: "reinvested in product.",
       },
       workbench: {
         pre: [
@@ -2172,8 +2172,7 @@ export const techTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 12,
-      estimatedTimeSavingsPercent: 50,
-      estimatedAnnualHoursSaved: 8000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Shadow experiments in notebooks without lineage or promotion paths",
         "Limited observability across training jobs, endpoints, and data drift",
@@ -2225,7 +2224,8 @@ export const techTower: TowerSlice = {
           role("Model Owners (DS)", "8-10 FTEs", ["experiment design", "review agent outputs", "stakeholder sign-off"], ["evaluation", "risk framing"], { "experiment design": 35, "review agent outputs": 40, "stakeholder sign-off": 25 }),
         ],
         keyShifts: ["Platform engineers absorb repetitive release mechanics", "Scientists focus on evaluation and business judgment"],
-        netFTEImpact: "2-3 FTEs equivalent shifted from manual release to higher-leverage platform and model risk work",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [
@@ -2282,8 +2282,7 @@ export const techTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 50,
-      estimatedAnnualHoursSaved: 10000,
+      impactTier: "High",
       currentPainPoints: [
         "As an independent news company, Versant is a target for state actors and politically motivated attackers",
         "Alert fatigue from SIEM + EDR + email security with minimal cross-correlation",
@@ -2334,7 +2333,8 @@ export const techTower: TowerSlice = {
           role("Compliance Engineering", "2-3 FTEs", ["continuous evidence", "controls"], ["GRC automation"], { evidence: 55, controls: 45 }),
         ],
         keyShifts: ["SOC shifts from tier-1 volume to investigation and hunting; compliance becomes continuous"],
-        netFTEImpact: "3-4 FTE equivalents released; reinvested in detection + hunt capability",
+        workforceImpactTier: "High",
+        workforceImpactSummary: "reinvested in detection + hunt capability.",
       },
       workbench: {
         pre: [
@@ -2407,7 +2407,7 @@ export const opsTower: TowerSlice = {
     "Operating from CNBC's Englewood Cliffs NJ facility. Running master control for MS NOW, CNBC, Golf Channel, USA Network, E!, Syfy, Oxygen. Lease arrangement with NBC for DC bureau technical operations. Adding Free TV Networks (OTA/FAST channels). Broadcast operations run 24/7/365 with zero-tolerance for outages.",
   totalProcesses: 3,
   aiEligibleProcesses: 3,
-  estimatedAnnualSavingsHours: 32000,
+  impactTier: "Medium",
   topOpportunityHeadline: "Master control automation",
   processes: [
     processShell("ops-1", "Master Control Automation & Intelligent Playout", {
@@ -2416,8 +2416,7 @@ export const opsTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 15,
-      estimatedTimeSavingsPercent: 50,
-      estimatedAnnualHoursSaved: 20000,
+      impactTier: "High",
       currentPainPoints: [
         "24/7 staffing across 7+ networks requires large operations team",
         "Manual monitoring for technical quality issues (audio levels, video quality, captioning sync)",
@@ -2470,7 +2469,8 @@ export const opsTower: TowerSlice = {
           role("Broadcast Engineering", "5-6 FTEs", ["platform engineering", "AI tuning"], ["automation", "ML"], { engineering: 60, "AI tuning": 40 }),
         ],
         keyShifts: ["MCR staffing scales sub-linearly as FAST/OTA channels are added"],
-        netFTEImpact: "10-12 FTE equivalents saved; some redeployed to live event coverage",
+        workforceImpactTier: "High",
+        workforceImpactSummary: "some redeployed to live event coverage.",
       },
       workbench: {
         pre: [
@@ -2535,8 +2535,7 @@ export const opsTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 12,
-      estimatedTimeSavingsPercent: 40,
-      estimatedAnnualHoursSaved: 8000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Complex routing across MVPD, OTT, FAST, and OTA with brittle manual runbooks",
         "Manual failover drills that do not cover all edge combinations",
@@ -2582,7 +2581,8 @@ export const opsTower: TowerSlice = {
           role("Augmented NOC Operators", "6-8 FTEs", ["exception handling", "customer comms"], ["AI consoles", "escalation playbooks"], { "exception handling": 55, "customer comms": 45 }),
         ],
         keyShifts: ["Operators shift from keystroke failover to supervising agent-proposed actions"],
-        netFTEImpact: "2-3 FTEs redeployed to architecture and partner governance",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [
@@ -2633,8 +2633,7 @@ export const opsTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 35,
-      estimatedAnnualHoursSaved: 4000,
+      impactTier: "Low",
       currentPainPoints: [
         "Reactive repairs after on-air incidents damage revenue and trust",
         "Limited fusion of vendor logs, environmental sensors, and usage telemetry",
@@ -2679,7 +2678,8 @@ export const opsTower: TowerSlice = {
           role("Field Technicians", "8-10 FTEs", ["precision repairs", "calibration"], ["AR guides", "CMMS"], { "precision repairs": 60, calibration: 40 }),
         ],
         keyShifts: ["Planners become reliability partners with agent-ranked backlogs"],
-        netFTEImpact: "1-2 FTEs equivalent freed from expediting and duplicate PM",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [tool("CMMS tickets", "Maintenance", "Work orders"), tool("Spreadsheets", "Planning", "Parts lists")],
@@ -2726,7 +2726,7 @@ export const salesTower: TowerSlice = {
     "Critical transition: NBCU currently handles ad sales for Versant channels. The 2-year TSA means Versant must build its own ad sales infrastructure and team by ~2028. This is simultaneously the biggest revenue risk ($1.58B ad revenue in FY2025, declining 8.9% YoY) and the biggest greenfield AI opportunity — Versant can build AI-native ad sales from Day 1. Distribution revenue ($4.09B) managed through carriage negotiations with declining MVPD subscribers.",
   totalProcesses: 3,
   aiEligibleProcesses: 3,
-  estimatedAnnualSavingsHours: 36000,
+  impactTier: "Medium",
   topOpportunityHeadline: "AI-native ad sales platform",
   processes: [
     processShell("sales-1", "AI-Native Advertising Sales & Yield Optimization", {
@@ -2735,8 +2735,7 @@ export const salesTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 18,
-      estimatedTimeSavingsPercent: 45,
-      estimatedAnnualHoursSaved: 25000,
+      impactTier: "High",
       currentPainPoints: [
         "No independent ad sales infrastructure — complete greenfield build required",
         "NBCU TSA creates dependency and knowledge transfer risk",
@@ -2795,7 +2794,8 @@ export const salesTower: TowerSlice = {
           "Sales team refocuses on relationships + strategic deals",
           "New revenue operations + ad product functions emerge",
         ],
-        netFTEImpact: "15-20 FTE equivalents released vs. NBCU-scale model; reinvested into ad product",
+        workforceImpactTier: "High",
+        workforceImpactSummary: "reinvested into ad product.",
       },
       workbench: {
         pre: [
@@ -2861,8 +2861,7 @@ export const salesTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 12,
-      estimatedTimeSavingsPercent: 35,
-      estimatedAnnualHoursSaved: 5000,
+      impactTier: "Medium",
       currentPainPoints: ["Limited integrated MVPD views", "Slow scenario modeling"],
       work: {
         pre: workState(
@@ -2909,7 +2908,8 @@ export const salesTower: TowerSlice = {
           role("Distribution Intelligence", "2-3 FTEs", ["model governance", "simulator tuning"], ["analytics", "ML"], { models: 55, simulator: 45 }),
         ],
         keyShifts: ["Team shifts from periodic deck production to continuous intelligence curation"],
-        netFTEImpact: "1-2 FTE equivalents released; reinvested in modeling",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "reinvested in modeling.",
       },
       workbench: {
         pre: [
@@ -2977,8 +2977,7 @@ export const salesTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 50,
-      estimatedAnnualHoursSaved: 6000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Siloed growth experiments across MS NOW, CNBC, GolfPass without shared learnings",
         "Manual lifecycle messaging and inconsistent paywall experiences",
@@ -3024,7 +3023,8 @@ export const salesTower: TowerSlice = {
           role("Save Coaches", "2-3 FTEs", ["high-touch exceptions", "VIP"], ["CRM", "policy"], { "high-touch exceptions": 60, VIP: 40 }),
         ],
         keyShifts: ["Retention shifts to exception-led while agents handle tier-1 saves"],
-        netFTEImpact: "1-2 FTEs reinvested into premium subscriber experience",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [tool("ESP + spreadsheets", "Marketing", "Campaigns"), tool("BI exports", "Analytics", "Reporting")],
@@ -3077,7 +3077,7 @@ export const marketingTower: TowerSlice = {
     "Building independent brand identity for Versant as a corporate entity while managing established brands (CNBC, MS NOW, E!, USA, Golf Channel). MS NOW generating 8B social views and 140M+ podcast downloads. Major DTC launches (MS NOW summer 2026, CNBC subscription) require acquisition marketing. Election cycle (2026 midterms) is a massive MS NOW marketing moment.",
   totalProcesses: 4,
   aiEligibleProcesses: 4,
-  estimatedAnnualSavingsHours: 32000,
+  impactTier: "Medium",
   topOpportunityHeadline: "Social media content ops",
   processes: [
     processShell("mkt-1", "AI-Powered Social Media Content Production & Distribution", {
@@ -3086,8 +3086,7 @@ export const marketingTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 6,
-      estimatedTimeSavingsPercent: 60,
-      estimatedAnnualHoursSaved: 15000,
+      impactTier: "High",
       currentPainPoints: [
         "MS NOW has 8B social views but content creation is labor-intensive — manual clip selection and formatting",
         "Each brand has separate social teams with duplicated processes",
@@ -3142,7 +3141,8 @@ export const marketingTower: TowerSlice = {
           role("Social Strategy + Analytics", "4-5 FTEs", ["strategy", "model governance"], ["analytics", "ML review"], { strategy: 55, governance: 45 }),
         ],
         keyShifts: ["Social teams shift from production to creative + strategy; community focuses on exceptions"],
-        netFTEImpact: "12-15 FTE equivalents released; reinvested in creative + strategy",
+        workforceImpactTier: "High",
+        workforceImpactSummary: "reinvested in creative + strategy.",
       },
       workbench: {
         pre: [
@@ -3207,8 +3207,7 @@ export const marketingTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 6,
-      estimatedTimeSavingsPercent: 45,
-      estimatedAnnualHoursSaved: 8000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Rapid iteration needs for election-cycle and tentpole moments",
         "Creative fatigue producing similar hooks across paid social",
@@ -3254,7 +3253,8 @@ export const marketingTower: TowerSlice = {
           role("Growth Leads", "4-5 FTEs", ["strategy", "experiment review"], ["CDP", "MMM"], { strategy: 45, "experiment review": 55 }),
         ],
         keyShifts: ["Creative partners steer agent outputs instead of hand-building every asset"],
-        netFTEImpact: "1-2 FTEs equivalent absorbed by higher campaign throughput",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [tool("Ad platform UIs", "Paid", "Buying"), tool("Slides + sheets", "Reporting", "Readouts")],
@@ -3298,8 +3298,7 @@ export const marketingTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Low",
       timelineMonths: 4,
-      estimatedTimeSavingsPercent: 40,
-      estimatedAnnualHoursSaved: 4000,
+      impactTier: "Low",
       currentPainPoints: [
         "Reactive press cycles with slow overnight coverage",
         "Manual monitoring across social, trades, and employee channels",
@@ -3342,7 +3341,8 @@ export const marketingTower: TowerSlice = {
           role("Internal Comms Partners", "2 FTEs", ["culture programs", "manager toolkits"], ["storytelling", "LLM review"], { "culture programs": 50, "manager toolkits": 50 }),
         ],
         keyShifts: ["Analyst time shifts from raw monitoring to validation and narrative strategy"],
-        netFTEImpact: "≈1 FTE equivalent absorbed by automation without reducing coverage",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [tool("Google Alerts + spreadsheets", "Monitoring", "Ad hoc"), tool("Word + email", "Authoring", "Drafts")],
@@ -3385,8 +3385,7 @@ export const marketingTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 50,
-      estimatedAnnualHoursSaved: 5000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Siloed attribution models per brand without portfolio view",
         "Manual UTM stitching and inconsistent taxonomy",
@@ -3431,7 +3430,8 @@ export const marketingTower: TowerSlice = {
           role("Marketing Analysts", "3-4 FTEs", ["feature QA", "stewardship"], ["dbt", "CDP"], { "feature QA": 50, stewardship: 50 }),
         ],
         keyShifts: ["Scientists spend more time on priors and governance than data wrangling"],
-        netFTEImpact: "1 FTE equivalent reinvested into experimentation design",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [tool("Spreadsheets + slides", "Office", "Reporting"), tool("BI exports", "Analytics", "Charts")],
@@ -3482,7 +3482,7 @@ export const serviceTower: TowerSlice = {
     "Fragmented service operations across multiple brands with different support channels, SLAs, and systems. Launching DTC products (MS NOW, CNBC) will create entirely new subscriber support requirements. Fandango handles high-volume transactional support (ticket purchases, refunds). GolfNow manages tee time booking issues. No unified service platform or knowledge base.",
   totalProcesses: 2,
   aiEligibleProcesses: 2,
-  estimatedAnnualSavingsHours: 36000,
+  impactTier: "Medium",
   topOpportunityHeadline: "AI-first customer support",
   processes: [
     processShell("svc-1", "AI-First Multi-Brand Customer Support", {
@@ -3491,8 +3491,7 @@ export const serviceTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 65,
-      estimatedAnnualHoursSaved: 30000,
+      impactTier: "High",
       currentPainPoints: [
         "Each brand has separate support operations with no shared knowledge base",
         "DTC launches will create spike in subscriber support needs (billing, access, content questions)",
@@ -3547,7 +3546,8 @@ export const serviceTower: TowerSlice = {
           role("CX Analytics", "4-5 FTEs", ["insights", "product feedback"], ["analytics"], { insights: 60, "product feedback": 40 }),
         ],
         keyShifts: ["Support workforce consolidates across brands and shifts upmarket to complex cases"],
-        netFTEImpact: "50+ FTE equivalents released; some reinvested in DTC subscriber experience",
+        workforceImpactTier: "High",
+        workforceImpactSummary: "50+ FTE equivalents released; some reinvested in DTC subscriber experience.",
       },
       workbench: {
         pre: [
@@ -3614,8 +3614,7 @@ export const serviceTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 50,
-      estimatedAnnualHoursSaved: 6000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Reactive saves after billing failures or silent churn",
         "Limited propensity models across GolfPass, CNBC Pro, MS NOW, Fandango bundles",
@@ -3661,7 +3660,8 @@ export const serviceTower: TowerSlice = {
           role("Lifecycle Scientists", "2-3 FTEs", ["model review", "experiment design"], ["Python", "CDP"], { "model review": 45, "experiment design": 55 }),
         ],
         keyShifts: ["Frontline focuses on high-touch while agents handle tier-1 saves"],
-        netFTEImpact: "2-3 FTEs equivalent absorbed by automation and better targeting",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [tool("CRM lists", "Service", "Dialing"), tool("ESP batches", "Marketing", "Blasts")],
@@ -3718,7 +3718,7 @@ export const editorialTower: TowerSlice = {
     "MS NOW separating from NBC News to build independent newsgathering. CNBC refreshing digital identity and integrating StockStory AI. Both brands produce thousands of hours of live content annually. MS NOW: 8B social views, 140M+ podcast downloads, DTC launch summer 2026. CNBC: #1 global business news, 6,000+ hours live coverage, Kalshi partnership, DTC subscription planned.",
   totalProcesses: 4,
   aiEligibleProcesses: 4,
-  estimatedAnnualSavingsHours: 51000,
+  impactTier: "High",
   topOpportunityHeadline: "Automated base-layer content",
   processes: [
     processShell("ed-1", "AI-Generated Data-Driven Content (CNBC Market Reports, MS NOW Digests)", {
@@ -3727,8 +3727,7 @@ export const editorialTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 6,
-      estimatedTimeSavingsPercent: 75,
-      estimatedAnnualHoursSaved: 25000,
+      impactTier: "High",
       currentPainPoints: [
         "Journalists spend significant time on routine data-driven content that follows templates",
         "CNBC market updates require speed (first-to-publish competitive advantage)",
@@ -3782,7 +3781,8 @@ export const editorialTower: TowerSlice = {
           role("News Automation Engineers", "3-4 FTEs", ["prompt engineering", "pipeline tuning"], ["LLM ops"], { prompts: 55, pipeline: 45 }),
         ],
         keyShifts: ["Journalists shift from routine drafting to analysis + enterprise; newsroom adds news automation role"],
-        netFTEImpact: "5-7 FTE equivalents released; reinvested into enterprise reporting",
+        workforceImpactTier: "High",
+        workforceImpactSummary: "reinvested into enterprise reporting.",
       },
       workbench: {
         pre: [
@@ -3848,8 +3848,7 @@ export const editorialTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 12,
-      estimatedTimeSavingsPercent: 50,
-      estimatedAnnualHoursSaved: 8000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Investigative pieces take weeks of document review across FOIA returns, court filings, and financial disclosures",
         "Reporters struggle to find non-obvious patterns across thousands of pages",
@@ -3903,7 +3902,8 @@ export const editorialTower: TowerSlice = {
           role("Fact-Checkers", "3-4 FTEs", ["high-stakes verification", "standards"], ["judgment"], { "high-stakes": 60, standards: 40 }),
         ],
         keyShifts: ["Reporters spend more time on judgment + source work; research technologists join the team"],
-        netFTEImpact: "1-2 FTE equivalents saved; capacity reinvested into more investigations",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "capacity reinvested into more investigations.",
       },
       workbench: {
         pre: [
@@ -3969,8 +3969,7 @@ export const editorialTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 12,
-      estimatedTimeSavingsPercent: 35,
-      estimatedAnnualHoursSaved: 10000,
+      impactTier: "High",
       currentPainPoints: [
         "Control rooms manage complex, time-sensitive shows with manual graphics + prompter updates",
         "Rundowns are rigid — breaking news requires frantic producer coordination",
@@ -4024,7 +4023,8 @@ export const editorialTower: TowerSlice = {
           role("Standards / Compliance", "3-4 FTEs", ["real-time oversight", "policy governance"], ["real-time tooling", "judgment"], { "real-time": 55, policy: 45 }),
         ],
         keyShifts: ["Control-room roles consolidate as agents handle routine; compliance moves to real-time"],
-        netFTEImpact: "5-7 FTE equivalents saved; some reallocated to creative + compliance",
+        workforceImpactTier: "High",
+        workforceImpactSummary: "some reallocated to creative + compliance.",
       },
       workbench: {
         pre: [
@@ -4090,8 +4090,7 @@ export const editorialTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 6,
-      estimatedTimeSavingsPercent: 60,
-      estimatedAnnualHoursSaved: 8000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Editor-heavy post-production for 140M+ annual downloads",
         "Metadata inconsistency across platforms and partners",
@@ -4139,7 +4138,8 @@ export const editorialTower: TowerSlice = {
           role("Digital Producers", "3-4 FTEs", ["clip curation", "promo strategy"], ["social tools", "LLM review"], { "clip curation": 45, "promo strategy": 55 }),
         ],
         keyShifts: ["Editors focus on signature sound while agents handle repetitive passes"],
-        netFTEImpact: "2-3 FTEs equivalent redirected to audience growth experiments",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [tool("DAW sessions", "Audio", "Editing"), tool("Shared docs", "Planning", "Notes")],
@@ -4194,7 +4194,7 @@ export const productionTower: TowerSlice = {
     "Operating studios in Englewood Cliffs NJ and contributing from NYC/DC locations. Production serves live news (MS NOW, CNBC), sports (Golf Channel, USA Sports), entertainment (E!, Syfy, Oxygen), and growing digital/DTC content needs. Post-production handles editing, graphics, audio mixing, and content packaging for multiple platforms.",
   totalProcesses: 3,
   aiEligibleProcesses: 3,
-  estimatedAnnualSavingsHours: 31000,
+  impactTier: "Medium",
   topOpportunityHeadline: "Post-production automation",
   processes: [
     processShell("prod-1", "AI-Accelerated Post-Production (Edit, Graphics, Audio)", {
@@ -4203,8 +4203,7 @@ export const productionTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 55,
-      estimatedAnnualHoursSaved: 20000,
+      impactTier: "High",
       currentPainPoints: [
         "Each live broadcast generates hours of content needing post-production for digital platforms",
         "Manual clip selection, rough cutting, and format transcoding is time-intensive",
@@ -4264,7 +4263,8 @@ export const productionTower: TowerSlice = {
           role("QA + Standards", "4-5 FTEs", ["QA", "standards"], ["QC tools"], { QA: 55, standards: 45 }),
         ],
         keyShifts: ["Post-production workforce becomes creative-led; pipeline engineering emerges as a discipline"],
-        netFTEImpact: "20-25 FTE equivalents saved; reinvested into creative + platform engineering",
+        workforceImpactTier: "High",
+        workforceImpactSummary: "reinvested into creative + platform engineering.",
       },
       workbench: {
         pre: [
@@ -4340,8 +4340,7 @@ export const productionTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 35,
-      estimatedAnnualHoursSaved: 6000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Scheduling conflicts across news, sports, and entertainment blocks",
         "Underutilized kits and expensive idle studio time",
@@ -4386,7 +4385,8 @@ export const productionTower: TowerSlice = {
           role("Field Coordinators", "6-7 FTEs", ["exceptions", "on-floor changes"], ["mobile", "AR overlays"], { exceptions: 60, "on-floor changes": 40 }),
         ],
         keyShifts: ["Managers become policy owners versus spreadsheet editors"],
-        netFTEImpact: "1-2 FTEs equivalent reinvested into cross-brand utilization analytics",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [tool("Whiteboards + Excel", "Planning", "Schedules"), tool("Radio + email", "Comms", "Crew pings")],
@@ -4431,8 +4431,7 @@ export const productionTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 12,
-      estimatedTimeSavingsPercent: 40,
-      estimatedAnnualHoursSaved: 5000,
+      impactTier: "Medium",
       currentPainPoints: [
         "Comms overhead across distributed talent and vendors",
         "Latency and packet loss causing dropped hits and rework",
@@ -4477,7 +4476,8 @@ export const productionTower: TowerSlice = {
           role("Coordinators", "4-5 FTEs", ["exceptions", "talent concierge"], ["mobile apps", "ticketing"], { exceptions: 55, "talent concierge": 45 }),
         ],
         keyShifts: ["TD time shifts from repetitive QC to complex path design"],
-        netFTEImpact: "≈1 FTE equivalent saved per major remote cycle through fewer re-dos",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [tool("Slack + PDF runbooks", "Comms", "Coordination"), tool("Vendor portals", "Network", "Circuits")],
@@ -4524,7 +4524,7 @@ export const programmingTower: TowerSlice = {
     "Managing programming schedules across 7+ linear networks, growing digital/DTC platforms, FAST channels (Free TV Networks), and podcast portfolio. Content development for original programming across brands. Content acquisition for licensing deals. Balancing declining linear ratings with growing digital audience.",
   totalProcesses: 3,
   aiEligibleProcesses: 3,
-  estimatedAnnualSavingsHours: 15000,
+  impactTier: "Low",
   topOpportunityHeadline: "Schedule optimization",
   processes: [
     processShell("prog-1", "AI-Optimized Programming & Scheduling", {
@@ -4533,8 +4533,7 @@ export const programmingTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 12,
-      estimatedTimeSavingsPercent: 40,
-      estimatedAnnualHoursSaved: 8000,
+      impactTier: "Medium",
       currentPainPoints: [
         "7+ linear networks each need optimized 24/7 schedules",
         "Lead-in/lead-out effects are significant but analyzed manually",
@@ -4587,7 +4586,8 @@ export const programmingTower: TowerSlice = {
           role("Scheduling Engineers", "2-3 FTEs", ["optimizer tuning"], ["ML", "solver"], { tuning: 100 }),
         ],
         keyShifts: ["Schedulers shift from grid builders to strategists; optimizer engineers join the team"],
-        netFTEImpact: "3-4 FTE equivalents released; reinvested in strategy + FAST creative"
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Reinvested in strategy and FAST creative; transactional scheduling load reduced.",
       },
       workbench: {
         pre: [
@@ -4649,8 +4649,7 @@ export const programmingTower: TowerSlice = {
       isAiEligible: true,
       complexity: "High",
       timelineMonths: 15,
-      estimatedTimeSavingsPercent: 35,
-      estimatedAnnualHoursSaved: 4000,
+      impactTier: "Low",
       currentPainPoints: [
         "Greenlight decks take weeks to assemble comps, demand signals, and financial models",
         "Competitive landscape research is static and stale by the time it's reviewed",
@@ -4702,7 +4701,8 @@ export const programmingTower: TowerSlice = {
           role("Portfolio Strategists", "2-3 FTEs", ["slate strategy", "model governance"], ["analytics"], { strategy: 55, governance: 45 }),
         ],
         keyShifts: ["Development focus shifts from prep work to creative judgment + relationships"],
-        netFTEImpact: "2-3 FTE equivalents released; reinvested into portfolio strategy",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "reinvested into portfolio strategy.",
       },
       workbench: {
         pre: [
@@ -4766,8 +4766,7 @@ export const programmingTower: TowerSlice = {
       isAiEligible: true,
       complexity: "Medium",
       timelineMonths: 9,
-      estimatedTimeSavingsPercent: 40,
-      estimatedAnnualHoursSaved: 3000,
+      impactTier: "Low",
       currentPainPoints: [
         "Slow comps across fragmented market listings",
         "Rights ambiguity across windows, holdbacks, and carve-outs",
@@ -4812,7 +4811,8 @@ export const programmingTower: TowerSlice = {
           role("Analysts", "3 FTEs", ["data QA", "vendor management"], ["warehouse", "RAG"], { "data QA": 55, "vendor management": 45 }),
         ],
         keyShifts: ["Legal focuses on exceptions while agents pre-clear standard terms"],
-        netFTEImpact: "≈1 FTE equivalent reinvested into originals pipeline sourcing",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
       },
       workbench: {
         pre: [tool("Email + Excel", "Deal", "Tracking"), tool("Screening databases", "Research", "Listings")],

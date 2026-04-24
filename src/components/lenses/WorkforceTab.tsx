@@ -65,8 +65,8 @@ export function WorkforceTab({ process }: { process: Process }) {
         <RoleCard title="Team with agentic AI" roles={workforce.post} tone="vibrant" />
       </div>
       <div className="rounded-2xl border border-forge-border border-l-4 border-l-accent-purple bg-forge-well p-4 text-sm text-forge-body">
-        <span className="font-semibold text-forge-ink">Net FTE impact: </span>
-        {workforce.netFTEImpact}
+        <span className="font-semibold text-forge-ink">Workforce impact ({workforce.workforceImpactTier}): </span>
+        {workforce.workforceImpactSummary}
       </div>
       <div>
         <div className="text-xs font-semibold uppercase tracking-wide text-forge-hint">Key shifts</div>

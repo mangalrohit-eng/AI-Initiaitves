@@ -16,7 +16,7 @@ import {
 import type { AIProcessBrief, FeasibilityEvidence, Process, Tower } from "@/data/types";
 import { MetricPill } from "@/components/ui/MetricPill";
 import { EvidenceSection } from "@/components/evidence/EvidenceSection";
-import { formatHours, slugify } from "@/lib/utils";
+import { slugify } from "@/lib/utils";
 import { TIER_STYLES } from "@/lib/priority";
 import { ChangedSinceBadge } from "@/components/collab/ChangedSinceBadge";
 
@@ -93,12 +93,8 @@ export function ProcessBriefCard({
       </header>
 
       {/* Headline metrics */}
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricPill label="Time savings" value={`${brief.estimatedTimeSavingsPercent}%`} />
-        <MetricPill
-          label="Annual hours saved"
-          value={`${formatHours(brief.estimatedAnnualHoursSaved)} hrs`}
-        />
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <MetricPill label="Modeled impact" value={brief.impactTier} />
         <MetricPill label="Cycle today" value={brief.preState.typicalCycleTime || "—"} />
         <MetricPill label="Cycle with agentic AI" value={brief.postState.newCycleTime || "—"} />
       </section>

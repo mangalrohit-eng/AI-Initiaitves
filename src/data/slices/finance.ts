@@ -15,8 +15,7 @@ const finClose = processShell("fin-1", "Monthly/Quarterly Financial Close & Cons
   isAiEligible: true,
   complexity: "High",
   timelineMonths: 12,
-  estimatedTimeSavingsPercent: 55,
-  estimatedAnnualHoursSaved: 18000,
+      impactTier: "High",
   currentPainPoints: [
     "Multi-entity consolidation with JV structures (Fandango 75/25, Nikkei CNBC) requires manual adjustments",
     "Revenue recognition across 4 streams (linear distribution $4.09B, advertising $1.58B, platforms $826M, licensing $193M) with different timing rules",
@@ -163,8 +162,9 @@ const finClose = processShell("fin-1", "Monthly/Quarterly Financial Close & Cons
       "From report builders to insight generators and strategic advisors",
       "From manual close warriors to AI close orchestrators",
     ],
-    netFTEImpact:
-      "5-7 FTEs redeployed from close operations to strategic finance, M&A support, and investor relations",
+    workforceImpactTier: "High",
+    workforceImpactSummary:
+      "Redeployed from close operations to strategic finance, M&A support, and investor relations.",
   },
   workbench: {
     pre: [
@@ -361,8 +361,7 @@ const finTreasury = processShell("fin-2", "Cash Flow Forecasting & Treasury Mana
   isAiEligible: true,
   complexity: "Medium",
   timelineMonths: 6,
-  estimatedTimeSavingsPercent: 60,
-  estimatedAnnualHoursSaved: 8000,
+      impactTier: "Medium",
   currentPainPoints: [
     "Advertising revenue is lumpy (election cycles, upfronts, scatter) making cash prediction hard",
     "Content licensing payments are complex with milestone-based triggers",
@@ -424,7 +423,8 @@ const finTreasury = processShell("fin-2", "Cash Flow Forecasting & Treasury Mana
       "From spreadsheet operators to liquidity strategists",
       "From reactive updates to proactive risk sensing",
     ],
-    netFTEImpact: "2 FTEs redeployed to M&A integration finance and strategic planning",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
   },
   workbench: {
     pre: [
@@ -534,8 +534,7 @@ const finContentRoi = processShell("fin-3", "Content Investment ROI Modeling", {
   isAiEligible: true,
   complexity: "High",
   timelineMonths: 15,
-  estimatedTimeSavingsPercent: 45,
-  estimatedAnnualHoursSaved: 6000,
+      impactTier: "Medium",
   currentPainPoints: [
     "Fragmented performance signals across platforms",
     "Manual attribution of value across windows",
@@ -587,7 +586,8 @@ const finContentRoi = processShell("fin-3", "Content Investment ROI Modeling", {
       }),
     ],
     keyShifts: ["From manual stitching to supervised agent outputs"],
-    netFTEImpact: "2 FTEs redirected to portfolio optimization and M&A analytics",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
   },
   workbench: {
     pre: [tool("Excel ROI models", "Spreadsheet", "Investment cases"), tool("BI exports", "Analytics", "Weekly performance pulls")],
@@ -686,8 +686,7 @@ const finIr = processShell("fin-4", "Investor Relations & Earnings Cycle Managem
   isAiEligible: true,
   complexity: "Medium",
   timelineMonths: 6,
-  estimatedTimeSavingsPercent: 50,
-  estimatedAnnualHoursSaved: 4000,
+      impactTier: "Low",
   currentPainPoints: [
     "Manual assembly of talking points and Q&A",
     "Fragmented sentiment tracking across brokers and social",
@@ -724,7 +723,8 @@ const finIr = processShell("fin-4", "Investor Relations & Earnings Cycle Managem
     pre: [role("IR Analysts", "3-4 FTEs", ["deck building", "logistics", "sentiment notes"], ["writing", "Excel", "capital markets"], { "deck building": 40, logistics: 20, "sentiment notes": 40 })],
     post: [role("IR Strategists", "2-3 FTEs", ["narrative judgment", "relationships", "AI governance"], ["disclosure literacy", "AI review"], { "narrative judgment": 45, relationships: 35, "AI governance": 20 })],
     keyShifts: ["From production staff to narrative strategists"],
-    netFTEImpact: "1-2 FTEs redeployed to strategic investor targeting and ESG messaging",
+        workforceImpactTier: "Low",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
   },
   workbench: {
     pre: [tool("PowerPoint + Word", "Productivity", "Materials"), tool("Excel peer comps", "Spreadsheet", "Benchmark tables")],
@@ -767,8 +767,7 @@ const finProcurement = processShell("fin-5", "Procurement Optimization & Vendor 
   isAiEligible: true,
   complexity: "Medium",
   timelineMonths: 9,
-  estimatedTimeSavingsPercent: 40,
-  estimatedAnnualHoursSaved: 5000,
+      impactTier: "Medium",
   currentPainPoints: ["Limited spend visibility post-separation", "Manual contract comparisons", "Reactive renewals"],
   work: {
     pre: workState(
@@ -801,7 +800,8 @@ const finProcurement = processShell("fin-5", "Procurement Optimization & Vendor 
     pre: [role("Procurement Coordinators", "4-5 FTEs", ["tactical buying", "vendor admin"], ["negotiation basics", "ERP catalogs"], { "tactical buying": 60, "vendor admin": 40 })],
     post: [role("Category Strategists", "3-4 FTEs", ["supplier innovation", "AI governance"], ["category strategy", "data fluency"], { "supplier innovation": 55, "AI governance": 45 })],
     keyShifts: ["From order takers to value orchestrators"],
-    netFTEImpact: "1 FTE reinvested into supplier diversity and sustainability analytics",
+        workforceImpactTier: "Medium",
+        workforceImpactSummary: "Workforce mix shifts toward judgment-led roles; quantitative sizing TBD in discovery.",
   },
   workbench: {
     pre: [tool("Email + spreadsheets", "Collaboration", "RFx tracking"), tool("ERP catalogs", "ERP", "PO execution")],
@@ -896,7 +896,7 @@ export const financeTower: TowerSlice = {
     "Finance function is being stood up as independent from Comcast. First full-year reporting (FY2025) just completed. Managing SEC compliance as new public company (NASDAQ: VSNT), quarterly earnings, $0.375/share dividend, $1B buyback authorization. Multi-entity consolidation across 7+ brands. Content rights amortization across hundreds of deals. BB- credit rating requires careful debt covenant management.",
   totalProcesses: 5,
   aiEligibleProcesses: 5,
-  estimatedAnnualSavingsHours: 41000,
+  impactTier: "High",
   topOpportunityHeadline: "Financial close automation",
   processes: [finClose, finTreasury, finContentRoi, finIr, finProcurement],
 };

@@ -4,6 +4,7 @@ import type {
   AgentOrchestration,
   AIProcessBrief,
   FeasibilityEvidence,
+  ImpactTier,
   Process,
   TopOpportunity,
   Tower,
@@ -43,22 +44,40 @@ export function getProcessBySlugs(
   return { tower, process };
 }
 
+const IMPACT_RANK: Record<ImpactTier, number> = { Low: 0, Medium: 1, High: 2 };
+
+/** 1=Low … 3=High for lightweight charts (not dollar or hour precision). */
+export function impactTierScore(t: ImpactTier) {
+  return (IMPACT_RANK[t] + 1) as 1 | 2 | 3;
+}
+
+export function compareImpactTier(a: ImpactTier, b: ImpactTier) {
+  return IMPACT_RANK[b] - IMPACT_RANK[a];
+}
+
 export function aggregateTotals() {
   const totalTowers = towers.length;
   const aiProcesses = towers.reduce((n, t) => n + t.aiEligibleProcesses, 0);
-  const hours = towers.reduce((n, t) => n + t.estimatedAnnualSavingsHours, 0);
+  const initiativeTiers: { high: number; medium: number; low: number } = { high: 0, medium: 0, low: 0 };
+  for (const t of towers) {
+    for (const p of t.processes) {
+      if (p.impactTier === "High") initiativeTiers.high += 1;
+      else if (p.impactTier === "Medium") initiativeTiers.medium += 1;
+      else initiativeTiers.low += 1;
+    }
+  }
   const agentCount = towers.reduce(
     (n, t) => n + t.processes.reduce((m, p) => m + p.agents.length, 0),
     0,
   );
-  return { totalTowers, aiProcesses, hours, agentCount };
+  return { totalTowers, aiProcesses, initiativeTiers, agentCount };
 }
 
-export function hoursByTower() {
+export function impactByTower() {
   return towers.map((t) => ({
     name: t.name,
-    hours: t.estimatedAnnualSavingsHours,
     id: t.id,
+    impactTier: t.impactTier,
   }));
 }
 
@@ -67,8 +86,7 @@ export function readinessHeatmapPoints() {
     tower: string;
     process: string;
     complexity: Process["complexity"];
-    hours: number;
-    savingsPct: number;
+    impactTier: ImpactTier;
   }[] = [];
   for (const t of towers) {
     for (const p of t.processes) {
@@ -77,18 +95,11 @@ export function readinessHeatmapPoints() {
         tower: t.name,
         process: p.name,
         complexity: p.complexity,
-        hours: p.estimatedAnnualHoursSaved,
-        savingsPct: p.estimatedTimeSavingsPercent,
+        impactTier: p.impactTier,
       });
     }
   }
   return points;
-}
-
-export function formatHours(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1000) return `${Math.round(n / 1000)}K`;
-  return `${Math.round(n)}`;
 }
 
 export function agentTypeCounts() {
@@ -187,18 +198,18 @@ export function aiEligibleDetailCount() {
 }
 
 // Returns up to 3 "top opportunities" for a tower. If the tower has curated
-// `topOpportunities` authored, those win. Otherwise the helper derives the top
-// AI-eligible initiatives by modeled annual hours saved so the tower page
+// `topOpportunities` authored, those win. Otherwise the helper ranks
+// AI-eligible initiatives by qualitative impact tier so the tower page
 // always has meaningful content without content authoring.
 export function deriveTopOpportunities(tower: Tower, limit = 3): TopOpportunity[] {
   if (tower.topOpportunities?.length) return tower.topOpportunities.slice(0, limit);
   const ranked = [...tower.processes]
     .filter((p) => p.isAiEligible)
-    .sort((a, b) => b.estimatedAnnualHoursSaved - a.estimatedAnnualHoursSaved)
+    .sort((a, b) => compareImpactTier(a.impactTier, b.impactTier) || a.name.localeCompare(b.name))
     .slice(0, limit);
   return ranked.map((p) => ({
     headline: p.name,
-    impact: `${formatHours(p.estimatedAnnualHoursSaved)} hrs/yr · ${p.estimatedTimeSavingsPercent}% time saved`,
+    impact: `Modeled impact: ${p.impactTier}`,
     processId: p.id,
   }));
 }

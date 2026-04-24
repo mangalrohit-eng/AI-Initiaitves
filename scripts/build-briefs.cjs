@@ -127,8 +127,14 @@ const body = briefs
       matchRowName,
       aiPriority,
       ...(item.description ? { description: String(item.description) } : {}),
-      estimatedTimeSavingsPercent: Number(item.estimatedTimeSavingsPercent ?? 0),
-      estimatedAnnualHoursSaved: Number(item.estimatedAnnualHoursSaved ?? 0),
+      impactTier: (() => {
+        const v = item.impactTier;
+        if (v === "High" || v === "Medium" || v === "Low") return v;
+        const h = Number(item.estimatedAnnualHoursSaved ?? 0);
+        if (h >= 5000) return "High";
+        if (h >= 2000) return "Medium";
+        return "Low";
+      })(),
       preState: {
         summary: String(pre.summary ?? ""),
         painPoints: asStringArray(pre.painPoints),

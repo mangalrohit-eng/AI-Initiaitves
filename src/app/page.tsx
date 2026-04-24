@@ -47,10 +47,13 @@ export default function HomePage() {
             </div>
           </div>
           <div className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-sm">
-            <div className="text-xs uppercase tracking-wide text-forge-hint">Annual hours saved</div>
+            <div className="text-xs uppercase tracking-wide text-forge-hint">High-impact initiatives (modeled)</div>
             <div className="mt-2 font-mono text-2xl font-semibold text-accent-purple-dark">
-              <AnimatedNumber value={totals.hours} variant="hours" />
+              <AnimatedNumber value={totals.initiativeTiers.high} />
             </div>
+            <p className="mt-1 text-[11px] text-forge-subtle">
+              {totals.initiativeTiers.medium} medium · {totals.initiativeTiers.low} low (qualitative tiers; not financial or FTE precision)
+            </p>
           </div>
           <div className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-sm">
             <div className="text-xs uppercase tracking-wide text-forge-hint">Agents modeled</div>

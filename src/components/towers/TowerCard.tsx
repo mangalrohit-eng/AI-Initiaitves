@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import type { Tower } from "@/data/types";
-import { formatHours, operatingModelTotals } from "@/lib/utils";
+import { impactTierScore, operatingModelTotals } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { ChangedSinceBadge } from "@/components/collab/ChangedSinceBadge";
 
 function Sparkline({ tower }: { tower: Tower }) {
-  const values = tower.processes.map((p) => p.estimatedAnnualHoursSaved);
-  const max = Math.max(1, ...values);
+  const values = tower.processes.map((p) => impactTierScore(p.impactTier));
+  const max = 3;
   return (
     <div className="flex h-10 items-end gap-1">
       {values.slice(0, 8).map((v, i) => (
@@ -70,11 +70,11 @@ export function TowerCard({ tower, index }: { tower: Tower; index: number }) {
               <div className="font-mono text-sm text-forge-ink">{agents}</div>
             </div>
             <div>
-              <div className="text-forge-hint">Hours / yr</div>
-              <div className="font-mono text-sm font-medium text-accent-purple-dark">{formatHours(tower.estimatedAnnualSavingsHours)}</div>
+              <div className="text-forge-hint">Tower impact</div>
+              <div className="font-mono text-sm font-medium text-accent-purple-dark">{tower.impactTier}</div>
             </div>
             <div>
-              <div className="text-forge-hint">Hours mix</div>
+              <div className="text-forge-hint">Initiative mix</div>
               <Sparkline tower={tower} />
             </div>
           </div>

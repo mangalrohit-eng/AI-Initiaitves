@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Process } from "@/data/types";
-import { slugify, formatHours } from "@/lib/utils";
+import { slugify } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Cpu } from "lucide-react";
 
@@ -24,12 +24,12 @@ export function ProcessCard({ towerSlug, process }: { towerSlug: string; process
           </div>
         </div>
         <div className="text-right">
-          <div className="font-mono text-sm text-forge-ink">{process.estimatedTimeSavingsPercent}%</div>
-          <div className="text-[11px] text-forge-hint">time saved</div>
+          <div className="font-mono text-sm text-forge-ink">{process.impactTier}</div>
+          <div className="text-[11px] text-forge-hint">modeled impact</div>
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between text-xs text-forge-subtle">
-        <span className="font-mono text-forge-body">{formatHours(process.estimatedAnnualHoursSaved)} hrs / yr</span>
+        <span className="text-forge-body">Full four-lens design</span>
         <span className="inline-flex items-center gap-1 text-forge-body">
           <Cpu className="h-3.5 w-3.5 text-accent-purple" />
           {process.agents.length} agents

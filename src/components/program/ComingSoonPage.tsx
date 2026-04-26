@@ -10,25 +10,31 @@ import { getPortalAudience } from "@/lib/portalAudience";
 
 const WHY_THIS_MATTERS: Record<string, string> = {
   "offshore-plan":
-    "Versant inherits the BB- credit rating with $2.75B debt and a quarterly $0.375 dividend commitment. Offshoring with the right editorial / news / political-brand carve-outs is the cleanest near-term lever to reset the cost base before the NBCU TSA expires — and this module turns the dials in Capability Map into a defensible plan.",
+    "Versant inherits the BB- credit rating with $2.75B debt and a quarterly $0.375 dividend commitment. Offshoring with the right editorial / news / political-brand carve-outs is the cleanest near-term lever to reset the cost base before the NBCU TSA expires — and this module turns the dials in the Assessment into a defensible plan.",
   prototypes:
     "Versant leadership and the board move faster on AI when they can experience an agent, not just read about it. This module ships clickable prototypes for the highest-impact initiatives — Reconciliation Agent for Finance close, Editorial Standards co-pilot for News, ad sales pipeline scoring on the new direct-to-advertiser model — so each tower's headline initiative has working evidence.",
   "delivery-plan":
-    "The Capability Map sizes the prize, the AI Initiatives describe the agents, and the Offshore Plan stages the location work — the Delivery Plan is the investment case Accenture brings to Versant leadership. Scope, sequencing, effort, and the governance (Steering, Tower Leads, Editorial Standards) that keep the brand intact while the OpEx and revenue commitments get delivered.",
+    "The Capability Map sizes the prize, the Assessment dials in the levers, and the Offshore Plan stages the location work — the Effort Estimate is the investment case Accenture brings to Versant leadership. Scope, sequencing, effort, and the governance (Steering, Tower Leads, Editorial Standards) that keep the brand intact while the OpEx and revenue commitments get delivered.",
+  workshops:
+    "The Capability Map and the Assessment only carry weight if the right Versant tower lead has signed off on them. This module is the connective tissue — facilitator-led tower workshops with an audit trail of who agreed to which carve-outs, dial values, and sequencing assumptions, so the BB- credit story and the editorial / news / political-brand carve-outs are decided by the people accountable for them.",
 };
 
 const WHAT_TODAY: Record<string, { label: string; href: string }[]> = {
   "offshore-plan": [
-    { label: "Set offshore dials per L4 in Capability Map", href: "/assess" },
-    { label: "Review the modeled scenario summary", href: "/assess/summary" },
+    { label: "Set offshore dials per L4 in the Assessment", href: "/assessment" },
+    { label: "Review the modeled scenario summary", href: "/assessment/summary" },
   ],
   prototypes: [
     { label: "See the AI initiatives by tower", href: "/towers" },
-    { label: "Confirm priority levers in Capability Map", href: "/assess" },
+    { label: "Confirm priority levers in the Assessment", href: "/assessment" },
   ],
   "delivery-plan": [
     { label: "Open the executive summary", href: "/summary" },
-    { label: "Confirm tower-level sizing in Capability Map", href: "/assess" },
+    { label: "Confirm tower-level sizing in the Capability Map", href: "/capability-map" },
+  ],
+  workshops: [
+    { label: "Confirm the capability map per tower", href: "/capability-map" },
+    { label: "Set offshore + AI dials in the Assessment", href: "/assessment" },
   ],
 };
 

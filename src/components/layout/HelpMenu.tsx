@@ -30,7 +30,7 @@ const ITEMS: HelpItem[] = [
     id: "walkthrough",
     label: "How to use this portal",
     description: "60-second workshop walkthrough — capability map, footprint, dials, complete.",
-    href: "/assess?walkthrough=open",
+    href: "/capability-map?walkthrough=open",
     Icon: Compass,
   },
   {
@@ -52,7 +52,7 @@ const ITEMS: HelpItem[] = [
     id: "sample",
     label: "Sample workbook",
     description: "13-tower Excel sample — one sheet per tower, ready to drop into the workshop.",
-    href: "/assess?sample=open",
+    href: "/capability-map?sample=open",
     Icon: Download,
   },
   {

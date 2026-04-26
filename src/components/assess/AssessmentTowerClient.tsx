@@ -1,0 +1,471 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
+import { PageShell } from "@/components/PageShell";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { TowerJourneyStepper } from "@/components/layout/TowerJourneyStepper";
+import { Term } from "@/components/help/Term";
+import { AssessmentLeverRow } from "@/components/assess/AssessmentLeverRow";
+import { AssessmentScoreboard } from "@/components/assess/AssessmentScoreboard";
+import { ScenarioPresetButtons } from "@/components/assess/ScenarioPresetButtons";
+import { TowerChecklist } from "@/components/assess/TowerChecklist";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
+import { useTowerAssessOps } from "@/lib/assess/useTowerAssessOps";
+import { useToast } from "@/components/feedback/ToastProvider";
+import {
+  clientInferTowerDefaults,
+  type InferDefaultsSource,
+} from "@/lib/assess/assessClientApi";
+import { applyTowerStarterDefaults } from "@/data/assess/seedAssessmentDefaults";
+import {
+  rowAnnualCost,
+  weightedTowerLevers,
+} from "@/lib/assess/scenarioModel";
+import {
+  getAssessProgram,
+  setTowerAssess,
+  setTowerScenario,
+} from "@/lib/localStore";
+import type { L4WorkforceRow, TowerId } from "@/data/assess/types";
+import { getTowerHref } from "@/lib/towerHref";
+import { useAssessSync } from "@/components/assess/AssessSyncProvider";
+import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
+
+type Props = { towerId: TowerId; towerName: string };
+
+/**
+ * Tower-scoped Assessment page. Step 2 of the workshop:
+ *
+ *   - Cinematic per-L4 lever rows (offshore + AI sliders, live modeled $).
+ *   - Top-of-page scoreboard (pool, weighted dials, modeled $).
+ *   - Scenario presets (Conservative / Base / Aggressive) for one-click frames.
+ *   - Tower checklist + Mark complete to anchor the scenario summary.
+ *
+ * Reuses `useTowerAssessOps` so saves and toasts stay in lock-step with the
+ * Capability Map sibling page.
+ */
+export function AssessmentTowerClient({ towerId, towerName }: Props) {
+  const sync = useAssessSync();
+  const toast = useToast();
+  const ops = useTowerAssessOps(towerId, towerName);
+  const {
+    program,
+    tState,
+    rows,
+    global,
+    blanks,
+    isComplete,
+    hasHeadcount,
+    hasAnyOffshoreInput,
+    hasAnyAiInput,
+    onConfirmStep,
+    doMarkComplete,
+    doUnmarkComplete,
+  } = ops;
+
+  const completedModules: ReadonlyArray<"capability-map" | "assessment"> = (() => {
+    const arr: Array<"capability-map" | "assessment"> = [];
+    if (rows.length > 0) arr.push("capability-map");
+    if (isComplete) arr.push("assessment");
+    return arr;
+  })();
+
+  const patchRow = React.useCallback(
+    (id: string, patch: Partial<L4WorkforceRow>) => {
+      const cur = getAssessProgram().towers[towerId];
+      if (!cur) return;
+      setTowerAssess(towerId, {
+        l4Rows: cur.l4Rows.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+        status: cur.status === "empty" ? "data" : cur.status,
+      });
+    },
+    [towerId],
+  );
+
+  // Defaults inference (LLM-first, heuristic fallback).
+  type ApplyDefaultsOutcome = {
+    changedRows: number;
+    changedCells: number;
+    source: InferDefaultsSource;
+    warning?: string;
+  };
+
+  const applyDefaults = React.useCallback(
+    async (mode: "fillBlanks" | "overwriteAll"): Promise<ApplyDefaultsOutcome> => {
+      if (!rows.length) throw new Error("Load a footprint first.");
+      const apiInputs = rows.map((r) => ({ l2: r.l2, l3: r.l3, l4: r.l4 }));
+      const apiRes = await clientInferTowerDefaults(towerId, apiInputs);
+
+      let source: InferDefaultsSource;
+      let warning: string | undefined;
+      let inferred: { offshorePct: number; aiPct: number }[];
+      if (apiRes.ok && apiRes.result.defaults.length === rows.length) {
+        source = apiRes.result.source;
+        warning = apiRes.result.warning;
+        inferred = apiRes.result.defaults;
+      } else {
+        source = "heuristic";
+        warning = apiRes.ok
+          ? "Server returned the wrong number of defaults; used local heuristic."
+          : `Inference API unavailable (${apiRes.error}); used local heuristic.`;
+        const local = applyTowerStarterDefaults(rows, towerId, "overwriteAll");
+        inferred = local.rows.map((r) => ({
+          offshorePct: r.l4OffshoreAssessmentPct ?? 0,
+          aiPct: r.l4AiImpactAssessmentPct ?? 0,
+        }));
+      }
+
+      let changedCells = 0;
+      let changedRows = 0;
+      const nextRows = rows.map((r, i) => {
+        const d = inferred[i];
+        let nextOff = r.l4OffshoreAssessmentPct;
+        let nextAi = r.l4AiImpactAssessmentPct;
+        let touched = false;
+        if (mode === "overwriteAll" || nextOff == null) {
+          if (nextOff !== d.offshorePct) {
+            nextOff = d.offshorePct;
+            changedCells += 1;
+            touched = true;
+          }
+        }
+        if (mode === "overwriteAll" || nextAi == null) {
+          if (nextAi !== d.aiPct) {
+            nextAi = d.aiPct;
+            changedCells += 1;
+            touched = true;
+          }
+        }
+        if (touched) changedRows += 1;
+        return touched
+          ? { ...r, l4OffshoreAssessmentPct: nextOff, l4AiImpactAssessmentPct: nextAi }
+          : r;
+      });
+
+      if (mode === "fillBlanks" && changedCells === 0) {
+        throw new Error("No blanks to fill — every row already has explicit values.");
+      }
+
+      const w = weightedTowerLevers(nextRows, tState.baseline, global);
+      setTowerAssess(towerId, {
+        l4Rows: nextRows,
+        baseline: {
+          baselineOffshorePct: Math.round(w.offshorePct),
+          baselineAIPct: Math.round(w.aiPct),
+        },
+        status: tState.status === "empty" ? "data" : tState.status,
+      });
+      setTowerScenario(towerId, {
+        scenarioOffshorePct: Math.round(w.offshorePct),
+        scenarioAIPct: Math.round(w.aiPct),
+      });
+      if (sync?.canSync) await sync.flushSave();
+      return { changedRows, changedCells, source, warning };
+    },
+    [rows, towerId, tState.baseline, tState.status, global, sync],
+  );
+
+  const sourceLabel = (source: InferDefaultsSource) =>
+    source === "llm" ? "AI inference" : "deterministic heuristic";
+
+  const fillBlanksOp = useAsyncOp<ApplyDefaultsOutcome, []>({
+    run: () => applyDefaults("fillBlanks"),
+    messages: {
+      loadingTitle: "Scoring blank rows...",
+      loadingDescription: "Trying AI inference, falling back to heuristic if unavailable.",
+      successTitle: ({ changedCells, changedRows }) =>
+        `Filled ${changedCells} cell${changedCells === 1 ? "" : "s"} across ${changedRows} row${changedRows === 1 ? "" : "s"}`,
+      successDescription: ({ source, warning }) =>
+        warning
+          ? `${warning} Filled blanks only.`
+          : `Sourced via ${sourceLabel(source)}. Existing explicit values were preserved.`,
+      errorTitle: "Couldn't apply defaults",
+    },
+  });
+
+  const overwriteAllOp = useAsyncOp<ApplyDefaultsOutcome, []>({
+    run: () => applyDefaults("overwriteAll"),
+    messages: {
+      loadingTitle: "Re-scoring every row...",
+      loadingDescription: "Trying AI inference, falling back to heuristic if unavailable.",
+      successTitle: ({ changedRows, changedCells }) =>
+        `Re-seeded ${changedRows} row${changedRows === 1 ? "" : "s"} (${changedCells} cell${changedCells === 1 ? "" : "s"})`,
+      successDescription: ({ source, warning }) =>
+        warning
+          ? `${warning} All explicit overrides were replaced.`
+          : `Sourced via ${sourceLabel(source)}. All explicit overrides were replaced.`,
+      errorTitle: "Couldn't re-apply defaults",
+    },
+  });
+
+  const [confirmCompleteOpen, setConfirmCompleteOpen] = React.useState(false);
+  const [confirmUnmarkOpen, setConfirmUnmarkOpen] = React.useState(false);
+  const [reseedDialogOpen, setReseedDialogOpen] = React.useState(false);
+  const [completeBusy, setCompleteBusy] = React.useState(false);
+
+  const handleMarkComplete = async () => {
+    setCompleteBusy(true);
+    try {
+      const ok = await doMarkComplete();
+      if (ok) setConfirmCompleteOpen(false);
+    } finally {
+      setCompleteBusy(false);
+    }
+  };
+
+  const handleUnmarkComplete = async () => {
+    setCompleteBusy(true);
+    try {
+      await doUnmarkComplete();
+      setConfirmUnmarkOpen(false);
+    } finally {
+      setCompleteBusy(false);
+    }
+  };
+
+  // Reset the row's overrides back to the tower default so the lever falls back
+  // to the per-tower seeded baseline.
+  const resetOverridesForRow = (id: string) => {
+    patchRow(id, {
+      l4OffshoreAssessmentPct: undefined,
+      l4AiImpactAssessmentPct: undefined,
+    });
+    toast.info({ title: "Row overrides cleared" });
+  };
+
+  const noFootprint = rows.length === 0;
+  const totalPool = rows.reduce((s, r) => s + rowAnnualCost(r, global), 0);
+
+  return (
+    <PageShell>
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+        <Breadcrumbs
+          items={[
+            { label: "Program home", href: "/" },
+            { label: "Assessment", href: "/assessment" },
+            { label: towerName },
+          ]}
+        />
+
+        <TowerJourneyStepper
+          className="mt-3"
+          towerId={towerId}
+          towerName={towerName}
+          current="assessment"
+          completed={completedModules}
+        />
+
+        <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="font-display text-2xl font-semibold text-forge-ink">
+              &gt; {towerName} · Assessment
+            </h1>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-forge-body">
+              Dial <Term termKey="offshore dial">offshore</Term> and{" "}
+              <Term termKey="ai impact dial">AI impact</Term> per <Term termKey="l4">L4</Term> activity. The
+              tool weights every drag against the L4&apos;s pool $ and updates the modeled
+              saving live. Scenario presets snap to anchored frames; you can override per row.
+            </p>
+          </div>
+          <Link
+            href={getTowerHref(towerId, "capability-map")}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-forge-border bg-forge-surface px-3 py-1.5 text-xs text-forge-body hover:border-accent-purple/40"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Capability Map
+          </Link>
+        </div>
+
+        {noFootprint ? (
+          <div className="mt-6 rounded-2xl border border-dashed border-forge-border bg-forge-well/40 p-8 text-center">
+            <p className="text-sm font-medium text-forge-body">
+              No footprint loaded for {towerName} yet.
+            </p>
+            <p className="mt-1 text-xs text-forge-subtle">
+              Confirm the capability map and load (or upload) the footprint on the Capability Map page first.
+            </p>
+            <Link
+              href={getTowerHref(towerId, "capability-map")}
+              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent-purple px-4 py-2 text-sm font-semibold text-white hover:bg-accent-purple-dark"
+            >
+              Open Capability Map
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        ) : (
+          <>
+            <div className="mt-5">
+              <AssessmentScoreboard
+                variant="tower"
+                program={program}
+                towerId={towerId}
+                rows={rows}
+              />
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-forge-border bg-forge-surface/60 p-3">
+              <ScenarioPresetButtons scopeTowerId={towerId} size="md" />
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                {blanks.totalBlanks > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => void fillBlanksOp.fire()}
+                    disabled={fillBlanksOp.state === "loading"}
+                    className="inline-flex items-center gap-1 rounded-md bg-accent-purple px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-purple-dark disabled:opacity-60"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    {fillBlanksOp.state === "loading"
+                      ? "Scoring..."
+                      : `Fill ${blanks.totalBlanks} blank${blanks.totalBlanks === 1 ? "" : "s"}`}
+                  </button>
+                ) : (
+                  <span className="text-forge-hint">No blanks</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setReseedDialogOpen(true)}
+                  disabled={overwriteAllOp.state === "loading"}
+                  className="rounded-md border border-forge-border px-2.5 py-1 text-xs text-forge-body hover:border-accent-purple/30 disabled:opacity-60"
+                  title="Re-score every row from scratch (replaces explicit overrides)"
+                >
+                  {overwriteAllOp.state === "loading" ? "Re-scoring..." : "Re-score every row"}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-2">
+              {rows.map((row) => (
+                <div key={row.id} className="group">
+                  <AssessmentLeverRow
+                    row={row}
+                    towerId={towerId}
+                    baseline={tState.baseline}
+                    global={global}
+                    onPatch={(patch) => patchRow(row.id, patch)}
+                  />
+                  <div className="mt-1 hidden text-right text-[10px] text-forge-hint group-hover:block">
+                    <button
+                      type="button"
+                      onClick={() => resetOverridesForRow(row.id)}
+                      className="underline-offset-2 hover:text-forge-subtle hover:underline"
+                    >
+                      Clear both overrides on this row
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-forge-hint">
+              <span>
+                Adjust global blended $ on the{" "}
+                <Link href="/assessment/summary" className="text-forge-body underline">
+                  scenario summary
+                </Link>{" "}
+                to change pool math across all towers.
+              </span>
+              <span className="font-mono">
+                tower pool ${totalPool.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+
+            <div className="mt-10">
+              <TowerChecklist
+                state={tState}
+                hasRows={rows.length > 0}
+                hasHeadcount={hasHeadcount}
+                hasAnyOffshoreInput={hasAnyOffshoreInput}
+                hasAnyAiInput={hasAnyAiInput}
+                isComplete={isComplete}
+                onConfirm={onConfirmStep}
+                onMarkComplete={() => setConfirmCompleteOpen(true)}
+                onUnmarkComplete={() => setConfirmUnmarkOpen(true)}
+              />
+            </div>
+
+            {isComplete ? (
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-accent-purple/30 bg-accent-purple/5 p-5">
+                <div>
+                  <p className="font-display text-base font-semibold text-forge-ink">
+                    Tower complete — open the AI agenda next.
+                  </p>
+                  <p className="mt-1 text-sm text-forge-body">
+                    See the sequenced AI initiatives, agent architectures, and 4-lens detail for {towerName}.
+                  </p>
+                </div>
+                <Link
+                  href={getTowerHref(towerId, "ai-initiatives")}
+                  className="inline-flex items-center gap-2 rounded-lg bg-accent-purple px-4 py-2 text-sm font-semibold text-white hover:bg-accent-purple-dark"
+                >
+                  Open in AI Initiatives
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            ) : (
+              <p className="mt-8 text-xs text-forge-hint">
+                <Link
+                  href={getTowerHref(towerId, "ai-initiatives")}
+                  className="text-forge-body underline"
+                >
+                  Open {towerName} in AI Initiatives
+                </Link>
+                {" — "}
+                (the handoff CTA appears once this tower is marked complete).
+              </p>
+            )}
+          </>
+        )}
+      </div>
+
+      <ConfirmDialog
+        open={reseedDialogOpen}
+        onClose={() => setReseedDialogOpen(false)}
+        onConfirm={async () => {
+          setReseedDialogOpen(false);
+          await overwriteAllOp.fire();
+        }}
+        title={`Re-apply starter defaults to every row in ${towerName}?`}
+        description={
+          <>
+            Every L4&apos;s offshore% and AI% will be replaced. Explicit overrides will be lost.
+          </>
+        }
+        confirmLabel="Yes, replace"
+        cancelLabel="Cancel"
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={confirmCompleteOpen}
+        onClose={() => setConfirmCompleteOpen(false)}
+        onConfirm={() => handleMarkComplete()}
+        title={`Mark ${towerName} complete?`}
+        description={
+          <>
+            We&apos;ll lock the baseline at the current cost-weighted roll-up and anchor this tower in the scenario summary. You can unmark anytime.
+          </>
+        }
+        confirmLabel="Mark complete"
+        variant="lock"
+        busy={completeBusy}
+      />
+
+      <ConfirmDialog
+        open={confirmUnmarkOpen}
+        onClose={() => setConfirmUnmarkOpen(false)}
+        onConfirm={() => handleUnmarkComplete()}
+        title={`Unmark ${towerName} as complete?`}
+        description={
+          <>
+            The tower returns to in-progress. Your data and all explicit reviews are kept.
+          </>
+        }
+        confirmLabel="Unmark"
+        variant="default"
+        busy={completeBusy}
+      />
+    </PageShell>
+  );
+}

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { CheckCircle2, CircleDot, Loader2, RefreshCw, Wifi } from "lucide-react";
 import { useAssessSync, type SaveState } from "@/components/assess/AssessSyncProvider";
 
-const ASSESS_PATH = /^\/assess(\/|$)/;
+const ASSESS_PATH = /^\/(assess|capability-map|assessment)(\/|$)/;
 
 /**
  * Compact save-status indicator. Renders only on assess routes and only when

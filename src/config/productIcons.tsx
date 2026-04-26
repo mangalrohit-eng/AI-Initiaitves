@@ -7,7 +7,9 @@ import {
   Globe2,
   Grid3X3,
   Map,
+  SlidersHorizontal,
   Sparkles,
+  UsersRound,
 } from "lucide-react";
 import * as React from "react";
 
@@ -18,6 +20,8 @@ const productIconMap: Record<string, LucideIcon> = {
   "globe-2": Globe2,
   "flask-conical": FlaskConical,
   "clipboard-list": ClipboardList,
+  sliders: SlidersHorizontal,
+  "users-round": UsersRound,
 };
 
 const staticIconMap: Record<string, LucideIcon> = {

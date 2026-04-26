@@ -62,17 +62,20 @@ export type ChecklistStepId =
   | "ai"
   | "complete";
 
+/**
+ * Global assumptions for the Configure Impact Levers flow. These are the ONLY
+ * knobs on the Assumptions tab and the ONLY rates the savings math reads.
+ *
+ * Every $ in the app is derived from these four rates plus the per-L4
+ * inputs (headcount mix, dials). No magic lever weights, no caps, no
+ * combine-mode toggles — see `scenarioModel.ts` for the math.
+ */
 export type GlobalAssessAssumptions = {
   /** Illustrative $ / FTE-year (user-entered, not Versant-reported). */
   blendedFteOnshore: number;
   blendedFteOffshore: number;
   blendedContractorOnshore: number;
   blendedContractorOffshore: number;
-  offshoreLeverWeight: number;
-  aiLeverWeight: number;
-  combineMode: "additive" | "capped";
-  /** Max combined modeled savings as % of tower pool. */
-  combinedCapPct: number;
 };
 
 export const defaultGlobalAssessAssumptions: GlobalAssessAssumptions = {
@@ -80,27 +83,21 @@ export const defaultGlobalAssessAssumptions: GlobalAssessAssumptions = {
   blendedFteOffshore: 90_000,
   blendedContractorOnshore: 120_000,
   blendedContractorOffshore: 60_000,
-  offshoreLeverWeight: 0.22,
-  aiLeverWeight: 0.28,
-  combineMode: "capped",
-  combinedCapPct: 35,
 };
 
-/** Per-tower scenario dials on the summary page (stress test). */
-export type TowerScenario = {
-  scenarioOffshorePct: number;
-  scenarioAIPct: number;
-};
-
-export type ScenarioSlice = Partial<Record<TowerId, TowerScenario>>;
-
-export type AssessProgramV2 = {
-  version: 2;
+/**
+ * V3 program shape — current. Drops the V2 `scenarios` slice and the four
+ * lever-weight / combine-mode / cap fields that hid the math behind magic
+ * numbers. Migration from V2 lives in `localStore.ts`.
+ */
+export type AssessProgramV3 = {
+  version: 3;
   towers: Partial<Record<TowerId, TowerAssessState>>;
   global: GlobalAssessAssumptions;
-  /** Tower-level scenario; missing keys default to that tower’s baseline at read time. */
-  scenarios: ScenarioSlice;
 };
+
+/** Back-compat alias for callers that still import the old name. */
+export type AssessProgramV2 = AssessProgramV3;
 
 export const defaultTowerBaseline: TowerBaseline = {
   baselineOffshorePct: 20,
@@ -115,11 +112,10 @@ export function defaultTowerState(): TowerAssessState {
   };
 }
 
-export function defaultAssessProgramV2(): AssessProgramV2 {
+export function defaultAssessProgramV2(): AssessProgramV3 {
   return {
-    version: 2,
+    version: 3,
     towers: {},
     global: { ...defaultGlobalAssessAssumptions },
-    scenarios: {},
   };
 }

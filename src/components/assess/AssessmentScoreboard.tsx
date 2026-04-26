@@ -60,14 +60,14 @@ export function AssessmentScoreboard(props: Props) {
         <Tile
           icon={<Globe2 className="h-3.5 w-3.5" />}
           label="Avg offshore"
-          value={`${s.weightedScenarioOffshorePct.toFixed(0)}%`}
+          value={`${s.weightedOffshorePct.toFixed(0)}%`}
           subtle="cost-weighted"
           accent="purple"
         />
         <Tile
           icon={<Cpu className="h-3.5 w-3.5" />}
           label="Avg AI impact"
-          value={`${s.weightedScenarioAiPct.toFixed(0)}%`}
+          value={`${s.weightedAiPct.toFixed(0)}%`}
           subtle="cost-weighted"
           accent="teal"
         />
@@ -85,8 +85,8 @@ export function AssessmentScoreboard(props: Props) {
           }
           counter={
             <MoneyCounter
-              value={s.scenarioCombined}
-              decimals={s.scenarioCombined >= 1_000_000_000 ? 2 : 1}
+              value={s.combined}
+              decimals={s.combined >= 1_000_000_000 ? 2 : 1}
             />
           }
           accent="green"
@@ -131,12 +131,12 @@ export function AssessmentScoreboard(props: Props) {
       <Tile
         icon={<TrendingUp className="h-3.5 w-3.5" />}
         label="Modeled $"
-        subtle="at scenario dials"
+        subtle="at L4 dial settings"
         counter={
           outcome ? (
             <MoneyCounter
-              value={outcome.scenario.combined}
-              decimals={outcome.scenario.combined >= 1_000_000 ? 1 : 0}
+              value={outcome.combined}
+              decimals={outcome.combined >= 1_000_000 ? 1 : 0}
             />
           ) : (
             <span>$—</span>

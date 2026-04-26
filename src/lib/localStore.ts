@@ -1,9 +1,7 @@
 // Typed, SSR-safe wrapper over localStorage for all P1 collaboration state.
-import type { AssessProgramV2, GlobalAssessAssumptions, TowerId, TowerScenario } from "@/data/assess/types";
+import type { AssessProgramV2, GlobalAssessAssumptions, TowerId } from "@/data/assess/types";
 import { buildSeededAssessProgramV2 } from "@/data/assess/seedAssessProgram";
 import { defaultTowerState, type TowerAssessState } from "@/data/assess/types";
-import type { CapabilitySavingsAssumptions, L4LeadInputs } from "@/data/capabilityMap/types";
-import { defaultCapabilitySavingsAssumptions } from "@/data/capabilityMap/types";
 //
 // Conventions:
 //   - Every key is prefixed `forge.` to avoid collisions with other apps.
@@ -48,8 +46,7 @@ const KEYS = {
   recent: "forge.recent.v1", // JSON: RecentRef[] (capped)
   displayName: "forge.displayName.v1",
   lastChangelogVisit: "forge.lastChangelogVisit.v1",
-  capabilityMap: "forge.capabilityMapState.v1",
-  assessProgram: "forge.assessProgram.v2",
+  assessProgram: "forge.assessProgram.v2", // key is shared across v2 + v3 — see migrateAssessProgram
   myTowers: "forge.myTowers.v1", // TowerId[]
   persona: "forge.persona", // legacy unversioned key from OnboardingHero
 } as const;
@@ -265,49 +262,7 @@ function cryptoId(): string {
   return `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// ----- capability map (local; not a system of record) ------------------
-
-export type CapabilityMapPersistedStateV1 = {
-  version: 1;
-  mapId: string;
-  l4Inputs: Record<string, L4LeadInputs>;
-  assumptions: CapabilitySavingsAssumptions;
-};
-
-const defaultCapabilityMapState: CapabilityMapPersistedStateV1 = {
-  version: 1,
-  mapId: "hr-localize-versant",
-  l4Inputs: {},
-  assumptions: { ...defaultCapabilitySavingsAssumptions },
-};
-
-export function getCapabilityMapState(): CapabilityMapPersistedStateV1 {
-  return safeGet(KEYS.capabilityMap, defaultCapabilityMapState);
-}
-
-export function setCapabilityMapState(next: CapabilityMapPersistedStateV1): void {
-  safeSet(KEYS.capabilityMap, next);
-}
-
-export function updateCapabilityMapState(
-  patch: Partial<Pick<CapabilityMapPersistedStateV1, "mapId" | "l4Inputs" | "assumptions">>,
-): CapabilityMapPersistedStateV1 {
-  const cur = getCapabilityMapState();
-  const next: CapabilityMapPersistedStateV1 = {
-    version: 1,
-    mapId: patch.mapId ?? cur.mapId,
-    l4Inputs:
-      patch.l4Inputs !== undefined ? { ...cur.l4Inputs, ...patch.l4Inputs } : { ...cur.l4Inputs },
-    assumptions:
-      patch.assumptions !== undefined
-        ? { ...cur.assumptions, ...patch.assumptions }
-        : { ...cur.assumptions },
-  };
-  safeSet(KEYS.capabilityMap, next);
-  return next;
-}
-
-// ----- assess program (13-tower, v2) -----------------------------------
+// ----- assess program (13-tower, v3) -----------------------------------
 
 /**
  * Read-time migration for snapshots seeded by the original (buggy) seed
@@ -343,9 +298,54 @@ function migrateBuggySeedComplete(program: AssessProgramV2): AssessProgramV2 {
   return { ...program, towers };
 }
 
+/**
+ * Read-time migration from V2 -> V3:
+ *   - drops `scenarios` (per-tower stress-test slice)
+ *   - drops `offshoreLeverWeight`, `aiLeverWeight`, `combineMode`,
+ *     `combinedCapPct` from `global`
+ *   - bumps `version` to 3
+ *
+ * Side-effect free — we don't write back here, so actual user actions are
+ * still the only thing that persists state changes. The migrated shape will
+ * be saved on the next mutation.
+ */
+function migrateV2ToV3(raw: unknown): AssessProgramV2 {
+  if (raw === null || typeof raw !== "object") return buildSeededAssessProgramV2();
+  const r = raw as Record<string, unknown>;
+  const versionRaw = r.version;
+  const towersRaw =
+    r.towers && typeof r.towers === "object"
+      ? (r.towers as AssessProgramV2["towers"])
+      : {};
+  const globalRaw =
+    r.global && typeof r.global === "object" ? (r.global as Record<string, unknown>) : {};
+
+  const num = (v: unknown, d: number) =>
+    typeof v === "number" && Number.isFinite(v) ? v : d;
+
+  const seed = buildSeededAssessProgramV2();
+  const global: GlobalAssessAssumptions = {
+    blendedFteOnshore: num(globalRaw.blendedFteOnshore, seed.global.blendedFteOnshore),
+    blendedFteOffshore: num(globalRaw.blendedFteOffshore, seed.global.blendedFteOffshore),
+    blendedContractorOnshore: num(
+      globalRaw.blendedContractorOnshore,
+      seed.global.blendedContractorOnshore,
+    ),
+    blendedContractorOffshore: num(
+      globalRaw.blendedContractorOffshore,
+      seed.global.blendedContractorOffshore,
+    ),
+  };
+
+  if (versionRaw === 3) {
+    return { version: 3, towers: towersRaw, global };
+  }
+  return { version: 3, towers: towersRaw, global };
+}
+
 export function getAssessProgram(): AssessProgramV2 {
-  const raw = safeGet(KEYS.assessProgram, buildSeededAssessProgramV2());
-  return migrateBuggySeedComplete(raw);
+  const raw = safeGet<unknown>(KEYS.assessProgram, buildSeededAssessProgramV2());
+  return migrateBuggySeedComplete(migrateV2ToV3(raw));
 }
 
 export function setAssessProgram(next: AssessProgramV2): void {
@@ -384,13 +384,6 @@ export function setGlobalAssessAssumptions(patch: Partial<GlobalAssessAssumption
   updateAssessProgram((p) => ({
     ...p,
     global: { ...p.global, ...patch },
-  }));
-}
-
-export function setTowerScenario(towerId: TowerId, s: TowerScenario): void {
-  updateAssessProgram((p) => ({
-    ...p,
-    scenarios: { ...p.scenarios, [towerId]: s },
   }));
 }
 

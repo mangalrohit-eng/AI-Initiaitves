@@ -249,13 +249,6 @@ export function CapabilityMapHubClient() {
         </ul>
 
         <WorkshopToolsDrawer />
-
-        <p className="mt-8 text-center text-xs text-forge-subtle">
-          Single-tower (HR) map from earlier build:{" "}
-          <Link href="/assess/legacy" className="text-forge-body underline">
-            open legacy view
-          </Link>
-        </p>
       </div>
     </PageShell>
   );

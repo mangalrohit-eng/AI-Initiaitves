@@ -7,7 +7,8 @@ import type {
 import { defaultGlobalAssessAssumptions, defaultTowerBaseline, defaultTowerState } from "@/data/assess/types";
 import { towers } from "@/data/towers";
 
-export const ASSESS_PROGRAM_FILE_FORMAT = "forge-assess-program-v2" as const;
+export const ASSESS_PROGRAM_FILE_FORMAT = "forge-assess-program-v3" as const;
+const SUPPORTED_PROGRAM_VERSIONS: ReadonlyArray<number> = [2, 3];
 
 export type AssessProgramFileEnvelope = {
   format: typeof ASSESS_PROGRAM_FILE_FORMAT;
@@ -68,6 +69,11 @@ function asL4Row(x: unknown): L4WorkforceRow | null {
   };
 }
 
+/**
+ * Coalesce the global assumptions blob, ignoring fields that no longer exist
+ * (offshoreLeverWeight, aiLeverWeight, combineMode, combinedCapPct from v2).
+ * v2 exports load cleanly — the obsolete fields are silently dropped.
+ */
 function parseGlobal(x: unknown): GlobalAssessAssumptions {
   if (!isRecord(x)) return { ...defaultGlobalAssessAssumptions };
   const d = defaultGlobalAssessAssumptions;
@@ -76,10 +82,6 @@ function parseGlobal(x: unknown): GlobalAssessAssumptions {
     blendedFteOffshore: coalesceNumber(x.blendedFteOffshore, d.blendedFteOffshore),
     blendedContractorOnshore: coalesceNumber(x.blendedContractorOnshore, d.blendedContractorOnshore),
     blendedContractorOffshore: coalesceNumber(x.blendedContractorOffshore, d.blendedContractorOffshore),
-    offshoreLeverWeight: coalesceNumber(x.offshoreLeverWeight, d.offshoreLeverWeight),
-    aiLeverWeight: coalesceNumber(x.aiLeverWeight, d.aiLeverWeight),
-    combineMode: x.combineMode === "additive" || x.combineMode === "capped" ? x.combineMode : d.combineMode,
-    combinedCapPct: coalesceNumber(x.combinedCapPct, d.combinedCapPct),
   };
 }
 
@@ -100,28 +102,40 @@ export function importAssessProgramFromJsonText(
   }
 
   let programRaw: unknown;
-  if (raw.format === ASSESS_PROGRAM_FILE_FORMAT) {
-    if (!isRecord(raw.program) || raw.program.version !== 2) {
+  if (
+    raw.format === ASSESS_PROGRAM_FILE_FORMAT ||
+    raw.format === "forge-assess-program-v2"
+  ) {
+    if (
+      !isRecord(raw.program) ||
+      typeof raw.program.version !== "number" ||
+      !SUPPORTED_PROGRAM_VERSIONS.includes(raw.program.version)
+    ) {
       return { ok: false, error: "Invalid export: missing or wrong program.version." };
     }
     programRaw = raw.program;
-  } else if (raw.version === 2) {
+  } else if (
+    typeof raw.version === "number" &&
+    SUPPORTED_PROGRAM_VERSIONS.includes(raw.version)
+  ) {
     programRaw = raw;
   } else {
-    return { ok: false, error: "Unrecognized file: use a Forge export (.json) or program version 2." };
+    return { ok: false, error: "Unrecognized file: use a Forge export (.json) or program version 2 / 3." };
   }
 
   if (!isRecord(programRaw)) {
     return { ok: false, error: "Program payload is not an object." };
   }
-  if (programRaw.version !== 2) {
+  if (
+    typeof programRaw.version !== "number" ||
+    !SUPPORTED_PROGRAM_VERSIONS.includes(programRaw.version)
+  ) {
     return { ok: false, error: `Unsupported program version: ${String(programRaw.version)}.` };
   }
 
   const program: AssessProgramV2 = {
-    version: 2,
+    version: 3,
     global: parseGlobal(programRaw.global),
-    scenarios: {},
     towers: {},
   };
 
@@ -147,17 +161,6 @@ export function importAssessProgramFromJsonText(
         },
         status,
         lastUpdated: typeof v.lastUpdated === "string" ? v.lastUpdated : base.lastUpdated,
-      };
-    }
-  }
-
-  const sc = programRaw.scenarios;
-  if (isRecord(sc)) {
-    for (const [k, v] of Object.entries(sc)) {
-      if (!isTowerId(k) || !isRecord(v)) continue;
-      program.scenarios[k] = {
-        scenarioOffshorePct: coalesceNumber(v.scenarioOffshorePct, 0),
-        scenarioAIPct: coalesceNumber(v.scenarioAIPct, 0),
       };
     }
   }

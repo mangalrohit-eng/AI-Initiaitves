@@ -7,7 +7,6 @@ import {
   Camera,
   Maximize2,
   Minimize2,
-  RotateCcw,
 } from "lucide-react";
 import {
   Bar,
@@ -20,40 +19,31 @@ import {
   YAxis,
 } from "recharts";
 import { ImpactHero } from "@/components/assess/ImpactHero";
-import { ScenarioPresetButtons } from "@/components/assess/ScenarioPresetButtons";
-import { PercentSlider } from "@/components/ui/PercentSlider";
 import { MoneyCounter, formatMoney } from "@/components/ui/MoneyCounter";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PageShell } from "@/components/PageShell";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { towers } from "@/data/towers";
-import type {
-  AssessProgramV2,
-  GlobalAssessAssumptions,
-  TowerId,
-} from "@/data/assess/types";
+import type { AssessProgramV2, TowerId } from "@/data/assess/types";
 import {
   buildExportCsv,
   l2Concentration,
   programImpactSummary,
-  sensitivityDeltas,
+  programSensitivityDeltas,
   towerOutcomeForState,
   towerPoolUsd,
 } from "@/lib/assess/scenarioModel";
-import {
-  getAssessProgram,
-  setGlobalAssessAssumptions,
-  setTowerScenario,
-  subscribe,
-} from "@/lib/localStore";
+import { getAssessProgram, subscribe } from "@/lib/localStore";
 import { getPortalAudience, isInternalSurfaceAllowed } from "@/lib/portalAudience";
 import { cn } from "@/lib/utils";
 
 /**
- * Step-3 — Impact Estimate. Animated impact hero, scenario presets, per-tower
- * lever cards, and a "Snapshot" button that exports a print-ready PNG of the
- * hero + scoreboard for slide decks. Present mode hides the chrome so the same
- * page works in a live workshop projection.
+ * Step-3 — Impact Estimate.
+ *
+ * One job: show what the per-L4 dials roll up to, program-wide and per
+ * tower. No scenario presets, no per-tower stress-test sliders, no inline
+ * lever-weight editors. To change a dial, the user opens the per-tower
+ * Configure Impact Levers page. To change a rate, they open Assumptions.
  */
 export function AssessmentSummaryClient() {
   const toast = useToast();
@@ -72,6 +62,7 @@ export function AssessmentSummaryClient() {
   }, []);
 
   const summary = React.useMemo(() => programImpactSummary(program), [program]);
+  const sens = React.useMemo(() => programSensitivityDeltas(program), [program]);
 
   const withData = React.useMemo(
     () =>
@@ -87,8 +78,9 @@ export function AssessmentSummaryClient() {
         const o = towerOutcomeForState(t.id as TowerId, program);
         return {
           name: t.name.length > 18 ? `${t.name.slice(0, 16)}...` : t.name,
-          baseline: o?.baseline.combined ?? 0,
-          modeled: o?.scenario.combined ?? 0,
+          offshore: o?.offshore ?? 0,
+          ai: o?.ai ?? 0,
+          combined: o?.combined ?? 0,
           id: t.id,
         };
       }),
@@ -99,7 +91,7 @@ export function AssessmentSummaryClient() {
     const blob = new Blob([buildExportCsv(program)], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "forge-assess-summary.csv";
+    a.download = "forge-impact-estimate.csv";
     a.click();
   };
 
@@ -114,7 +106,7 @@ export function AssessmentSummaryClient() {
       });
       const a = document.createElement("a");
       a.href = dataUrl;
-      a.download = `forge-assess-snapshot-${new Date().toISOString().slice(0, 10)}.png`;
+      a.download = `forge-impact-estimate-${new Date().toISOString().slice(0, 10)}.png`;
       a.click();
       toast.success({
         title: "Snapshot saved",
@@ -157,9 +149,12 @@ export function AssessmentSummaryClient() {
             </h1>
             {!presentMode ? (
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
-                The headline below reflects every tower&apos;s scenario dials in real time. Snap
-                between Conservative / Base / Aggressive presets, or stress-test individual
-                towers below. Snapshot it to PNG when you&apos;re ready for the deck.
+                Roll-up of every tower&apos;s per-L4 offshore + AI dials at the current{" "}
+                <Link href="/assumptions" className="text-accent-purple-dark underline">
+                  blended rates
+                </Link>
+                . Open a tower&apos;s Configure Impact Levers page to move dials. Snapshot to
+                PNG when you&apos;re ready for the deck.
               </p>
             ) : null}
           </div>
@@ -212,7 +207,7 @@ export function AssessmentSummaryClient() {
                   Modeled $ by tower
                 </h2>
                 <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
-                  baseline (purple) → scenario (green)
+                  offshore (purple) + AI (teal)
                 </span>
               </div>
               <div className="mt-2 h-64 w-full min-w-0">
@@ -245,8 +240,8 @@ export function AssessmentSummaryClient() {
                       ]}
                     />
                     <Legend wrapperStyle={{ fontSize: 11, color: "hsl(220,6%,70%)" }} />
-                    <Bar dataKey="baseline" name="Baseline" fill="#A100FF" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="modeled" name="Scenario" fill="#00C853" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="offshore" name="Offshore" stackId="modeled" fill="#A100FF" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="ai" name="AI" stackId="modeled" fill="#00BFA5" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -256,7 +251,24 @@ export function AssessmentSummaryClient() {
 
         {!presentMode ? (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-forge-border bg-forge-surface/60 p-3">
-            <ScenarioPresetButtons size="md" />
+            <div className="text-xs text-forge-body">
+              <span className="font-mono uppercase tracking-wider text-forge-hint">
+                Sensitivity
+              </span>
+              <span className="ml-2">
+                +10 pts on every L4 offshore dial &asymp;{" "}
+                <span className="font-mono text-accent-green">
+                  {formatMoney(sens.dOff10, { decimals: sens.dOff10 >= 1_000_000 ? 1 : 0 })}
+                </span>
+              </span>
+              <span className="mx-2 text-forge-hint">·</span>
+              <span>
+                +10 pts on every L4 AI dial &asymp;{" "}
+                <span className="font-mono text-accent-green">
+                  {formatMoney(sens.dAi10, { decimals: sens.dAi10 >= 1_000_000 ? 1 : 0 })}
+                </span>
+              </span>
+            </div>
             <div className="text-[11px] text-forge-hint">
               Live · {summary.contributingTowers.length} towers contributing ·{" "}
               <span className="font-mono">
@@ -266,14 +278,11 @@ export function AssessmentSummaryClient() {
           </div>
         ) : null}
 
-        {/* Global cost assumptions — internal only, collapsible */}
-        {!presentMode ? <GlobalAssumptionsPanel program={program} /> : null}
-
         {withData.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-dashed border-forge-border bg-forge-well/40 p-6 text-center">
             <p className="text-sm text-forge-subtle">
-              No tower capability map &amp; headcount loaded yet. Start by loading the sample workshop or picking a
-              tower on the Capability Map.
+              No tower capability map &amp; headcount loaded yet. Start by loading the sample
+              workshop or picking a tower on the Capability Map.
             </p>
             <Link
               href="/capability-map"
@@ -299,8 +308,12 @@ export function AssessmentSummaryClient() {
 
         {!presentMode ? (
           <p className="mt-8 text-center text-xs text-forge-hint">
-            Formulas: each lever applies weight × (pct / 100) to the tower pool; combined is
-            capped at {program.global.combinedCapPct}% of the pool when combine mode is capped.
+            Math:{" "}
+            <Link href="/assumptions" className="text-forge-body underline">
+              How impact is calculated
+            </Link>{" "}
+            · combined = AI + offshore × (1 − AI dial). All rates pulled from the Assumptions
+            tab.
           </p>
         ) : null}
       </div>
@@ -323,25 +336,11 @@ function TowerCard({
   const st = program.towers[towerId];
   if (!o || !st) return null;
   const pool = towerPoolUsd(st.l4Rows, program.global);
-  const s = program.scenarios[towerId] ?? {
-    scenarioOffshorePct: o.baseline.offshorePct,
-    scenarioAIPct: o.baseline.aiPct,
-  };
-  const sens = sensitivityDeltas(
-    pool,
-    s.scenarioOffshorePct,
-    s.scenarioAIPct,
-    program.global,
-  );
   const l2c = l2Concentration(st.l4Rows, program.global);
   const isComplete = st.status === "complete";
 
-  const onReset = () => {
-    setTowerScenario(towerId, {
-      scenarioOffshorePct: o.baseline.offshorePct,
-      scenarioAIPct: o.baseline.aiPct,
-    });
-  };
+  const offSharePct = o.combined > 0 ? (o.offshore / (o.offshore + o.ai)) * 100 : 0;
+  const aiSharePct = o.combined > 0 ? (o.ai / (o.offshore + o.ai)) * 100 : 0;
 
   return (
     <li className="rounded-2xl border border-forge-border bg-forge-surface p-5">
@@ -370,7 +369,7 @@ function TowerCard({
             <span className="font-mono text-forge-body">
               {formatMoney(pool, { decimals: 1 })}
             </span>{" "}
-            · baseline {o.baseline.offshorePct.toFixed(0)}% off · {o.baseline.aiPct.toFixed(0)}% AI
+            · weighted {o.offshorePct.toFixed(0)}% offshore · {o.aiPct.toFixed(0)}% AI
           </p>
           {!presentMode ? (
             <p className="mt-1 text-[11px] text-forge-hint">
@@ -386,137 +385,53 @@ function TowerCard({
           </div>
           <div className="font-display text-2xl font-semibold text-accent-green tabular-nums">
             <MoneyCounter
-              value={o.scenario.combined}
-              decimals={o.scenario.combined >= 1_000_000 ? 1 : 0}
+              value={o.combined}
+              decimals={o.combined >= 1_000_000 ? 1 : 0}
             />
           </div>
           <div className="font-mono text-[10px] text-forge-hint">
-            +10pts off ≈ {formatMoney(sens.dOff10, { decimals: 0 })} · +10pts AI ≈{" "}
-            {formatMoney(sens.dAi10, { decimals: 0 })}
+            off {formatMoney(o.offshore, { decimals: 0 })} · AI{" "}
+            {formatMoney(o.ai, { decimals: 0 })}
           </div>
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <div>
-          <div className="flex items-center justify-between text-[11px] text-forge-subtle">
-            <span>Scenario offshore</span>
-            <span className="font-mono text-forge-body">{s.scenarioOffshorePct.toFixed(0)}%</span>
-          </div>
-          <PercentSlider
-            ariaLabel={`${towerName} offshore`}
-            value={s.scenarioOffshorePct}
-            onChange={(n) =>
-              setTowerScenario(towerId, { ...s, scenarioOffshorePct: n })
-            }
-            hue="purple"
-            defaultMark={o.baseline.offshorePct}
+      <div className="mt-3">
+        <div className="flex h-2 overflow-hidden rounded-full bg-forge-page/60">
+          <div
+            className="bg-accent-purple"
+            style={{ width: `${offSharePct.toFixed(2)}%` }}
+            aria-label={`Offshore share ${offSharePct.toFixed(0)}%`}
+          />
+          <div
+            className="bg-accent-teal"
+            style={{ width: `${aiSharePct.toFixed(2)}%` }}
+            aria-label={`AI share ${aiSharePct.toFixed(0)}%`}
           />
         </div>
-        <div>
-          <div className="flex items-center justify-between text-[11px] text-forge-subtle">
-            <span>Scenario AI</span>
-            <span className="font-mono text-forge-body">{s.scenarioAIPct.toFixed(0)}%</span>
-          </div>
-          <PercentSlider
-            ariaLabel={`${towerName} AI`}
-            value={s.scenarioAIPct}
-            onChange={(n) => setTowerScenario(towerId, { ...s, scenarioAIPct: n })}
-            hue="teal"
-            defaultMark={o.baseline.aiPct}
-          />
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-[10px] text-forge-hint">
+          <span>
+            Offshore {offSharePct.toFixed(0)}% · AI {aiSharePct.toFixed(0)}% of pre-overlap
+            modeled $
+          </span>
+          <span className="font-mono">
+            combined / pool = {pool > 0 ? ((o.combined / pool) * 100).toFixed(0) : 0}%
+          </span>
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={onReset}
-          className="inline-flex items-center gap-1 text-xs text-forge-subtle underline-offset-2 hover:text-forge-ink hover:underline"
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-xs">
+        <Link
+          href={`/impact-levers/tower/${towerId}`}
+          className="text-accent-purple-dark underline"
         >
-          <RotateCcw className="h-3 w-3" />
-          Reset to L4 baseline
-        </button>
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <Link
-            href={`/impact-levers/tower/${towerId}`}
-            className="text-accent-purple-dark underline"
-          >
-            Open dials
-          </Link>
-          <span className="text-forge-hint">·</span>
-          <Link href={`/tower/${towerId}`} className="text-forge-body underline">
-            AI Initiatives
-          </Link>
-        </div>
+          Open dials
+        </Link>
+        <span className="text-forge-hint">·</span>
+        <Link href={`/tower/${towerId}`} className="text-forge-body underline">
+          AI Initiatives
+        </Link>
       </div>
     </li>
-  );
-}
-
-function GlobalAssumptionsPanel({ program }: { program: AssessProgramV2 }) {
-  const [open, setOpen] = React.useState(false);
-  return (
-    <details
-      className="mt-4 rounded-xl border border-forge-border bg-forge-surface p-4 text-sm"
-      open={open}
-      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
-    >
-      <summary className="cursor-pointer font-medium text-forge-ink">
-        Global cost assumptions (blended $ / year, illustrative)
-      </summary>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        {(
-          [
-            ["blendedFteOnshore", "FTE onshore"],
-            ["blendedFteOffshore", "FTE offshore"],
-            ["blendedContractorOnshore", "Contractor onshore"],
-            ["blendedContractorOffshore", "Contractor offshore"],
-          ] as const
-        ).map(([k, lab]) => (
-          <label key={k} className="text-xs">
-            {lab}
-            <input
-              className="mt-1 w-full rounded border border-forge-border bg-forge-page px-2 py-1 font-mono"
-              type="number"
-              value={program.global[k]}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                if (!Number.isFinite(n) || n < 0) return;
-                setGlobalAssessAssumptions({ [k]: n } as Partial<GlobalAssessAssumptions>);
-              }}
-            />
-          </label>
-        ))}
-        <label className="text-xs sm:col-span-2">
-          Offshore lever weight (0 to 1)
-          <input
-            className="mt-1 w-full rounded border border-forge-border bg-forge-page px-2 py-1 font-mono"
-            type="number"
-            step={0.05}
-            min={0}
-            max={1}
-            value={program.global.offshoreLeverWeight}
-            onChange={(e) =>
-              setGlobalAssessAssumptions({ offshoreLeverWeight: Number(e.target.value) })
-            }
-          />
-        </label>
-        <label className="text-xs sm:col-span-2">
-          AI lever weight (0 to 1)
-          <input
-            className="mt-1 w-full rounded border border-forge-border bg-forge-page px-2 py-1 font-mono"
-            type="number"
-            step={0.05}
-            min={0}
-            max={1}
-            value={program.global.aiLeverWeight}
-            onChange={(e) =>
-              setGlobalAssessAssumptions({ aiLeverWeight: Number(e.target.value) })
-            }
-          />
-        </label>
-      </div>
-    </details>
   );
 }

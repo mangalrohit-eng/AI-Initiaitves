@@ -16,7 +16,6 @@ import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
 import {
   getAssessProgram,
   setTowerAssess,
-  setTowerScenario,
   subscribe,
 } from "@/lib/localStore";
 
@@ -118,10 +117,6 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
         status: seed.status,
         capabilityMapConfirmedAt: undefined,
       });
-      setTowerScenario(towerId, {
-        scenarioOffshorePct: seed.baseline.baselineOffshorePct,
-        scenarioAIPct: seed.baseline.baselineAIPct,
-      });
       if (sync?.canSync) await sync.flushSave();
       return { rows: seed.l4Rows.length };
     },
@@ -153,10 +148,6 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
         },
         status: tState.status === "empty" ? "data" : tState.status,
       });
-      setTowerScenario(towerId, {
-        scenarioOffshorePct: Math.round(w.offshorePct),
-        scenarioAIPct: Math.round(w.aiPct),
-      });
       if (sync?.canSync) await sync.flushSave();
       return result;
     },
@@ -184,10 +175,6 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
           baselineAIPct: Math.round(w.aiPct),
         },
         status: tState.status === "empty" ? "data" : tState.status,
-      });
-      setTowerScenario(towerId, {
-        scenarioOffshorePct: Math.round(w.offshorePct),
-        scenarioAIPct: Math.round(w.aiPct),
       });
       if (sync?.canSync) await sync.flushSave();
       return result;
@@ -224,7 +211,6 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       },
       status: "complete",
     });
-    setTowerScenario(towerId, { scenarioOffshorePct: w.offshorePct, scenarioAIPct: w.aiPct });
     if (sync?.canSync) await sync.flushSave();
     toast.success({
       title: `${towerName} reviewed by tower lead`,

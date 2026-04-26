@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Allow `next build` to write into a separate output dir from `next dev` so a
+  // local build-check doesn't fight the running dev server for file locks on
+  // `.next/`. Vercel and `next start` use the default `.next` because the env
+  // var is unset there. Locally: `npm run build:check` sets it to `.next-build`.
+  distDir: process.env.NEXT_BUILD_DIR || ".next",
   // Avoid occasional Windows build races where webpack chunks resolve from the wrong cwd.
   experimental: {
     webpackBuildWorker: false,

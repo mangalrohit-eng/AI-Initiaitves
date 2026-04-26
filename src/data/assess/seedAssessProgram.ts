@@ -178,20 +178,13 @@ export function getTowerSeedState(towerId: TowerId): TowerAssessState {
 
 export function buildSeededAssessProgramV2(): AssessProgramV2 {
   const tmap: Partial<Record<TowerId, TowerAssessState>> = {};
-  const sc: AssessProgramV2["scenarios"] = {};
   for (const tw of towers) {
     const id = tw.id as TowerId;
-    const state = getTowerSeedState(id);
-    tmap[id] = state;
-    sc[id] = {
-      scenarioOffshorePct: state.baseline.baselineOffshorePct,
-      scenarioAIPct: state.baseline.baselineAIPct,
-    };
+    tmap[id] = getTowerSeedState(id);
   }
   return {
-    version: 2,
+    version: 3,
     towers: tmap,
     global: { ...defaultGlobalAssessAssumptions },
-    scenarios: sc,
   };
 }

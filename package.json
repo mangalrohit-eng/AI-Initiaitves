@@ -9,8 +9,10 @@
     "db:migrate": "node scripts/migrate-assess.cjs",
     "db:seed": "tsx scripts/seed-assess-defaults.ts",
     "build": "next build",
+    "build:check": "node scripts/build-check.cjs",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -9,7 +9,6 @@ import { TowerJourneyStepper } from "@/components/layout/TowerJourneyStepper";
 import { Term } from "@/components/help/Term";
 import { AssessmentLeverRow } from "@/components/assess/AssessmentLeverRow";
 import { AssessmentScoreboard } from "@/components/assess/AssessmentScoreboard";
-import { ScenarioPresetButtons } from "@/components/assess/ScenarioPresetButtons";
 import { TowerChecklist } from "@/components/assess/TowerChecklist";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { useTowerAssessOps } from "@/lib/assess/useTowerAssessOps";
@@ -23,11 +22,7 @@ import {
   rowAnnualCost,
   weightedTowerLevers,
 } from "@/lib/assess/scenarioModel";
-import {
-  getAssessProgram,
-  setTowerAssess,
-  setTowerScenario,
-} from "@/lib/localStore";
+import { getAssessProgram, setTowerAssess } from "@/lib/localStore";
 import type { L4WorkforceRow, TowerId } from "@/data/assess/types";
 import { getTowerHref } from "@/lib/towerHref";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
@@ -40,7 +35,6 @@ type Props = { towerId: TowerId; towerName: string };
  *
  *   - Cinematic per-L4 lever rows (offshore + AI sliders, live modeled $).
  *   - Top-of-page scoreboard (pool, weighted dials, modeled $).
- *   - Scenario presets (Conservative / Base / Aggressive) for one-click frames.
  *   - Tower checklist + Mark complete to anchor the impact estimate summary.
  *
  * Reuses `useTowerAssessOps` so saves and toasts stay in lock-step with the
@@ -157,10 +151,6 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
         },
         status: tState.status === "empty" ? "data" : tState.status,
       });
-      setTowerScenario(towerId, {
-        scenarioOffshorePct: Math.round(w.offshorePct),
-        scenarioAIPct: Math.round(w.aiPct),
-      });
       if (sync?.canSync) await sync.flushSave();
       return { changedRows, changedCells, source, warning };
     },
@@ -266,7 +256,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
               Dial <Term termKey="offshore dial">offshore</Term> and{" "}
               <Term termKey="ai impact dial">AI impact</Term> per <Term termKey="l4">L4</Term> activity. The
               tool weights every drag against the L4&apos;s pool $ and updates the modeled
-              saving live. Scenario presets snap to anchored frames; you can override per row.
+              saving live.
             </p>
           </div>
           <Link
@@ -305,8 +295,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
               />
             </div>
 
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-forge-border bg-forge-surface/60 p-3">
-              <ScenarioPresetButtons scopeTowerId={towerId} size="md" />
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-forge-border bg-forge-surface/60 p-3">
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 {blanks.totalBlanks > 0 ? (
                   <button

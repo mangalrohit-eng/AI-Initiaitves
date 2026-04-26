@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { AssessmentScoreboard } from "@/components/assess/AssessmentScoreboard";
 import { ImpactHero } from "@/components/assess/ImpactHero";
-import { ScenarioPresetButtons } from "@/components/assess/ScenarioPresetButtons";
 import { WorkshopToolsDrawer } from "@/components/assess/WorkshopToolsDrawer";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PageShell } from "@/components/PageShell";
@@ -137,9 +136,8 @@ export function AssessmentHubClient() {
           <AssessmentScoreboard variant="program" program={program} />
         </div>
 
-        {/* Scenario presets — program-wide */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-forge-border bg-forge-surface/60 p-3">
-          <ScenarioPresetButtons size="md" />
+        {/* Quick link to impact estimate */}
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-forge-border bg-forge-surface/60 p-3">
           <Link
             href="/impact-levers/summary"
             className="inline-flex items-center gap-1.5 rounded-lg border border-accent-purple/40 bg-accent-purple/10 px-3 py-1.5 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/20"
@@ -289,8 +287,8 @@ export function AssessmentHubClient() {
                     <div className="font-mono text-[9px] uppercase tracking-wider text-forge-hint">Modeled</div>
                     <div className="font-mono text-[12px] tabular-nums text-accent-green">
                       {outcome
-                        ? formatMoney(outcome.scenario.combined, {
-                            decimals: outcome.scenario.combined >= 1_000_000 ? 1 : 0,
+                        ? formatMoney(outcome.combined, {
+                            decimals: outcome.combined >= 1_000_000 ? 1 : 0,
                           })
                         : "$—"}
                     </div>

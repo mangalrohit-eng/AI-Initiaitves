@@ -2,27 +2,16 @@
 
 import * as React from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  Building2,
-  Calculator,
-  Cpu,
-  Globe2,
-  RotateCcw,
-  Sparkles,
-  TrendingUp,
-} from "lucide-react";
+import { ArrowRight, Building2, Calculator, RotateCcw } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PageShell } from "@/components/PageShell";
-import { MoneyCounter, formatMoney } from "@/components/ui/MoneyCounter";
-import { PercentSlider } from "@/components/ui/PercentSlider";
+import { formatMoney } from "@/components/ui/MoneyCounter";
 import { useToast } from "@/components/feedback/ToastProvider";
 import {
   defaultGlobalAssessAssumptions,
   type AssessProgramV2,
   type GlobalAssessAssumptions,
 } from "@/data/assess/types";
-import { modeledSavingsForTower } from "@/lib/assess/scenarioModel";
 import {
   getAssessProgram,
   setGlobalAssessAssumptions,
@@ -30,16 +19,11 @@ import {
 } from "@/lib/localStore";
 
 /**
- * Top-level Assumptions surface — the single place where all globals that
- * drive modeled $ live. Workshop facilitators sanity-check Versant-specific
- * blended rates here; clients see them too for transparency.
- *
- * Layout:
- *   - Live calculator preview (anchors the math at $100M pool, current dials).
- *   - Workforce blended rates ($/FTE-year).
- *   - Lever weights (offshore + AI).
- *   - Combine mode + cap.
- *   - "How impact is calculated" inline explainer.
+ * Top-level Assumptions surface — the single place where the four blended
+ * rates that drive every modeled $ live. There is intentionally nothing else
+ * on this page: no scenario presets, no live calculator, no lever weights,
+ * no combine mode. The math (in `scenarioModel.ts`) reads these four rates
+ * and the per-L4 dials — that's the entire model.
  */
 export function AssumptionsClient() {
   const toast = useToast();
@@ -64,6 +48,9 @@ export function AssumptionsClient() {
     });
   };
 
+  const fteWageGap = Math.max(0, g.blendedFteOnshore - g.blendedFteOffshore);
+  const ctrWageGap = Math.max(0, g.blendedContractorOnshore - g.blendedContractorOffshore);
+
   return (
     <PageShell>
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
@@ -79,9 +66,10 @@ export function AssumptionsClient() {
               &gt; The numbers behind the modeled $
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
-              Workshop-level inputs that drive every modeled dollar on the Impact Levers hub
-              and Impact Estimate. Editable, illustrative — the system of record stays with
-              Versant&apos;s reported financials.
+              Four blended rates feed every modeled dollar in the app. Edit them here and
+              every total on the Impact Levers hub, the Impact Estimate, and per-tower pages
+              recomputes on the next render. Workshop modelling — illustrative, not
+              Versant-reported.
             </p>
           </div>
           <button
@@ -95,15 +83,12 @@ export function AssumptionsClient() {
           </button>
         </div>
 
-        {/* ============== LIVE CALCULATOR ============== */}
-        <CalculatorPreview g={g} />
-
         {/* ============== WORKFORCE BLENDED RATES ============== */}
         <section className="mt-6">
           <SectionHeader
             icon={<Building2 className="h-4 w-4" />}
             title="Workforce blended rates"
-            subtitle={`$ per FTE-year. Used when an L4 row's annualSpendUsd is empty.`}
+            subtitle="$ per FTE-year. Used to size the pool for L4s without an annualSpendUsd override and to value offshore arbitrage."
           />
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <MoneyInput
@@ -135,164 +120,160 @@ export function AssumptionsClient() {
               hint="Per-FTE-year equivalent"
             />
           </div>
-        </section>
-
-        {/* ============== LEVER WEIGHTS ============== */}
-        <section className="mt-6">
-          <SectionHeader
-            icon={<Sparkles className="h-4 w-4" />}
-            title="Lever weights"
-            subtitle="Maximum pool deflection at 100% dial. Industry-anchored band math, not Versant-reported."
-          />
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <LeverWeight
-              hue="purple"
-              icon={<Globe2 className="h-3.5 w-3.5" />}
-              label="Offshore lever weight"
-              value={g.offshoreLeverWeight}
-              defaultValue={defaultGlobalAssessAssumptions.offshoreLeverWeight}
-              onChange={(n) => onPatch({ offshoreLeverWeight: n })}
-              microcopy="Going from 0 to 100% offshore deflects this fraction of the L4 pool."
-            />
-            <LeverWeight
-              hue="teal"
-              icon={<Cpu className="h-3.5 w-3.5" />}
-              label="AI lever weight"
-              value={g.aiLeverWeight}
-              defaultValue={defaultGlobalAssessAssumptions.aiLeverWeight}
-              onChange={(n) => onPatch({ aiLeverWeight: n })}
-              microcopy="Going from 0 to 100% AI impact deflects this fraction of the L4 pool."
-            />
-          </div>
-        </section>
-
-        {/* ============== COMBINE MODE + CAP ============== */}
-        <section className="mt-6">
-          <SectionHeader
-            icon={<TrendingUp className="h-4 w-4" />}
-            title="Combine mode and cap"
-            subtitle="How offshore + AI savings stack. Capped mode keeps band math defensible."
-          />
-          <div className="mt-3 rounded-2xl border border-forge-border bg-forge-surface p-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="text-[11px] font-medium uppercase tracking-wider text-forge-hint">
-                  Combine mode
-                </label>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <ModeButton
-                    selected={g.combineMode === "additive"}
-                    onClick={() => onPatch({ combineMode: "additive" })}
-                    title="Additive"
-                    description="Off + AI sum directly. Most aggressive."
-                  />
-                  <ModeButton
-                    selected={g.combineMode === "capped"}
-                    onClick={() => onPatch({ combineMode: "capped" })}
-                    title="Capped"
-                    description="Sum is clipped at the cap. Defensible default."
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-[11px] font-medium uppercase tracking-wider text-forge-hint">
-                  Combined cap (% of pool)
-                </label>
-                <div
-                  className={
-                    "mt-2 transition " +
-                    (g.combineMode === "capped" ? "" : "pointer-events-none opacity-50")
-                  }
-                >
-                  <div className="flex items-center justify-between text-xs text-forge-subtle">
-                    <span>Cap</span>
-                    <span className="font-mono text-forge-body">{g.combinedCapPct.toFixed(0)}%</span>
-                  </div>
-                  <PercentSlider
-                    ariaLabel="Combined cap percent"
-                    value={g.combinedCapPct}
-                    onChange={(n) => onPatch({ combinedCapPct: n })}
-                    hue="purple"
-                    defaultMark={defaultGlobalAssessAssumptions.combinedCapPct}
-                    min={0}
-                    max={75}
-                    showValue={false}
-                  />
-                  <p className="mt-1 text-[11px] text-forge-hint">
-                    Default {defaultGlobalAssessAssumptions.combinedCapPct}%. Combined modeled
-                    savings can&apos;t exceed this share of the pool, per tower.
-                  </p>
-                </div>
-              </div>
-            </div>
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-forge-subtle">
+            <span className="inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-surface/60 px-2 py-0.5 font-mono">
+              FTE wage gap{" "}
+              <span className="text-forge-body">{formatMoney(fteWageGap, { decimals: 0 })}</span>{" "}
+              / year per moved FTE
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-surface/60 px-2 py-0.5 font-mono">
+              Contractor wage gap{" "}
+              <span className="text-forge-body">{formatMoney(ctrWageGap, { decimals: 0 })}</span>{" "}
+              / year per moved contractor
+            </span>
           </div>
         </section>
 
         {/* ============== HOW IT'S CALCULATED ============== */}
-        <section className="mt-6 rounded-2xl border border-accent-purple/30 bg-accent-purple/5 p-5">
+        <section className="mt-8 rounded-2xl border border-accent-purple/30 bg-accent-purple/5 p-5">
           <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-accent-purple-dark">
             &gt; How impact is calculated
           </h2>
-          <ol className="mt-3 space-y-2 text-sm text-forge-body">
-            <li className="flex gap-2">
-              <span className="font-mono text-xs text-forge-hint">1.</span>
-              <span>
-                <span className="font-semibold text-forge-ink">Row pool $</span> =
-                <span className="ml-1 font-mono text-xs">
-                  annualSpendUsd
-                </span>{" "}
-                if set, else{" "}
-                <span className="font-mono text-xs">
-                  fteOn × {formatMoney(g.blendedFteOnshore, { decimals: 0 })} + fteOff ×{" "}
-                  {formatMoney(g.blendedFteOffshore, { decimals: 0 })} + contractors at the
-                  matching rates
-                </span>
-                .
-              </span>
+          <p className="mt-1 text-xs text-forge-subtle">
+            Every $ in the app comes from these four rates × the per-L4 headcount mix and
+            dials. No magic lever weights, no caps. Change a rate above and watch the
+            Impact Estimate move.
+          </p>
+
+          <ol className="mt-4 space-y-3 text-sm text-forge-body">
+            <li className="flex gap-3">
+              <Step n={1} />
+              <div>
+                <div className="font-semibold text-forge-ink">Pool $ — what does the work cost today?</div>
+                <p className="mt-0.5 text-forge-body">
+                  If the L4 has an{" "}
+                  <span className="font-mono text-xs text-forge-ink">annualSpendUsd</span>{" "}
+                  override, that&apos;s the pool. Otherwise it&apos;s the sum of headcount ×
+                  rate:
+                </p>
+                <pre className="mt-1 overflow-x-auto rounded-md border border-forge-border bg-forge-page/60 p-2 font-mono text-[11px] text-forge-body">
+{`pool = fteOn  × ${formatMoney(g.blendedFteOnshore, { decimals: 0 })}
+     + fteOff × ${formatMoney(g.blendedFteOffshore, { decimals: 0 })}
+     + ctrOn  × ${formatMoney(g.blendedContractorOnshore, { decimals: 0 })}
+     + ctrOff × ${formatMoney(g.blendedContractorOffshore, { decimals: 0 })}`}
+                </pre>
+              </div>
             </li>
-            <li className="flex gap-2">
-              <span className="font-mono text-xs text-forge-hint">2.</span>
-              <span>
-                <span className="font-semibold text-forge-ink">Tower pool</span> = sum of L4 row
-                pools.
-              </span>
+            <li className="flex gap-3">
+              <Step n={2} />
+              <div>
+                <div className="font-semibold text-forge-ink">
+                  Offshore savings — wage arbitrage on movable headcount only
+                </div>
+                <p className="mt-0.5 text-forge-body">
+                  The dial sets the <em>target</em> offshore share for the L4. Existing
+                  offshore staff don&apos;t double-count. Only the headcount that has to{" "}
+                  <em>move</em> generates savings — at the wage gap, not at the pool.
+                </p>
+                <pre className="mt-1 overflow-x-auto rounded-md border border-forge-border bg-forge-page/60 p-2 font-mono text-[11px] text-forge-body">
+{`movableFte  = max(0, (fteOn + fteOff) × dial − fteOff)
+fteSavings  = movableFte × ${formatMoney(fteWageGap, { decimals: 0 })}   // FTE wage gap
+movableCtr  = max(0, (ctrOn + ctrOff) × dial − ctrOff)
+ctrSavings  = movableCtr × ${formatMoney(ctrWageGap, { decimals: 0 })}   // contractor wage gap
+
+offshore    = fteSavings + ctrSavings`}
+                </pre>
+                <p className="mt-1 text-[11px] text-forge-subtle">
+                  When a row only has annualSpendUsd (no headcount counts), offshore ={" "}
+                  <span className="font-mono">spend × dial × (1 − offshore/onshore FTE rate)</span>{" "}
+                  — same wage-gap factor, no hardcoded numbers.
+                </p>
+              </div>
             </li>
-            <li className="flex gap-2">
-              <span className="font-mono text-xs text-forge-hint">3.</span>
-              <span>
-                <span className="font-semibold text-forge-ink">Cost-weighted dials</span>: each
-                tower&apos;s offshore % and AI % are pool-weighted across its L4 rows. Rows
-                without dials fall back to the tower baseline.
-              </span>
+            <li className="flex gap-3">
+              <Step n={3} />
+              <div>
+                <div className="font-semibold text-forge-ink">AI savings — the dial is the savings %</div>
+                <p className="mt-0.5 text-forge-body">
+                  AI eliminates a share of the L4&apos;s annual cost. No multiplier, no cap.
+                </p>
+                <pre className="mt-1 overflow-x-auto rounded-md border border-forge-border bg-forge-page/60 p-2 font-mono text-[11px] text-forge-body">
+{`ai = pool × aiDial`}
+                </pre>
+              </div>
             </li>
-            <li className="flex gap-2">
-              <span className="font-mono text-xs text-forge-hint">4.</span>
-              <span>
-                <span className="font-semibold text-forge-ink">Modeled $ per tower</span> ={" "}
-                <span className="font-mono text-xs">
-                  off% × {g.offshoreLeverWeight.toFixed(2)} × pool + ai% ×{" "}
-                  {g.aiLeverWeight.toFixed(2)} × pool
-                </span>
-                {g.combineMode === "capped" ? (
-                  <>
-                    , clipped at <span className="font-mono">{g.combinedCapPct.toFixed(0)}%</span>{" "}
-                    of pool.
-                  </>
-                ) : (
-                  <> (additive — no cap).</>
-                )}
-              </span>
+            <li className="flex gap-3">
+              <Step n={4} />
+              <div>
+                <div className="font-semibold text-forge-ink">
+                  Combined — sequential, AI removes work first
+                </div>
+                <p className="mt-0.5 text-forge-body">
+                  AI takes the work out, then offshore arbitrage applies to what&apos;s left.
+                  This prevents the two levers from over-counting the same hour.
+                </p>
+                <pre className="mt-1 overflow-x-auto rounded-md border border-forge-border bg-forge-page/60 p-2 font-mono text-[11px] text-forge-body">
+{`combined = ai + offshore × (1 − aiDial)`}
+                </pre>
+              </div>
             </li>
-            <li className="flex gap-2">
-              <span className="font-mono text-xs text-forge-hint">5.</span>
-              <span>
-                <span className="font-semibold text-forge-ink">Program $</span> = sum across
-                contributing towers. Each tower&apos;s cap is applied independently — a tower at
-                cap can&apos;t borrow headroom from another.
-              </span>
+            <li className="flex gap-3">
+              <Step n={5} />
+              <div>
+                <div className="font-semibold text-forge-ink">Roll-up</div>
+                <p className="mt-0.5 text-forge-body">
+                  Tower combined = sum of L4 combined. Program combined = sum of tower
+                  combined. There is no synthetic cap and no second savings model in the
+                  codebase.
+                </p>
+              </div>
             </li>
           </ol>
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+
+          <div className="mt-5 rounded-xl border border-forge-border bg-forge-surface/70 p-4 text-xs">
+            <div className="font-semibold uppercase tracking-wider text-forge-hint">
+              Worked example (at current assumptions)
+            </div>
+            <p className="mt-1 leading-relaxed text-forge-body">
+              An L4 with 10 onshore FTE, 5 offshore FTE, 0 contractors, no
+              annualSpendUsd override. Tower lead dials offshore 80%, AI 30%.
+            </p>
+            <ul className="mt-2 space-y-1 font-mono text-forge-body">
+              <li>
+                Pool = 10 ×{" "}
+                <span className="text-forge-ink">{formatMoney(g.blendedFteOnshore, { decimals: 0 })}</span> + 5 ×{" "}
+                <span className="text-forge-ink">{formatMoney(g.blendedFteOffshore, { decimals: 0 })}</span> ={" "}
+                <span className="text-forge-ink">
+                  {formatMoney(10 * g.blendedFteOnshore + 5 * g.blendedFteOffshore, { decimals: 1 })}
+                </span>
+              </li>
+              <li>
+                AI = pool × 0.30 ={" "}
+                <span className="text-forge-ink">
+                  {formatMoney((10 * g.blendedFteOnshore + 5 * g.blendedFteOffshore) * 0.3, {
+                    decimals: 1,
+                  })}
+                </span>
+              </li>
+              <li>
+                Movable FTE = (15 × 0.80) − 5 = 7; offshore = 7 ×{" "}
+                <span className="text-forge-ink">{formatMoney(fteWageGap, { decimals: 0 })}</span> ={" "}
+                <span className="text-forge-ink">{formatMoney(7 * fteWageGap, { decimals: 1 })}</span>
+              </li>
+              <li>
+                Combined ={" "}
+                <span className="text-accent-green">
+                  {formatMoney(
+                    (10 * g.blendedFteOnshore + 5 * g.blendedFteOffshore) * 0.3 +
+                      7 * fteWageGap * (1 - 0.3),
+                    { decimals: 1 },
+                  )}
+                </span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
             <Link
               href="/impact-levers/summary"
               className="inline-flex items-center gap-1 text-accent-purple-dark underline-offset-2 hover:underline"
@@ -317,149 +298,16 @@ export function AssumptionsClient() {
   );
 }
 
-/* ============== LIVE CALCULATOR ============== */
-
-function CalculatorPreview({ g }: { g: GlobalAssessAssumptions }) {
-  const [pool, setPool] = React.useState(100_000_000);
-  const [off, setOff] = React.useState(50);
-  const [ai, setAi] = React.useState(50);
-  const out = modeledSavingsForTower(pool, off, ai, g);
-  const capBinding =
-    g.combineMode === "capped" && out.offshore + out.ai > out.combined + 0.5;
-
-  return (
-    <section className="mt-5 rounded-2xl border border-accent-purple/30 bg-gradient-to-br from-accent-purple/10 via-forge-surface to-forge-surface p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-accent-purple-dark">
-          &gt; Live preview
-        </h2>
-        <span className="text-[11px] text-forge-hint">
-          What happens to a sample pool at the current assumptions
-        </span>
-      </div>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 grid gap-3 sm:grid-cols-3">
-          <PoolControl
-            label="Test pool $"
-            value={pool}
-            onChange={setPool}
-            options={[25_000_000, 100_000_000, 500_000_000, 1_000_000_000]}
-          />
-          <DialControl
-            label="Offshore %"
-            hue="purple"
-            value={off}
-            onChange={setOff}
-          />
-          <DialControl label="AI %" hue="teal" value={ai} onChange={setAi} />
-        </div>
-        <div className="rounded-xl border border-forge-border bg-forge-page/50 p-4">
-          <div className="text-[10px] font-medium uppercase tracking-wider text-forge-hint">
-            Modeled $
-          </div>
-          <div className="mt-1 font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">
-            <MoneyCounter value={out.combined} decimals={1} />
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
-            <Split label="Off" value={out.offshore} hue="purple" />
-            <Split label="AI" value={out.ai} hue="teal" />
-          </div>
-          {capBinding ? (
-            <div className="mt-2 inline-flex items-center gap-1 rounded-md border border-accent-amber/40 bg-accent-amber/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-accent-amber">
-              Cap binding · {g.combinedCapPct.toFixed(0)}%
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function PoolControl({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: number;
-  onChange: (n: number) => void;
-  options: number[];
-}) {
-  return (
-    <div>
-      <div className="text-[10px] font-medium uppercase tracking-wider text-forge-hint">{label}</div>
-      <div className="mt-2 flex flex-wrap gap-1">
-        {options.map((o) => (
-          <button
-            key={o}
-            type="button"
-            onClick={() => onChange(o)}
-            className={
-              "rounded-md border px-2 py-1 font-mono text-[11px] transition " +
-              (value === o
-                ? "border-accent-purple bg-accent-purple/15 text-accent-purple-dark"
-                : "border-forge-border bg-forge-surface text-forge-body hover:border-accent-purple/40")
-            }
-          >
-            {formatMoney(o, { decimals: 0 })}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DialControl({
-  label,
-  value,
-  onChange,
-  hue,
-}: {
-  label: string;
-  value: number;
-  onChange: (n: number) => void;
-  hue: "purple" | "teal";
-}) {
-  return (
-    <div>
-      <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-forge-hint">
-        <span>{label}</span>
-        <span className="font-mono text-forge-body">{value.toFixed(0)}%</span>
-      </div>
-      <div className="mt-2">
-        <PercentSlider
-          ariaLabel={label}
-          value={value}
-          onChange={onChange}
-          hue={hue}
-          showValue={false}
-        />
-      </div>
-    </div>
-  );
-}
-
-function Split({ label, value, hue }: { label: string; value: number; hue: "purple" | "teal" }) {
+function Step({ n }: { n: number }) {
   return (
     <span
-      className={
-        "inline-flex items-center justify-between gap-1 rounded-md border px-1.5 py-1 font-mono " +
-        (hue === "purple"
-          ? "border-accent-purple/30 bg-accent-purple/10 text-accent-purple-dark"
-          : "border-accent-teal/30 bg-accent-teal/10 text-accent-teal")
-      }
+      className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-accent-purple/40 bg-accent-purple/10 font-mono text-[11px] font-semibold text-accent-purple-dark"
+      aria-hidden
     >
-      <span className="text-forge-hint">{label}</span>
-      <span className="font-semibold text-forge-ink">
-        {formatMoney(value, { decimals: 1 })}
-      </span>
+      {n}
     </span>
   );
 }
-
-/* ============== SECTION HEADER ============== */
 
 function SectionHeader({
   icon,
@@ -487,8 +335,6 @@ function SectionHeader({
     </div>
   );
 }
-
-/* ============== INPUT PRIMITIVES ============== */
 
 function MoneyInput({
   label,
@@ -540,103 +386,5 @@ function MoneyInput({
         )}
       </div>
     </label>
-  );
-}
-
-function LeverWeight({
-  label,
-  value,
-  defaultValue,
-  onChange,
-  microcopy,
-  hue,
-  icon,
-}: {
-  label: string;
-  value: number;
-  defaultValue: number;
-  onChange: (n: number) => void;
-  microcopy: string;
-  hue: "purple" | "teal";
-  icon: React.ReactNode;
-}) {
-  const isDefault = Math.abs(value - defaultValue) < 1e-6;
-  const pct = Math.round(value * 100);
-  return (
-    <div className="rounded-xl border border-forge-border bg-forge-surface p-4">
-      <div className="flex items-center justify-between gap-2">
-        <span
-          className={
-            "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider " +
-            (hue === "purple"
-              ? "bg-accent-purple/15 text-accent-purple-dark"
-              : "bg-accent-teal/15 text-accent-teal")
-          }
-        >
-          {icon}
-          {label}
-        </span>
-        <span className="font-mono text-base font-semibold tabular-nums text-forge-ink">
-          {pct}%
-        </span>
-      </div>
-      <div className="mt-2">
-        <PercentSlider
-          ariaLabel={label}
-          value={pct}
-          onChange={(n) => onChange(n / 100)}
-          hue={hue}
-          defaultMark={defaultValue * 100}
-          min={0}
-          max={100}
-          showValue={false}
-        />
-      </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-forge-subtle">{microcopy}</p>
-      <div className="mt-1 flex items-center justify-between text-[10px] text-forge-hint">
-        <span>
-          Default <span className="font-mono">{Math.round(defaultValue * 100)}%</span>
-        </span>
-        {!isDefault ? (
-          <button
-            type="button"
-            onClick={() => onChange(defaultValue)}
-            className="inline-flex items-center gap-1 text-forge-subtle hover:text-accent-purple-dark"
-          >
-            <RotateCcw className="h-2.5 w-2.5" />
-            Reset
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function ModeButton({
-  selected,
-  onClick,
-  title,
-  description,
-}: {
-  selected: boolean;
-  onClick: () => void;
-  title: string;
-  description: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={selected}
-      className={
-        "rounded-lg border p-3 text-left transition " +
-        (selected
-          ? "border-accent-purple bg-accent-purple/10 text-forge-ink shadow-[0_0_0_1px_rgba(161,0,255,0.25)]"
-          : "border-forge-border bg-forge-surface text-forge-body hover:border-accent-purple/40")
-      }
-    >
-      <div className="text-sm font-semibold">{title}</div>
-      <p className="mt-0.5 text-[11px] leading-relaxed text-forge-subtle">{description}</p>
-    </button>
   );
 }

@@ -65,7 +65,7 @@ export function ImpactHero({
               {noData ? (
                 <span className="text-forge-subtle">$—</span>
               ) : (
-                <MoneyCounter value={summary.scenarioCombined} />
+                <MoneyCounter value={summary.combined} />
               )}
             </div>
           </div>
@@ -98,7 +98,7 @@ export function ImpactHero({
               {noData ? (
                 <span className="text-forge-subtle">$—</span>
               ) : (
-                <MoneyCounter value={summary.scenarioCombined} decimals={2} />
+                <MoneyCounter value={summary.combined} decimals={2} />
               )}
             </div>
             {!noData ? (
@@ -112,27 +112,27 @@ export function ImpactHero({
             <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
               <SplitChip
                 label="Offshore"
-                value={summary.scenarioOffshore}
+                value={summary.offshore}
                 pct={
-                  summary.scenarioCombined > 0
-                    ? (summary.scenarioOffshore / summary.scenarioCombined) * 100
+                  summary.offshore + summary.ai > 0
+                    ? (summary.offshore / (summary.offshore + summary.ai)) * 100
                     : 0
                 }
                 hue="purple"
               />
               <SplitChip
                 label="AI"
-                value={summary.scenarioAi}
+                value={summary.ai}
                 pct={
-                  summary.scenarioCombined > 0
-                    ? (summary.scenarioAi / summary.scenarioCombined) * 100
+                  summary.offshore + summary.ai > 0
+                    ? (summary.ai / (summary.offshore + summary.ai)) * 100
                     : 0
                 }
                 hue="teal"
               />
               <span className="font-mono text-[11px] text-forge-hint">
-                wt avg {summary.weightedScenarioOffshorePct.toFixed(0)}% off ·{" "}
-                {summary.weightedScenarioAiPct.toFixed(0)}% AI
+                wt avg {summary.weightedOffshorePct.toFixed(0)}% off ·{" "}
+                {summary.weightedAiPct.toFixed(0)}% AI
               </span>
             </div>
           ) : (

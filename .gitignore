@@ -22,6 +22,7 @@
 # script output (xlsx/csv from export-tower-opportunities)
 /exports/
 /screenshots/
+/.tmp-audit/
 *.pem
 
 # debug

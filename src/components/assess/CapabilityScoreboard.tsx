@@ -69,15 +69,23 @@ export function CapabilityScoreboard(props: Props) {
         />
         <Tile
           icon={<Network className="h-3.5 w-3.5" />}
-          label="L3 / L4 nodes"
-          value={`${counts.l3} / ${counts.l4}`}
+          label="L3 + L4 nodes"
+          value={
+            <span className="inline-flex items-baseline gap-1.5">
+              <span>{counts.l3.toLocaleString()}</span>
+              <span className="text-xs font-medium text-forge-hint">L3</span>
+              <span className="text-forge-hint">·</span>
+              <span>{counts.l4.toLocaleString()}</span>
+              <span className="text-xs font-medium text-forge-hint">L4</span>
+            </span>
+          }
           subtle="in current scope"
         />
         <Tile
           icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-          label="Towers confirmed"
+          label="Towers reviewed"
           value={`${completed}/${towers.length}`}
-          subtle={completed > 0 ? "marked complete" : "none yet"}
+          subtle={completed > 0 ? "signed off by tower lead" : "awaiting tower lead review"}
           accent={completed > 0 ? "green" : undefined}
         />
       </div>
@@ -102,9 +110,17 @@ export function CapabilityScoreboard(props: Props) {
       />
       <Tile
         icon={<ListTree className="h-3.5 w-3.5" />}
-        label="L2 / L3"
-        value={`${counts.l2} / ${counts.l3}`}
-        subtle="capabilities"
+        label="L2 + L3 capabilities"
+        value={
+          <span className="inline-flex items-baseline gap-1.5">
+            <span>{counts.l2}</span>
+            <span className="text-xs font-medium text-forge-hint">L2</span>
+            <span className="text-forge-hint">·</span>
+            <span>{counts.l3}</span>
+            <span className="text-xs font-medium text-forge-hint">L3</span>
+          </span>
+        }
+        subtle="grouping the L4s"
       />
       <Tile
         icon={<Network className="h-3.5 w-3.5" />}
@@ -132,7 +148,7 @@ function Tile({
 }: {
   icon: React.ReactNode;
   label: string;
-  value: number | string;
+  value: number | string | React.ReactNode;
   subtle?: string;
   accent?: "green" | "purple";
 }) {

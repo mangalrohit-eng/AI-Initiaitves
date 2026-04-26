@@ -23,7 +23,7 @@ export function TowerOpportunities({ tower }: { tower: Tower }) {
           <p className="mt-1 max-w-2xl text-sm text-forge-subtle">
             {curated
               ? "Curated by the tower leads as the highest-leverage AI initiatives."
-              : "Derived from the modeled annual hours saved. Tower leads can pin a curated list."}
+              : "Ranked by qualitative impact tier (High > Medium > Low). Tower leads can pin a curated list."}
           </p>
         </div>
       </div>

@@ -115,7 +115,7 @@ export function AssessmentHubClient() {
               Dial <Term termKey="offshore dial">offshore</Term> and{" "}
               <Term termKey="ai impact dial">AI impact</Term> per <Term termKey="l4">L4</Term> against the
               footprint you confirmed in step 1. The headline below reflects every drag in
-              real time. When you&apos;re happy, mark the tower complete.
+              real time. When the dials look right, sign the tower off as reviewed.
             </p>
           </div>
           <Link

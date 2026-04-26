@@ -163,7 +163,7 @@ export const glossary: GlossaryEntry[] = [
     category: "People & change",
     term: "Tower lead",
     short: "The person responsible for a tower's content and dials.",
-    long: "Tower leads upload the L1-L4 capability map, confirm the workforce footprint, set offshore + AI dials, and mark the tower complete when ready for the rollup.",
+    long: "Tower leads upload the L1-L4 capability map, confirm the workforce footprint, set offshore + AI dials, and sign the tower off as reviewed when it is ready for the rollup.",
   },
   {
     id: "tsa",

@@ -389,7 +389,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-accent-purple/30 bg-accent-purple/5 p-5">
                 <div>
                   <p className="font-display text-base font-semibold text-forge-ink">
-                    Tower complete — open the AI agenda next.
+                    Tower reviewed — open the AI agenda next.
                   </p>
                   <p className="mt-1 text-sm text-forge-body">
                     See the sequenced AI initiatives, agent architectures, and 4-lens detail for {towerName}.
@@ -412,7 +412,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
                   Open {towerName} in AI Initiatives
                 </Link>
                 {" — "}
-                (the handoff CTA appears once this tower is marked complete).
+                (the handoff CTA appears once this tower is reviewed by the tower lead).
               </p>
             )}
           </>
@@ -441,13 +441,13 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
         open={confirmCompleteOpen}
         onClose={() => setConfirmCompleteOpen(false)}
         onConfirm={() => handleMarkComplete()}
-        title={`Mark ${towerName} complete?`}
+        title={`Sign ${towerName} off as reviewed?`}
         description={
           <>
-            We&apos;ll lock the baseline at the current cost-weighted roll-up and anchor this tower in the scenario summary. You can unmark anytime.
+            We&apos;ll lock the baseline at the current cost-weighted roll-up and anchor this tower in the scenario summary. You can reopen for review anytime.
           </>
         }
-        confirmLabel="Mark complete"
+        confirmLabel="Mark reviewed"
         variant="lock"
         busy={completeBusy}
       />
@@ -456,13 +456,13 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
         open={confirmUnmarkOpen}
         onClose={() => setConfirmUnmarkOpen(false)}
         onConfirm={() => handleUnmarkComplete()}
-        title={`Unmark ${towerName} as complete?`}
+        title={`Reopen ${towerName} for review?`}
         description={
           <>
-            The tower returns to in-progress. Your data and all explicit reviews are kept.
+            The tower returns to awaiting tower lead sign-off. Your data and all explicit reviews are kept.
           </>
         }
-        confirmLabel="Unmark"
+        confirmLabel="Reopen"
         variant="default"
         busy={completeBusy}
       />

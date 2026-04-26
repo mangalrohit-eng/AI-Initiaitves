@@ -216,7 +216,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     setTowerScenario(towerId, { scenarioOffshorePct: w.offshorePct, scenarioAIPct: w.aiPct });
     if (sync?.canSync) await sync.flushSave();
     toast.success({
-      title: `${towerName} marked complete`,
+      title: `${towerName} reviewed by tower lead`,
       description: "It now anchors the scenario summary. Open AI Initiatives next.",
       action: {
         label: "Open AI Initiatives",
@@ -232,7 +232,10 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
   const doUnmarkComplete = React.useCallback(async () => {
     setTowerAssess(towerId, { status: rows.length ? "data" : "empty" });
     if (sync?.canSync) await sync.flushSave();
-    toast.info({ title: `${towerName} unmarked`, description: "The tower is back to in-progress." });
+    toast.info({
+      title: `${towerName} reopened for review`,
+      description: "The tower is back to awaiting tower lead sign-off.",
+    });
   }, [rows.length, sync, toast, towerId, towerName]);
 
   return {

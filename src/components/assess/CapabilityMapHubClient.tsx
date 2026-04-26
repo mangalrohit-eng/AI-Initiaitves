@@ -158,11 +158,11 @@ export function CapabilityMapHubClient() {
             <div className="text-xs text-forge-subtle">
               Capability Map progress ·{" "}
               <span className="font-mono text-forge-body">{completed}</span> of{" "}
-              <span className="font-mono">{towers.length}</span> towers complete
+              <span className="font-mono">{towers.length}</span> towers reviewed
               {inProgress > 0 ? (
                 <>
-                  {" "}· <span className="font-mono text-forge-body">{inProgress}</span> in
-                  progress
+                  {" "}· <span className="font-mono text-forge-body">{inProgress}</span> awaiting
+                  review
                 </>
               ) : null}
             </div>
@@ -176,7 +176,7 @@ export function CapabilityMapHubClient() {
           </div>
           <div
             className="mt-3 h-2 w-full overflow-hidden rounded-full bg-forge-well/80"
-            aria-label={`${completed} of ${towers.length} towers complete`}
+            aria-label={`${completed} of ${towers.length} towers reviewed`}
           >
             <div
               className="h-full rounded-full bg-accent-purple transition-[width]"

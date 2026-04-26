@@ -224,12 +224,12 @@ export function TowerChecklist({
                 ? "Load the sample or upload a footprint first."
                 : !allConfirmed
                   ? "Confirm every checklist step first."
-                  : "Mark this tower complete and unlock the AI Initiatives handoff."
+                  : "Sign this tower off as reviewed and unlock the AI Initiatives handoff."
             }
             className="inline-flex items-center gap-2 rounded-lg bg-accent-purple px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-purple-dark disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Lock className="h-4 w-4" />
-            Mark tower complete
+            Mark reviewed by tower lead
           </button>
         ) : (
           <button
@@ -238,17 +238,17 @@ export function TowerChecklist({
             className="inline-flex items-center gap-2 rounded-lg border border-forge-border bg-forge-surface px-4 py-2 text-sm font-medium text-forge-body transition hover:border-forge-border-strong"
           >
             <Unlock className="h-4 w-4" />
-            Unmark complete
+            Reopen for review
           </button>
         )}
         {isComplete ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-green/40 bg-accent-green/10 px-2.5 py-1 text-xs font-medium text-accent-green">
             <Check className="h-3 w-3" />
-            Tower marked complete
+            Reviewed by tower lead
           </span>
         ) : (
           <span className="text-xs text-forge-subtle">
-            Marking complete pins the tower in the scenario summary and surfaces the AI Initiatives handoff.
+            Marking reviewed pins the tower in the scenario summary and surfaces the AI Initiatives handoff.
           </span>
         )}
       </footer>

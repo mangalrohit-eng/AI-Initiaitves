@@ -103,11 +103,14 @@ export async function POST(req: Request) {
     } catch (e) {
       warning =
         "AI inference unavailable; used deterministic heuristic. " +
-        (e instanceof Error ? e.message : "Unknown LLM error.");
+        (e instanceof Error ? e.message : "Unknown LLM error.") +
+        ` [env=${describeRuntimeEnv()}]`;
       llmDefaults = null;
     }
   } else {
-    warning = "OPENAI_API_KEY not set; used deterministic heuristic.";
+    warning =
+      "OPENAI_API_KEY not set on this deployment; used deterministic heuristic." +
+      ` [env=${describeRuntimeEnv()}]`;
   }
 
   if (llmDefaults && llmDefaults.length === rows.length) {
@@ -139,4 +142,18 @@ export async function POST(req: Request) {
 async function isAuthed(): Promise<boolean> {
   const token = cookies().get(AUTH_COOKIE_NAME)?.value;
   return isValidSessionToken(token);
+}
+
+/**
+ * Compact runtime env description embedded in fallback warnings so the user
+ * can tell, from the toast alone, whether the OPENAI_API_KEY is missing on
+ * Production vs Preview vs local, and whether the var is undefined or just
+ * blank/whitespace. Never leaks the key value itself.
+ */
+function describeRuntimeEnv(): string {
+  const raw = process.env.OPENAI_API_KEY;
+  const hasVar = typeof raw === "string";
+  const keyLen = hasVar ? raw.trim().length : 0;
+  const vercelEnv = process.env.VERCEL_ENV ?? "local";
+  return `vercel=${vercelEnv}, hasVar=${hasVar}, keyLen=${keyLen}`;
 }

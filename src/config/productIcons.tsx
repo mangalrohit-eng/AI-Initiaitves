@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Bell,
   BookOpen,
+  Calculator,
   ClipboardList,
   FlaskConical,
   Globe2,
@@ -27,6 +28,7 @@ const productIconMap: Record<string, LucideIcon> = {
 const staticIconMap: Record<string, LucideIcon> = {
   "book-open": BookOpen,
   bell: Bell,
+  calculator: Calculator,
 };
 
 export function getProductIcon(iconId: string): LucideIcon {

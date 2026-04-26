@@ -201,6 +201,15 @@ const STATIC_LINKS: StaticNavLink[] = [
     showLabel: true,
   },
   {
+    id: "assumptions",
+    name: "Assumptions",
+    path: "/assumptions",
+    order: 16,
+    iconId: "calculator",
+    audience: "both",
+    showLabel: true,
+  },
+  {
     id: "glossary",
     name: "Glossary",
     path: "/glossary",

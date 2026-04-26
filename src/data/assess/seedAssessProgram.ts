@@ -28,6 +28,18 @@ import { inferL3Defaults } from "./seedAssessmentDefaults";
  */
 export const ASSESS_SEED_REFERENCE_AT = "2026-04-26T00:00:00.000Z";
 
+/**
+ * Versant's reported total employee headcount per `docs/headcount.csv` (24
+ * locations, ~55 sub-business units). Used by the Capability Map scoreboard
+ * to render a "gap vs Versant" indicator next to the program-wide FTE total —
+ * i.e. how much of the 3,748-person footprint is currently represented in
+ * tower-lead-confirmed capability maps.
+ *
+ * Source-of-truth note: the CSV is employees only (no contractors), so this
+ * baseline only compares against onshore + offshore FTE.
+ */
+export const VERSANT_REPORTED_FTE = 3748;
+
 /** Per-tower onshore FTE and contractor — modeled from `docs/headcount.csv`. */
 const TOWER_HEADCOUNT: Record<TowerId, { fte: number; contractor: number }> = {
   finance: { fte: 133, contractor: 0 },

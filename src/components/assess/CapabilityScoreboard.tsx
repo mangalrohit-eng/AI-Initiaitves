@@ -1,14 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, ListTree, MapPin, Network } from "lucide-react";
+import { CheckCircle2, ListTree, MapPin, Network, Users } from "lucide-react";
 import type { AssessProgramV2, L3WorkforceRow, TowerId } from "@/data/assess/types";
 import {
   programCapabilityCounts,
+  programHeadcountTotals,
   towerCapabilityCounts,
   towerFootprintCoverage,
   type CapabilityCounts,
 } from "@/lib/assess/capabilityCounts";
+import { VERSANT_REPORTED_FTE } from "@/data/assess/seedAssessProgram";
 import { towers } from "@/data/towers";
 import { cn } from "@/lib/utils";
 
@@ -42,17 +44,31 @@ export function CapabilityScoreboard(props: Props) {
     () => (variant === "program" ? programCapabilityCounts(program) : null),
     [variant, program],
   );
+  const programHeadcount = React.useMemo(
+    () => (variant === "program" ? programHeadcountTotals(program) : null),
+    [variant, program],
+  );
 
   if (variant === "program") {
-    // programCounts is non-null whenever variant === "program"
+    // programCounts and programHeadcount are non-null whenever variant === "program"
     const counts = programCounts!;
+    const headcount = programHeadcount!;
     const completed = towers.filter(
       (t) => program.towers[t.id]?.status === "complete",
     ).length;
+    const versantGap = headcount.fte - VERSANT_REPORTED_FTE;
+    const versantSubtle =
+      headcount.fte === 0
+        ? `vs Versant ${VERSANT_REPORTED_FTE.toLocaleString()} — load sample`
+        : versantGap === 0
+          ? `matches Versant ${VERSANT_REPORTED_FTE.toLocaleString()}`
+          : `${versantGap > 0 ? "+" : "−"}${Math.abs(versantGap).toLocaleString()} vs Versant ${VERSANT_REPORTED_FTE.toLocaleString()}`;
+    const headcountAccent: "green" | undefined =
+      headcount.fte > 0 && Math.abs(versantGap) <= 50 ? "green" : undefined;
     return (
       <div
         className={cn(
-          "grid grid-cols-2 gap-2 rounded-2xl border border-forge-border bg-forge-surface/70 p-3 sm:grid-cols-4 sm:gap-3 sm:p-4",
+          "grid grid-cols-2 gap-2 rounded-2xl border border-forge-border bg-forge-surface/70 p-3 sm:grid-cols-3 sm:gap-3 sm:p-4 lg:grid-cols-5",
           className,
         )}
       >
@@ -61,6 +77,13 @@ export function CapabilityScoreboard(props: Props) {
           label="Towers covered"
           value={`${counts.contributingTowers}/${towers.length}`}
           subtle={`L1 in scope`}
+        />
+        <Tile
+          icon={<Users className="h-3.5 w-3.5" />}
+          label="Headcount (FTE)"
+          value={headcount.fte.toLocaleString()}
+          subtle={versantSubtle}
+          accent={headcountAccent}
         />
         <Tile
           icon={<ListTree className="h-3.5 w-3.5" />}

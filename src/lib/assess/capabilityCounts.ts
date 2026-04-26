@@ -88,6 +88,32 @@ export function programCapabilityCounts(state: AssessProgramV2): CapabilityCount
 }
 
 /**
+ * Program-wide headcount roll-up. Sums onshore + offshore FTE and onshore +
+ * offshore contractor across every L3 row in every tower. Used by the
+ * Capability Map program scoreboard to render the modeled total alongside
+ * the gap vs Versant's reported 3,748 employees.
+ *
+ * Note: contractors are tracked separately because the Versant CSV is
+ * employees only — the gap-vs-Versant comparison should use FTE only.
+ */
+export function programHeadcountTotals(state: AssessProgramV2): {
+  fte: number;
+  contractor: number;
+  total: number;
+} {
+  let fte = 0;
+  let contractor = 0;
+  for (const t of towers) {
+    const rows = state.towers[t.id]?.l3Rows ?? [];
+    for (const r of rows) {
+      fte += (r.fteOnshore || 0) + (r.fteOffshore || 0);
+      contractor += (r.contractorOnshore || 0) + (r.contractorOffshore || 0);
+    }
+  }
+  return { fte, contractor, total: fte + contractor };
+}
+
+/**
  * Footprint coverage — how many of the L3 capabilities have non-zero headcount
  * or spend in the current rows. Used by Capability Map scoreboards to show
  * "how confirmed is the footprint?" without relying on the user's explicit

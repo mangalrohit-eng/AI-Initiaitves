@@ -29,7 +29,7 @@ const ITEMS: HelpItem[] = [
   {
     id: "walkthrough",
     label: "How to use this portal",
-    description: "60-second workshop walkthrough — capability map, footprint, dials, complete.",
+    description: "60-second workshop walkthrough — capability map, headcount, dials, complete.",
     href: "/capability-map?walkthrough=open",
     Icon: Compass,
   },

@@ -247,7 +247,7 @@ const QUICK_STARTS: ReadonlyArray<{
   {
     href: "/capability-map",
     label: "Capability Map",
-    description: "Confirm L1-L4 work and footprint",
+    description: "Confirm capabilities and headcount",
     Icon: MapIcon,
   },
   {

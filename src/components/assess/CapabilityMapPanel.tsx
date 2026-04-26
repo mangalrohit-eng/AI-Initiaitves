@@ -1,41 +1,49 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, Info } from "lucide-react";
+import { ChevronDown, Eye } from "lucide-react";
+import type { L4WorkforceRow } from "@/data/assess/types";
 import type {
-  GlobalAssessAssumptions,
-  L4WorkforceRow,
-} from "@/data/assess/types";
-import type { CapabilityMapViewModel } from "@/lib/assess/capabilityMapTree";
-import { findRowForMapL4, isL4InFootprint } from "@/lib/assess/capabilityMapTree";
-import { rowAnnualCost } from "@/lib/assess/scenarioModel";
-import { formatMoney } from "@/components/ui/MoneyCounter";
+  CapabilityMapViewModel,
+  MapViewL3,
+  MapViewL4,
+} from "@/lib/assess/capabilityMapTree";
+import { findRowForMapL4 } from "@/lib/assess/capabilityMapTree";
 import { cn } from "@/lib/utils";
 
 type Props = {
   view: CapabilityMapViewModel;
   rows: L4WorkforceRow[];
-  /** When provided, each L2 / L3 / L4 paints a $-pool bar sized by share. */
-  globalAssumptions?: GlobalAssessAssumptions;
+  /**
+   * When true the rendered tree is the predefined seed map (no rows uploaded
+   * yet). Adds a Preview banner and suppresses every per-box headcount cell —
+   * those become meaningful only once the user loads a footprint.
+   */
+  isPreview?: boolean;
 };
 
 /**
- * Visual L1 to L4 capability tree.
+ * Layered capability tree with two distinct visual bands:
  *
- * Cascading tree: L1, L2, L3 are visible by default with $-pool bars showing
- * each branch's share. L4 leaves are hidden behind a per-L3 chevron and a
- * global "Expand all L4" toggle so the tower at-a-glance stays digestible.
- * L4 chips, when expanded, show footprint membership and headcount in mono.
+ *   1. L1 banner + L2 row + L3 grid (the "L3 band") — every L3 is always
+ *      visible. No L4 chips ever sit inside this band.
+ *   2. A divider, then an L4 band that renders only when at least one L3 is
+ *      active. The band reuses the same equal-width column structure as the
+ *      L3 band, and shows ghost L3 captions + their L4 chips per column.
+ *
+ * Multiple L3s can be active simultaneously. A top-line "Show all L4" /
+ * "Hide all L4" master toggle expands or collapses everything in one shot.
+ *
+ * Tier colours ride a purple-intensity gradient — red/amber/teal/green are
+ * reserved for priority and savings semantics elsewhere in the app, so we
+ * don't repurpose them for hierarchy.
+ *
+ * Source of truth: rows always when present; the predefined map only when
+ * `isPreview === true` (no rows yet).
  */
-export function CapabilityMapPanel({ view, rows, globalAssumptions }: Props) {
-  const totals = React.useMemo(() => buildTotals(view, rows, globalAssumptions), [
-    view,
-    rows,
-    globalAssumptions,
-  ]);
-
+export function CapabilityMapPanel({ view, rows, isPreview = false }: Props) {
   const allL3Keys = React.useMemo(
-    () => view.l2.flatMap((l2) => l2.l3.map((l3) => `${l2.name}|${l3.name}`)),
+    () => view.l2.flatMap((l2) => l2.l3.map((l3) => keyOf(l2.name, l3.name))),
     [view],
   );
   const totalL4 = React.useMemo(
@@ -43,287 +51,432 @@ export function CapabilityMapPanel({ view, rows, globalAssumptions }: Props) {
     [view],
   );
 
-  const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
-  const allExpanded = expanded.size > 0 && expanded.size === allL3Keys.length;
-  const noneExpanded = expanded.size === 0;
+  // Pre-compute headcount per row id so per-L4 / per-L3 / per-L2 sums are O(rows + tree).
+  const hcByRowId = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) {
+      m.set(
+        r.id,
+        (r.fteOnshore || 0) +
+          (r.fteOffshore || 0) +
+          (r.contractorOnshore || 0) +
+          (r.contractorOffshore || 0),
+      );
+    }
+    return m;
+  }, [rows]);
+
+  const l4Headcount = React.useCallback(
+    (l2Name: string, l3Name: string, l4: MapViewL4): number | null => {
+      if (isPreview) return null;
+      const r = findRowForMapL4(rows, l2Name, l3Name, l4);
+      if (!r) return null;
+      return hcByRowId.get(r.id) ?? 0;
+    },
+    [hcByRowId, rows, isPreview],
+  );
+
+  const l3Headcount = React.useCallback(
+    (l2Name: string, l3: MapViewL3): number | null => {
+      if (isPreview) return null;
+      let any = false;
+      let sum = 0;
+      for (const l4 of l3.l4) {
+        const v = l4Headcount(l2Name, l3.name, l4);
+        if (v != null) {
+          any = true;
+          sum += v;
+        }
+      }
+      return any ? sum : null;
+    },
+    [l4Headcount, isPreview],
+  );
+
+  const l2Headcount = React.useCallback(
+    (l2: { name: string; l3: MapViewL3[] }): number | null => {
+      if (isPreview) return null;
+      let any = false;
+      let sum = 0;
+      for (const l3 of l2.l3) {
+        const v = l3Headcount(l2.name, l3);
+        if (v != null) {
+          any = true;
+          sum += v;
+        }
+      }
+      return any ? sum : null;
+    },
+    [l3Headcount, isPreview],
+  );
+
+  const towerHeadcount = React.useMemo(() => {
+    if (isPreview || hcByRowId.size === 0) return null;
+    let sum = 0;
+    hcByRowId.forEach((v) => {
+      sum += v;
+    });
+    return sum;
+  }, [hcByRowId, isPreview]);
+
+  const [active, setActive] = React.useState<Set<string>>(() => new Set());
+  const allActive = active.size > 0 && active.size === allL3Keys.length;
+  const anyActive = active.size > 0;
 
   const toggleL3 = React.useCallback((key: string) => {
-    setExpanded((prev) => {
+    setActive((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
   }, []);
-  const expandAll = React.useCallback(
-    () => setExpanded(new Set(allL3Keys)),
-    [allL3Keys],
-  );
-  const collapseAll = React.useCallback(() => setExpanded(new Set()), []);
+  const masterToggle = React.useCallback(() => {
+    setActive((prev) => (prev.size > 0 ? new Set() : new Set(allL3Keys)));
+  }, [allL3Keys]);
 
   return (
     <div className="space-y-3">
+      {/* Top line: total L4 count + master toggle. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        {view.secondaryLabel ? (
-          <p className="text-xs text-forge-subtle">
-            <Info className="mb-0.5 mr-1 inline h-3.5 w-3.5 text-accent-purple" aria-hidden />
-            {view.secondaryLabel}. Bars show each branch&apos;s share of the tower pool $.
-          </p>
-        ) : <span />}
+        <span className="font-mono text-[11px] tabular-nums text-forge-hint">
+          {totalL4} L4 activities
+        </span>
         {totalL4 > 0 ? (
-          <div className="flex items-center gap-2 text-[11px] text-forge-subtle">
-            <span className="font-mono tabular-nums text-forge-hint">
-              {totalL4} L4 activities
-            </span>
-            <button
-              type="button"
-              onClick={allExpanded ? collapseAll : expandAll}
-              className="inline-flex items-center gap-1 rounded-md border border-forge-border bg-forge-surface px-2 py-1 text-[11px] font-medium text-forge-body transition hover:border-accent-purple/40 hover:text-forge-ink"
-              aria-pressed={allExpanded}
-            >
-              <ChevronDown
-                className={cn(
-                  "h-3 w-3 transition-transform",
-                  allExpanded ? "rotate-180" : "",
-                )}
-                aria-hidden
-              />
-              {allExpanded ? "Collapse all L4" : noneExpanded ? "Show all L4" : "Show all L4"}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={masterToggle}
+            aria-pressed={allActive}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/40",
+              anyActive
+                ? "border-accent-purple/60 bg-accent-purple/15 text-forge-ink"
+                : "border-forge-border bg-forge-surface text-forge-body hover:border-accent-purple/40 hover:text-forge-ink",
+            )}
+          >
+            <ChevronDown
+              className={cn(
+                "h-3 w-3 transition-transform",
+                anyActive ? "rotate-180 text-accent-purple" : "",
+              )}
+              aria-hidden
+            />
+            {anyActive ? "Hide all L4" : "Show all L4"}
+          </button>
         ) : null}
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-forge-border bg-forge-surface/60 p-4">
-        <div className="min-w-[820px] space-y-3">
-          <div className="flex items-stretch gap-2">
-            <Rail label="L1" />
-            <div className="flex flex-1 items-center justify-between gap-3 rounded-lg border border-forge-ink/30 bg-gradient-to-r from-accent-purple/15 via-forge-ink/40 to-forge-ink/40 px-4 py-3">
-              <div className="flex items-baseline gap-2">
-                <span className="font-display text-base font-semibold tracking-wide text-accent-mist">
-                  {view.l1Name}
-                </span>
-                <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
-                  Tower L1
-                </span>
-              </div>
-              {totals && totals.totalPool > 0 ? (
-                <div className="font-mono text-xs tabular-nums text-accent-mist">
-                  {formatMoney(totals.totalPool, { decimals: 1 })} pool
-                </div>
-              ) : null}
-            </div>
-          </div>
+      {isPreview ? <PreviewBanner /> : null}
 
-          <div className="space-y-3">
-            {view.l2.map((l2) => {
-              const l2Pool = totals?.byL2.get(l2.name) ?? 0;
-              const l2Share = totals?.totalPool ? l2Pool / totals.totalPool : 0;
-              return (
-                <div key={l2.name} className="space-y-1.5">
-                  <div className="flex items-stretch gap-2">
-                    <Rail label="L2" />
-                    <div className="flex flex-1 items-center gap-3 rounded-lg border border-forge-border bg-forge-page/70 px-3 py-2">
-                      <span className="font-display text-sm font-medium text-forge-ink">
-                        {l2.name}
-                      </span>
-                      {totals?.totalPool ? <PoolBar share={l2Share} pool={l2Pool} hue="purple" /> : null}
-                    </div>
-                  </div>
+      {/* L1 banner — full width, deepest purple wash. */}
+      <L1Banner name={view.l1Name} hc={towerHeadcount} />
 
-                  <div className="space-y-1.5 pl-9">
-                    {l2.l3.map((l3) => {
-                      const l3Key = `${l2.name}|${l3.name}`;
-                      const l3Pool = totals?.byL3.get(l3Key) ?? 0;
-                      const l3Share = totals?.totalPool ? l3Pool / totals.totalPool : 0;
-                      const isOpen = expanded.has(l3Key);
-                      const inFootprintCount = l3.l4.reduce(
-                        (n, l4) => n + (isL4InFootprint(rows, l2.name, l3.name, l4) ? 1 : 0),
-                        0,
-                      );
-                      return (
-                        <div key={l3Key} className="space-y-1.5">
-                          <button
-                            type="button"
-                            onClick={() => toggleL3(l3Key)}
-                            aria-expanded={isOpen}
-                            aria-controls={`l4-${l3Key}`}
-                            className={cn(
-                              "flex w-full items-stretch gap-2 text-left transition",
-                              "focus-visible:outline-none",
-                            )}
-                          >
-                            <Rail label="L3" subtle />
-                            <div
-                              className={cn(
-                                "flex flex-1 items-center gap-3 rounded border px-3 py-1.5 transition",
-                                isOpen
-                                  ? "border-accent-purple/40 bg-accent-purple/5"
-                                  : "border-forge-border/70 bg-forge-well/60 hover:border-accent-purple/30 hover:bg-forge-well/80",
-                              )}
-                            >
-                              <ChevronDown
-                                className={cn(
-                                  "h-3.5 w-3.5 shrink-0 text-forge-subtle transition-transform",
-                                  isOpen ? "rotate-0" : "-rotate-90",
-                                )}
-                                aria-hidden
-                              />
-                              <span className="text-[12px] font-medium text-forge-body">
-                                {l3.name}
-                              </span>
-                              {totals?.totalPool ? (
-                                <PoolBar share={l3Share} pool={l3Pool} hue="teal" />
-                              ) : null}
-                              <span className="ml-auto font-mono text-[10px] tabular-nums text-forge-hint">
-                                {inFootprintCount}/{l3.l4.length} L4
-                              </span>
-                            </div>
-                          </button>
-
-                          {isOpen ? (
-                            <div
-                              id={`l4-${l3Key}`}
-                              className="grid grid-cols-2 gap-1.5 pl-8 sm:grid-cols-3 lg:grid-cols-4"
-                            >
-                              {l3.l4.map((l4) => {
-                                const inData = isL4InFootprint(rows, l2.name, l3.name, l4);
-                                return (
-                                  <L4Chip
-                                    key={l4.id}
-                                    inFootprint={inData}
-                                    label={l4.name}
-                                    meta={fteMeta(rows, l2.name, l3.name, l4)}
-                                  />
-                                );
-                              })}
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      {/* L3 band: L2 row of equal-width columns, every L3 chip visible, no L4s. */}
+      <div className="overflow-x-auto pb-1">
+        <div className="flex items-stretch gap-3">
+          {view.l2.map((l2) => (
+            <L2Column
+              key={l2.name}
+              name={l2.name}
+              hc={l2Headcount(l2)}
+              l3Nodes={l2.l3}
+              active={active}
+              onToggleL3={(l3Name) => toggleL3(keyOf(l2.name, l3Name))}
+              l3HeadcountFn={(l3) => l3Headcount(l2.name, l3)}
+            />
+          ))}
         </div>
       </div>
+
+      {/* L4 band: only when at least one L3 is active. Same column structure. */}
+      {anyActive ? (
+        <>
+          <BandDivider />
+          <div className="overflow-x-auto">
+            <div className="flex items-start gap-3">
+              {view.l2.map((l2) => (
+                <L4BandColumn
+                  key={l2.name}
+                  l2Name={l2.name}
+                  l3Nodes={l2.l3}
+                  active={active}
+                  l4HeadcountFn={(l3, l4) => l4Headcount(l2.name, l3.name, l4)}
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
 
-function Rail({ label, subtle = false }: { label: string; subtle?: boolean }) {
-  return (
-    <div
-      className={cn(
-        "flex w-7 shrink-0 flex-col items-center justify-start pt-2 font-mono text-[10px] tracking-wider",
-        subtle ? "text-forge-hint" : "text-forge-subtle",
-      )}
-      aria-hidden
-    >
-      <span>{label}</span>
-      <span className="mt-1 h-full min-h-[1rem] w-px bg-forge-border" aria-hidden />
-    </div>
-  );
+function keyOf(l2: string, l3: string): string {
+  return `${l2}|${l3}`;
 }
 
-function PoolBar({ share, pool, hue }: { share: number; pool: number; hue: "purple" | "teal" }) {
-  const pct = Math.max(0, Math.min(1, share)) * 100;
+function PreviewBanner() {
   return (
-    <div className="flex flex-1 items-center gap-2">
-      <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-forge-border/40">
-        <div
-          className={cn(
-            "absolute inset-y-0 left-0 rounded-full",
-            hue === "purple" ? "bg-accent-purple/70" : "bg-accent-teal/70",
-          )}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="w-20 shrink-0 text-right font-mono text-[10px] tabular-nums text-forge-subtle">
-        {pool > 0 ? `${formatMoney(pool, { decimals: pool >= 1_000_000 ? 1 : 0 })} · ${pct.toFixed(0)}%` : "—"}
+    <div className="flex items-start gap-2 rounded-lg border border-accent-purple/30 bg-accent-purple/5 px-3 py-2 text-xs text-forge-body">
+      <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-purple" aria-hidden />
+      <span>
+        <span className="font-semibold text-forge-ink">Preview</span> of the
+        predefined capability tree. Load the sample or upload your own
+        capability map &amp; headcount to replace it — your map then drives the
+        assessment and downstream impact.
       </span>
     </div>
   );
 }
 
-type RowMeta = { headcount: number; spend: number };
-
-function fteMeta(
-  rows: L4WorkforceRow[],
-  l2: string,
-  l3: string,
-  l4: { id: string; name: string },
-): RowMeta | null {
-  const r = findRowForMapL4(rows, l2, l3, l4);
-  if (!r) return null;
-  const hc =
-    (r.fteOnshore || 0) +
-    (r.fteOffshore || 0) +
-    (r.contractorOnshore || 0) +
-    (r.contractorOffshore || 0);
-  return { headcount: hc, spend: r.annualSpendUsd ?? 0 };
-}
-
-function L4Chip({
-  inFootprint,
-  label,
-  meta,
-}: {
-  inFootprint: boolean;
-  label: string;
-  meta: RowMeta | null;
-}) {
+function L1Banner({ name, hc }: { name: string; hc: number | null }) {
   return (
     <div
-      className={cn(
-        "flex flex-col gap-0.5 rounded-md border px-2 py-1.5 text-[11px] leading-snug",
-        inFootprint
-          ? "border-accent-purple/40 bg-accent-purple/5 text-forge-body shadow-[0_0_0_1px_rgba(161,0,255,0.08)]"
-          : "border-dashed border-forge-hint/40 bg-forge-page/40 text-forge-subtle",
-      )}
-      title={inFootprint ? "In current footprint" : "Not in footprint (upload or add row)"}
+      data-l1
+      className="flex items-center justify-between gap-3 rounded-lg border border-accent-purple/50 bg-accent-purple/20 px-4 py-2"
     >
-      <span className="break-words text-forge-ink">{label}</span>
-      {meta ? (
-        <span className="font-mono text-[9px] tabular-nums text-forge-hint">
-          {meta.headcount > 0 ? `${meta.headcount} h/c` : "0 h/c"}
-          {meta.spend > 0 ? ` · ${formatMoney(meta.spend, { decimals: meta.spend >= 1_000_000 ? 1 : 0 })}` : ""}
+      <span className="font-display text-sm font-semibold tracking-wide text-forge-ink">
+        {name}
+      </span>
+      {hc != null ? (
+        <span
+          className="inline-flex items-baseline gap-1 rounded-md border border-accent-purple/40 bg-forge-surface/70 px-2 py-0.5"
+          title="Total headcount across this tower (FTE + contractor, onshore + offshore)"
+        >
+          <span className="font-mono text-sm font-semibold tabular-nums text-forge-ink">
+            {hc.toLocaleString()}
+          </span>
+          <span className="text-[10px] uppercase tracking-wider text-accent-purple-dark">
+            total h/c
+          </span>
         </span>
       ) : null}
     </div>
   );
 }
 
-function buildTotals(
-  view: CapabilityMapViewModel,
-  rows: L4WorkforceRow[],
-  g: GlobalAssessAssumptions | undefined,
-): {
-  totalPool: number;
-  byL2: Map<string, number>;
-  byL3: Map<string, number>;
-} | null {
-  if (!g) return null;
-  let totalPool = 0;
-  const byL2 = new Map<string, number>();
-  const byL3 = new Map<string, number>();
-  for (const l2 of view.l2) {
-    let l2Sum = 0;
-    for (const l3 of l2.l3) {
-      let l3Sum = 0;
-      for (const l4 of l3.l4) {
-        const r = findRowForMapL4(rows, l2.name, l3.name, l4);
-        if (!r) continue;
-        const c = rowAnnualCost(r, g);
-        l3Sum += c;
-        l2Sum += c;
-        totalPool += c;
-      }
-      byL3.set(`${l2.name}|${l3.name}`, l3Sum);
-    }
-    byL2.set(l2.name, l2Sum);
+function L2Column({
+  name,
+  hc,
+  l3Nodes,
+  active,
+  onToggleL3,
+  l3HeadcountFn,
+}: {
+  name: string;
+  hc: number | null;
+  l3Nodes: MapViewL3[];
+  active: Set<string>;
+  onToggleL3: (l3Name: string) => void;
+  l3HeadcountFn: (l3: MapViewL3) => number | null;
+}) {
+  return (
+    <div
+      data-l2-col={name}
+      className="flex min-w-[180px] flex-1 flex-col gap-1.5"
+    >
+      <Box
+        tier="l2"
+        name={name}
+        hc={hc}
+        title={name}
+        ariaLabel={`L2 ${name}`}
+      />
+      {l3Nodes.map((l3) => {
+        const isActive = active.has(keyOf(name, l3.name));
+        return (
+          <Box
+            key={l3.name}
+            tier="l3"
+            name={l3.name}
+            hc={l3HeadcountFn(l3)}
+            title={l3.name}
+            isActive={isActive}
+            onClick={() => onToggleL3(l3.name)}
+            data-l3={l3.name}
+            ariaLabel={`L3 ${l3.name}`}
+            ariaPressed={isActive}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function BandDivider() {
+  return (
+    <div className="flex items-center gap-3 pt-1">
+      <span className="font-mono text-[10px] uppercase tracking-wider text-accent-purple">
+        L4 details
+      </span>
+      <div className="h-px flex-1 bg-gradient-to-r from-accent-purple/40 via-forge-border to-transparent" />
+    </div>
+  );
+}
+
+function L4BandColumn({
+  l2Name,
+  l3Nodes,
+  active,
+  l4HeadcountFn,
+}: {
+  l2Name: string;
+  l3Nodes: MapViewL3[];
+  active: Set<string>;
+  l4HeadcountFn: (l3: MapViewL3, l4: MapViewL4) => number | null;
+}) {
+  const activeL3sInThisL2 = l3Nodes.filter((l3) =>
+    active.has(keyOf(l2Name, l3.name)),
+  );
+
+  return (
+    <div
+      data-l4-col={l2Name}
+      className="flex min-w-[180px] flex-1 flex-col gap-1.5"
+    >
+      {activeL3sInThisL2.length === 0 ? (
+        <div
+          aria-hidden
+          className="h-8 rounded-md border border-dashed border-forge-border/50 bg-forge-page/30"
+        />
+      ) : (
+        activeL3sInThisL2.map((l3) => (
+          <React.Fragment key={l3.name}>
+            <GhostL3Caption name={l3.name} />
+            {l3.l4.length === 0 ? (
+              <Box
+                tier="l4-empty"
+                name="No L4 activities recorded."
+                hc={null}
+                title="No L4 activities recorded."
+              />
+            ) : (
+              l3.l4.map((l4) => (
+                <Box
+                  key={l4.id}
+                  tier="l4"
+                  name={l4.name}
+                  hc={l4HeadcountFn(l3, l4)}
+                  title={l4.name}
+                  data-l4={l4.id}
+                  ariaLabel={`L4 ${l4.name}`}
+                />
+              ))
+            )}
+          </React.Fragment>
+        ))
+      )}
+    </div>
+  );
+}
+
+function GhostL3Caption({ name }: { name: string }) {
+  return (
+    <div
+      className="flex h-7 w-full items-center rounded-md border border-dashed border-accent-purple/35 bg-accent-purple/5 px-2.5"
+      title={name}
+    >
+      <span className="truncate text-[11px] font-medium leading-none text-accent-purple">
+        {name}
+      </span>
+    </div>
+  );
+}
+
+type BoxTier = "l2" | "l3" | "l4" | "l4-empty";
+
+type BoxBaseProps = {
+  tier: BoxTier;
+  name: string;
+  title: string;
+  hc: number | null;
+  isActive?: boolean;
+  ariaLabel?: string;
+  ariaPressed?: boolean;
+  onClick?: () => void;
+  /** Stable dataset markers for future selectors (crawler / tests). */
+  "data-l3"?: string;
+  "data-l4"?: string;
+};
+
+/**
+ * Single equal-size box used for L2 / L3 / L4 chips. Same height (~32 px) and
+ * column width across all tiers; styling differs by tier on the
+ * purple-intensity gradient. Names render on a single line with a `title`
+ * attribute carrying the full text.
+ */
+function Box(props: BoxBaseProps) {
+  const {
+    tier,
+    name,
+    title,
+    hc,
+    isActive,
+    ariaLabel,
+    ariaPressed,
+    onClick,
+    ...rest
+  } = props;
+
+  const className = cn(
+    "flex h-8 w-full items-center gap-2 rounded-md border px-2.5 text-left transition",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/40",
+    tier === "l2" &&
+      "border-accent-purple/35 bg-accent-purple/12 text-forge-ink",
+    tier === "l3" && !isActive &&
+      "cursor-pointer border-accent-purple/25 bg-accent-purple/5 text-forge-body hover:border-accent-purple/45 hover:text-forge-ink",
+    tier === "l3" && isActive &&
+      "cursor-pointer border-accent-purple/60 bg-accent-purple/15 text-forge-ink ring-1 ring-accent-purple/30",
+    tier === "l4" &&
+      "border-forge-border border-l-[3px] border-l-accent-purple/55 bg-forge-well/40 text-forge-subtle",
+    tier === "l4-empty" &&
+      "border-dashed border-forge-border bg-forge-page/40 text-forge-hint",
+  );
+
+  const nameClass = cn(
+    "min-w-0 flex-1 truncate text-[12px] leading-none",
+    tier === "l2" && "font-display font-semibold",
+    tier === "l3" && "font-medium",
+    tier === "l4" && "italic-none",
+  );
+
+  const hcClass = cn(
+    "shrink-0 font-mono text-[10px] tabular-nums",
+    tier === "l4" ? "text-forge-hint" : "text-forge-subtle",
+  );
+
+  const inner = (
+    <>
+      <span className={nameClass}>{name}</span>
+      {hc != null ? <span className={hcClass}>{hc} h/c</span> : null}
+    </>
+  );
+
+  if (tier === "l3") {
+    return (
+      <button
+        type="button"
+        title={title}
+        aria-label={ariaLabel}
+        aria-pressed={ariaPressed}
+        onClick={onClick}
+        className={className}
+        {...rest}
+      >
+        {inner}
+      </button>
+    );
   }
-  return { totalPool, byL2, byL3 };
+
+  return (
+    <div
+      title={title}
+      aria-label={ariaLabel}
+      className={className}
+      {...rest}
+    >
+      {inner}
+    </div>
+  );
 }

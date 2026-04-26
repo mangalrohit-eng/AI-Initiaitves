@@ -94,7 +94,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
 
   const applyDefaults = React.useCallback(
     async (mode: "fillBlanks" | "overwriteAll"): Promise<ApplyDefaultsOutcome> => {
-      if (!rows.length) throw new Error("Load a footprint first.");
+      if (!rows.length) throw new Error("Load a capability map & headcount first.");
       const apiInputs = rows.map((r) => ({ l2: r.l2, l3: r.l3, l4: r.l4 }));
       const apiRes = await clientInferTowerDefaults(towerId, apiInputs);
 
@@ -281,10 +281,10 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
         {noFootprint ? (
           <div className="mt-6 rounded-2xl border border-dashed border-forge-border bg-forge-well/40 p-8 text-center">
             <p className="text-sm font-medium text-forge-body">
-              No footprint loaded for {towerName} yet.
+              No capability map &amp; headcount loaded for {towerName} yet.
             </p>
             <p className="mt-1 text-xs text-forge-subtle">
-              Confirm the capability map and load (or upload) the footprint on the Capability Map page first.
+              Upload (or load a sample of) the capability map &amp; headcount on the Capability Map page first.
             </p>
             <Link
               href={getTowerHref(towerId, "capability-map")}

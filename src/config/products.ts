@@ -32,9 +32,9 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     id: "capability-map",
     name: "Tower Capability Map",
     navLabel: "Capability Map",
-    tagline: "Per tower: confirm the L1 to L4 capability tree and the workforce footprint behind it.",
+    tagline: "Per tower: confirm the L1 to L4 capability tree and the headcount behind it.",
     shortDescription:
-      "For each functional tower, confirm the in-scope L1 to L4 capabilities and the workforce footprint that delivers them. Sets the canvas the Assessment dials operate on.",
+      "For each functional tower, confirm the in-scope L1 to L4 capabilities and the headcount that delivers them. Sets the canvas the Assessment dials operate on.",
     path: "/capability-map",
     iconId: "map",
     order: 10,

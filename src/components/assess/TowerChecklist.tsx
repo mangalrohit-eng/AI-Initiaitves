@@ -73,7 +73,7 @@ export function TowerChecklist({
       enabled: hasRows,
       disabledReason: hasRows
         ? undefined
-        : "Load the sample workshop or upload a footprint first.",
+        : "Load the sample workshop or upload a capability map & headcount first.",
     },
     {
       key: "headcountConfirmedAt",
@@ -81,7 +81,7 @@ export function TowerChecklist({
       description: "FTE / contractor onshore / offshore set per L4.",
       enabled: hasRows && hasHeadcount,
       disabledReason: !hasRows
-        ? "Load the sample or upload a footprint first."
+        ? "Load the sample or upload a capability map & headcount first."
         : !hasHeadcount
           ? "Enter headcount on at least one L4 row first."
           : undefined,
@@ -93,7 +93,7 @@ export function TowerChecklist({
       enabled: hasRows && hasAnyOffshoreInput,
       disabledReason:
         !hasRows
-          ? "Load the sample or upload a footprint first."
+          ? "Load the sample or upload a capability map & headcount first."
           : !hasAnyOffshoreInput
             ? "Set at least one L4 offshore% explicitly first."
             : undefined,
@@ -105,7 +105,7 @@ export function TowerChecklist({
       enabled: hasRows && hasAnyAiInput,
       disabledReason:
         !hasRows
-          ? "Load the sample or upload a footprint first."
+          ? "Load the sample or upload a capability map & headcount first."
           : !hasAnyAiInput
             ? "Set at least one L4 AI% explicitly first."
             : undefined,
@@ -221,7 +221,7 @@ export function TowerChecklist({
             disabled={!allConfirmed || !hasRows}
             title={
               !hasRows
-                ? "Load the sample or upload a footprint first."
+                ? "Load the sample or upload a capability map & headcount first."
                 : !allConfirmed
                   ? "Confirm every checklist step first."
                   : "Sign this tower off as reviewed and unlock the AI Initiatives handoff."

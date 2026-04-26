@@ -89,5 +89,5 @@ export function downloadAllTowersSampleWorkbook(): void {
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     XLSX.utils.book_append_sheet(wb, ws, safeSheetName(t.id));
   }
-  XLSX.writeFile(wb, "forge-tower-footprint-samples-13-towers.xlsx");
+  XLSX.writeFile(wb, "forge-tower-capability-map-samples-13-towers.xlsx");
 }

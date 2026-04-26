@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   CheckCircle2,
@@ -14,7 +13,6 @@ import {
 } from "lucide-react";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import { CapabilityScoreboard } from "@/components/assess/CapabilityScoreboard";
-import { MyTowersChips } from "@/components/assess/MyTowersChips";
 import { WorkshopToolsDrawer } from "@/components/assess/WorkshopToolsDrawer";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PageShell } from "@/components/PageShell";
@@ -51,7 +49,7 @@ function statusCopy(s: RowStatus): { label: string; className: string } {
 /**
  * Step 1 hub — Capability Map.
  *
- * Confirm the L1 to L4 tree and the workforce footprint per tower. The hub
+ * Confirm the L1 to L4 tree and the headcount per tower. The hub
  * shows the program-wide capability scoreboard at the top, a focused "next
  * tower" CTA, and a tight tower list. Templates / backup / admin re-seed have
  * been demoted to `WorkshopToolsDrawer` at the bottom so the page stays
@@ -60,7 +58,6 @@ function statusCopy(s: RowStatus): { label: string; className: string } {
 export function CapabilityMapHubClient() {
   const sync = useAssessSync();
   const toast = useToast();
-  const params = useSearchParams();
   const [program, setProgram] = React.useState<AssessProgramV2>(getAssessProgram);
   const [mine, setMine] = React.useState<TowerId[]>([]);
 
@@ -82,7 +79,7 @@ export function CapabilityMapHubClient() {
       loadingTitle: "Loading sample workshop across 13 towers",
       successTitle: "Sample workshop loaded",
       successDescription:
-        "All 13 towers seeded with capability maps, footprint, and starter dials.",
+        "All 13 towers seeded with capability maps, headcount, and starter dials.",
       errorTitle: "Couldn't load sample",
     },
   });
@@ -105,7 +102,6 @@ export function CapabilityMapHubClient() {
   const inProgress = statuses.filter((s) => s.status === "in-progress").length;
 
   const hasAnyData = completed + inProgress > 0;
-  const autoOpenPicker = params?.get("picker") === "open";
 
   return (
     <PageShell>
@@ -127,7 +123,7 @@ export function CapabilityMapHubClient() {
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
               For each tower, confirm the in-scope <Term termKey="capability map">L1 to L4 capability tree</Term>{" "}
-              and the workforce footprint that delivers it. Once a tower&apos;s footprint is in,{" "}
+              and the headcount that delivers it. Once a tower&apos;s capability map &amp; headcount is in,{" "}
               <Link href="/assessment" className="text-accent-purple-dark underline">
                 step 2 — the Assessment dials
               </Link>{" "}
@@ -145,44 +141,6 @@ export function CapabilityMapHubClient() {
         {/* KEY METRICS — top of page */}
         <div className="mt-5">
           <CapabilityScoreboard variant="program" program={program} />
-        </div>
-
-        {/* Personalisation */}
-        <div className="mt-5 rounded-2xl border border-forge-border bg-forge-surface/70 p-4">
-          <MyTowersChips compact defaultOpen={autoOpenPicker} />
-        </div>
-
-        {/* Progress */}
-        <div className="mt-5 rounded-2xl border border-forge-border bg-forge-surface/70 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-xs text-forge-subtle">
-              Capability Map progress ·{" "}
-              <span className="font-mono text-forge-body">{completed}</span> of{" "}
-              <span className="font-mono">{towers.length}</span> towers reviewed
-              {inProgress > 0 ? (
-                <>
-                  {" "}· <span className="font-mono text-forge-body">{inProgress}</span> awaiting
-                  review
-                </>
-              ) : null}
-            </div>
-            <Link
-              href="/assessment"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-accent-purple/40 bg-accent-purple/10 px-3 py-1.5 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/20"
-            >
-              Open Assessment
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-          <div
-            className="mt-3 h-2 w-full overflow-hidden rounded-full bg-forge-well/80"
-            aria-label={`${completed} of ${towers.length} towers reviewed`}
-          >
-            <div
-              className="h-full rounded-full bg-accent-purple transition-[width]"
-              style={{ width: `${(completed / towers.length) * 100}%` }}
-            />
-          </div>
         </div>
 
         {/* Hero CTA */}
@@ -224,54 +182,65 @@ export function CapabilityMapHubClient() {
           </div>
         ) : null}
 
-        {/* Tower list */}
-        <h2
-          id="tower-list"
-          className="mt-10 font-display text-sm font-semibold uppercase tracking-wider text-forge-subtle"
+        {/* Tower grid */}
+        <div className="mt-8 flex flex-wrap items-baseline justify-between gap-2">
+          <h2
+            id="tower-list"
+            className="font-display text-sm font-semibold uppercase tracking-wider text-forge-subtle"
+          >
+            &gt; Towers ({towers.length}){minePicked ? " · my towers first" : ""}
+          </h2>
+          <span className="font-mono text-[11px] tabular-nums text-forge-hint">
+            {completed} reviewed · {inProgress} in progress · {towers.length - completed - inProgress} not started
+          </span>
+        </div>
+        <ul
+          className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3"
+          role="list"
         >
-          &gt; Towers ({towers.length}){minePicked ? " · my towers first" : ""}
-        </h2>
-        <ul className="mt-3 space-y-2">
           {statuses.map(({ tower: tw, status, isMine }) => {
             const s = statusCopy(status);
+            const href = getTowerHref(tw.id as TowerId, "capability-map");
             return (
-              <li
-                key={tw.id}
-                className={
-                  "flex flex-col gap-2 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between " +
-                  (isMine
-                    ? "border-accent-purple/20 bg-forge-surface"
-                    : "border-forge-border bg-forge-surface")
-                }
-              >
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-forge-ink">{tw.name}</span>
+              <li key={tw.id} className="relative">
+                <Link
+                  href={href}
+                  className={
+                    "group flex h-full flex-col gap-1.5 rounded-xl border p-3 transition " +
+                    (isMine
+                      ? "border-accent-purple/30 bg-forge-surface hover:border-accent-purple/55 hover:bg-accent-purple/5"
+                      : "border-forge-border bg-forge-surface hover:border-accent-purple/35 hover:bg-forge-well/40")
+                  }
+                >
+                  <div className="flex min-w-0 items-start gap-1.5 pr-7">
                     {isMine ? (
-                      <span className="rounded-full bg-accent-purple/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">
+                      <span
+                        className="shrink-0 rounded-full bg-accent-purple/15 px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-wider text-accent-purple-dark"
+                        title="Marked as one of your towers"
+                      >
                         Mine
                       </span>
                     ) : null}
+                    <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold text-forge-ink">
+                      {tw.name}
+                    </span>
                   </div>
-                  <div
-                    className={`mt-0.5 flex items-center gap-1.5 text-xs ${s.className}`}
-                  >
+                  <div className={`flex items-center gap-1.5 text-[11px] ${s.className}`}>
                     {status === "complete" ? (
-                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <CheckCircle2 className="h-3 w-3" />
                     ) : (
-                      <Circle className="h-3.5 w-3.5" />
+                      <Circle className="h-3 w-3" />
                     )}
-                    {s.label}
+                    <span className="truncate">{s.label}</span>
                   </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Link
-                    href={getTowerHref(tw.id as TowerId, "capability-map")}
-                    className="inline-flex items-center gap-1 rounded-lg bg-accent-purple px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-purple-dark"
-                  >
-                    {status === "not-started" ? "Start" : "Continue"}
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-accent-purple-dark group-hover:text-accent-purple">
+                      {status === "not-started" ? "Start" : "Continue"}
+                      <ArrowRight className="ml-0.5 inline h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                  </div>
+                </Link>
+                <div className="absolute right-2 top-2">
                   <RowMenu towerId={tw.id as TowerId} towerName={tw.name} toast={toast} />
                 </div>
               </li>

@@ -82,30 +82,41 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       if (!res.rows.length) {
         throw new Error("No data rows parsed. Check the template columns.");
       }
-      setTowerAssess(towerId, { l4Rows: res.rows, status: "data" });
+      // A tower-lead upload is the canonical source of truth — record the
+      // confirmation timestamp so the journey stepper marks Capability Map
+      // complete and downstream consumers know the map is authored, not seeded.
+      setTowerAssess(towerId, {
+        l4Rows: res.rows,
+        status: "data",
+        capabilityMapConfirmedAt: new Date().toISOString(),
+      });
       if (sync?.canSync) await sync.flushSave();
       return { rows: res.rows, warnings: res.errors };
     },
     messages: {
-      loadingTitle: `Importing ${towerName} footprint`,
+      loadingTitle: `Importing ${towerName} capability map & headcount`,
       loadingDescription: "Parsing rows and saving to the workshop...",
       successTitle: ({ rows: r }) =>
         `Imported ${r.length} row${r.length === 1 ? "" : "s"} for ${towerName}`,
       successDescription: ({ warnings }) =>
         warnings.length > 0
           ? `${warnings.length} warning${warnings.length === 1 ? "" : "s"} — review the parser output below.`
-          : "Footprint loaded. Continue to the assessment when you're ready.",
-      errorTitle: "Could not import footprint",
+          : "Capability map & headcount loaded. Continue to the assessment when you're ready.",
+      errorTitle: "Could not import capability map & headcount",
     },
   });
 
   const sampleLoadOp = useAsyncOp<{ rows: number }, []>({
     run: async () => {
       const seed = getTowerSeedState(towerId);
+      // Sample loads are seed data, NOT a tower-lead authored map. Clear any
+      // prior confirmation so the journey stepper reverts the Capability Map
+      // step to "in progress" until the lead actually uploads.
       setTowerAssess(towerId, {
         l4Rows: seed.l4Rows,
         baseline: seed.baseline,
         status: seed.status,
+        capabilityMapConfirmedAt: undefined,
       });
       setTowerScenario(towerId, {
         scenarioOffshorePct: seed.baseline.baselineOffshorePct,
@@ -128,7 +139,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
 
   const fillBlanksOp = useAsyncOp<{ changedRows: number; changedCells: number }, []>({
     run: async () => {
-      if (!rows.length) throw new Error("Load a footprint first.");
+      if (!rows.length) throw new Error("Load a capability map & headcount first.");
       const result = applyTowerStarterDefaults(rows, towerId, "fillBlanks");
       if (result.changedCells === 0) {
         throw new Error("No blanks to fill — every row already has explicit values.");
@@ -163,7 +174,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
 
   const overwriteAllOp = useAsyncOp<{ changedRows: number; changedCells: number }, []>({
     run: async () => {
-      if (!rows.length) throw new Error("Load a footprint first.");
+      if (!rows.length) throw new Error("Load a capability map & headcount first.");
       const result = applyTowerStarterDefaults(rows, towerId, "overwriteAll");
       const w = weightedTowerLevers(result.rows, tState.baseline, global);
       setTowerAssess(towerId, {
@@ -202,7 +213,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
 
   const doMarkComplete = React.useCallback(async () => {
     if (!rows.length) {
-      toast.error({ title: "Load a footprint first" });
+      toast.error({ title: "Load a capability map & headcount first" });
       return false;
     }
     const w = weightedTowerLevers(rows, tState.baseline, global);

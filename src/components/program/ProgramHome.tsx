@@ -136,7 +136,7 @@ export function ProgramHome({ products, portalMode }: Props) {
           <PrimaryCard
             step={1}
             title="Capability Map"
-            subtitle="Confirm L1-L4 work and footprint"
+            subtitle="Confirm capabilities and headcount"
             href="/capability-map"
             icon={<MapIcon className="h-7 w-7" />}
             metric={

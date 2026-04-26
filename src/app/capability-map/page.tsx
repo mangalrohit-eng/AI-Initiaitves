@@ -5,7 +5,7 @@ import { CapabilityMapHubClient } from "@/components/assess/CapabilityMapHubClie
 export const metadata: Metadata = {
   title: "Capability Map — Versant Forge Program",
   description:
-    "Confirm the L1 to L4 capability tree and the workforce footprint per tower. Step 1 of the workshop, sets the canvas for the Assessment dials.",
+    "Confirm the L1 to L4 capability tree and the headcount per tower. Step 1 of the workshop, sets the canvas for the Assessment dials.",
 };
 
 export default function CapabilityMapHubPage() {

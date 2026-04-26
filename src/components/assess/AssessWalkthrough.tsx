@@ -15,7 +15,7 @@ const STEPS: { Icon: typeof Layers; title: string; body: string }[] = [
   },
   {
     Icon: ClipboardList,
-    title: "Enter footprint",
+    title: "Enter headcount",
     body: "Headcount and average loaded cost per L4 activity. Rough is fine — the dials matter more.",
   },
   {

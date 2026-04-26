@@ -44,7 +44,7 @@ function dialStatus(program: AssessProgramV2, towerId: TowerId): DialStatus {
 function dialStatusCopy(s: DialStatus): { label: string; className: string } {
   if (s === "dialed") return { label: "Dialed", className: "text-accent-green" };
   if (s === "default-only") return { label: "Defaults only", className: "text-accent-amber" };
-  return { label: "No footprint", className: "text-forge-subtle" };
+  return { label: "No headcount", className: "text-forge-subtle" };
 }
 
 /**
@@ -114,7 +114,7 @@ export function AssessmentHubClient() {
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
               Dial <Term termKey="offshore dial">offshore</Term> and{" "}
               <Term termKey="ai impact dial">AI impact</Term> per <Term termKey="l4">L4</Term> against the
-              footprint you confirmed in step 1. The headline below reflects every drag in
+              capability map &amp; headcount you confirmed in step 1. The headline below reflects every drag in
               real time. When the dials look right, sign the tower off as reviewed.
             </p>
           </div>
@@ -154,11 +154,11 @@ export function AssessmentHubClient() {
           <div className="mt-6 rounded-2xl border border-dashed border-forge-border bg-forge-well/40 p-8 text-center">
             <Sliders className="mx-auto h-6 w-6 text-accent-purple-dark" aria-hidden />
             <p className="mt-3 text-sm font-medium text-forge-body">
-              No tower footprint loaded yet.
+              No tower capability map &amp; headcount loaded yet.
             </p>
             <p className="mt-1 text-xs text-forge-subtle">
-              Confirm a tower&apos;s capability map first; the dials light up here once a
-              footprint is in.
+              Confirm a tower&apos;s capability map first; the dials light up here once the
+              capability map &amp; headcount is in.
             </p>
             <Link
               href="/capability-map"

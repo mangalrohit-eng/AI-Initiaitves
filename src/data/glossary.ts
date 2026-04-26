@@ -59,7 +59,7 @@ export const glossary: GlossaryEntry[] = [
     category: "Operating model",
     term: "FTE",
     short: "Full-time equivalent — one person at standard hours.",
-    long: "We track FTE separately from contractors so the workforce footprint reflects Versant's actual hire mix.",
+    long: "We track FTE separately from contractors so the headcount reflects Versant's actual hire mix.",
   },
   {
     id: "contractor",
@@ -163,7 +163,7 @@ export const glossary: GlossaryEntry[] = [
     category: "People & change",
     term: "Tower lead",
     short: "The person responsible for a tower's content and dials.",
-    long: "Tower leads upload the L1-L4 capability map, confirm the workforce footprint, set offshore + AI dials, and sign the tower off as reviewed when it is ready for the rollup.",
+    long: "Tower leads upload the L1-L4 capability map and headcount, set offshore + AI dials, and sign the tower off as reviewed when it is ready for the rollup.",
   },
   {
     id: "tsa",

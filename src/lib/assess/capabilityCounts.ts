@@ -18,9 +18,11 @@ export type CapabilityCounts = {
 /**
  * Counts L1 / L2 / L3 / L4 nodes for a tower.
  *
- * Resolution order — same as the rest of the assess module:
- *   1. Canonical capability map definition for the tower (when one exists).
- *   2. Otherwise, structure inferred from the user's footprint rows.
+ * Resolution order — uploaded rows are the source of truth; the per-tower
+ * predefined map is only a seed/preview:
+ *   1. If the user has loaded any footprint rows, infer L1-L4 from those rows.
+ *   2. Otherwise, fall back to the predefined map (rendered as Preview on the
+ *      Capability Map page).
  *   3. Otherwise, zeroes (no map yet — coverage starts at the L1 placeholder).
  *
  * The L1 count is 1 whenever any L2 nodes exist; this matches the visual
@@ -30,9 +32,12 @@ export function towerCapabilityCounts(towerId: TowerId, rows: L4WorkforceRow[]):
   const tower = towers.find((t) => t.id === towerId);
   if (!tower) return { l1: 0, l2: 0, l3: 0, l4: 0 };
   const def = getCapabilityMapForTower(towerId);
-  const view: CapabilityMapViewModel = def
-    ? definitionToViewModel(def)
-    : inferCapabilityViewFromRows(tower.name, rows);
+  const view: CapabilityMapViewModel =
+    rows.length > 0
+      ? inferCapabilityViewFromRows(tower.name, rows)
+      : def
+        ? definitionToViewModel(def)
+        : { l1Name: tower.name, l2: [] };
   return countView(view);
 }
 

@@ -55,7 +55,7 @@ export function WorkshopToolsDrawer() {
     messages: {
       loadingTitle: "Loading sample workshop across 13 towers",
       successTitle: "Sample workshop loaded",
-      successDescription: "All 13 towers seeded with capability maps, footprint, and starter dials.",
+      successDescription: "All 13 towers seeded with capability maps, headcount, and starter dials.",
       errorTitle: "Couldn't load sample",
     },
   });
@@ -126,7 +126,7 @@ export function WorkshopToolsDrawer() {
       loadingDescription: "Rebuilding L1-L4 maps and starter heuristic for all 13 towers...",
       successTitle: ({ towers }) => `Re-seeded ${towers} towers from latest defaults`,
       successDescription:
-        "All footprint, dials, and scenario state were replaced. Cost-weighted baselines recomputed.",
+        "All headcount, dials, and scenario state were replaced. Cost-weighted baselines recomputed.",
       errorTitle: "Re-seed failed",
     },
     retryable: true,
@@ -284,7 +284,7 @@ export function WorkshopToolsDrawer() {
                 <div className="flex items-start gap-2 rounded-lg border border-accent-amber/30 bg-accent-amber/5 p-3 text-xs text-forge-body">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-amber" aria-hidden />
                   <div>
-                    Overwrites every tower&apos;s footprint, dials, and scenario with the latest
+                    Overwrites every tower&apos;s capability map &amp; headcount, dials, and scenario with the latest
                     L1-L4 maps + starter heuristic. Use after editing the seed files.
                   </div>
                 </div>
@@ -336,7 +336,7 @@ export function WorkshopToolsDrawer() {
         title="Replace the current workshop with this file?"
         description={
           <>
-            All current workshop state (footprint, dials, scenarios) will be replaced by
+            All current workshop state (capability map, headcount, dials, scenarios) will be replaced by
             the contents of <span className="font-mono">{pendingFile?.name ?? "this file"}</span>.
             Use Export first if you want to keep the current state as a backup.
           </>

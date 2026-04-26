@@ -37,7 +37,7 @@ const STEPS: Step[] = [
   },
   {
     icon: Target,
-    title: "Enter the workforce footprint",
+    title: "Enter the headcount",
     body: <>Headcount, mix, and US/onshore split — straight from your operating plan.</>,
   },
   {

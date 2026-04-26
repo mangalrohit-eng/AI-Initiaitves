@@ -130,9 +130,9 @@ export function CapabilityScoreboard(props: Props) {
       />
       <Tile
         icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-        label="Footprint coverage"
+        label="Headcount coverage"
         value={`${coverage.confirmedL4s}/${coverage.totalL4s || counts.l4}`}
-        subtle={coverage.confirmedL4s > 0 ? "with headcount or spend" : "load a footprint"}
+        subtle={coverage.confirmedL4s > 0 ? "with headcount or spend" : "upload a capability map"}
         accent={coverage.confirmedL4s > 0 ? "green" : undefined}
       />
     </div>

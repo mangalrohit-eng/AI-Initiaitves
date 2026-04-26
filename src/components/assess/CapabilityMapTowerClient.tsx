@@ -10,6 +10,7 @@ import {
   Info,
   Sparkles,
   Upload,
+  Wand2,
 } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { CapabilityMapPanel } from "@/components/assess/CapabilityMapPanel";
@@ -18,13 +19,17 @@ import { TowerJourneyStepper } from "@/components/layout/TowerJourneyStepper";
 import { Term } from "@/components/help/Term";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { getCapabilityMapForTower } from "@/data/capabilityMap/maps";
-import type { L4WorkforceRow, TowerId } from "@/data/assess/types";
+import type { L3WorkforceRow, TowerId } from "@/data/assess/types";
 import { useTowerAssessOps } from "@/lib/assess/useTowerAssessOps";
 import {
   definitionToViewModel,
   inferCapabilityViewFromRows,
 } from "@/lib/assess/capabilityMapTree";
 import { downloadSingleTowerSampleCsv } from "@/lib/assess/downloadAssessSamples";
+import { clientGenerateL4Activities } from "@/lib/assess/assessClientApi";
+import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
+import { useAssessSync } from "@/components/assess/AssessSyncProvider";
+import { getAssessProgram, setTowerAssess } from "@/lib/localStore";
 import { getTowerHref } from "@/lib/towerHref";
 import { cn } from "@/lib/utils";
 
@@ -43,9 +48,102 @@ type Props = { towerId: TowerId; towerName: string };
  */
 export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   const toast = useToast();
+  const sync = useAssessSync();
   const ops = useTowerAssessOps(towerId, towerName);
   const { rows, tState, importOp, sampleLoadOp, patchRow } = ops;
   const fileRef = React.useRef<HTMLInputElement>(null);
+
+  // Count L3 capabilities that don't yet have any L4 activities. The Generate
+  // L4 button only acts on those (so canonical seeds with activities aren't
+  // overwritten unless the user explicitly chooses regenerate-all).
+  const blankL4Count = rows.filter(
+    (r) => !r.l4Activities || r.l4Activities.length === 0,
+  ).length;
+
+  type GenerateL4Outcome = {
+    changedRows: number;
+    totalRows: number;
+    source: "llm" | "fallback";
+    warning?: string;
+  };
+
+  const runGenerateL4 = React.useCallback(
+    async (mode: "fillBlanks" | "regenerateAll"): Promise<GenerateL4Outcome> => {
+      if (!rows.length) throw new Error("Load a capability map & headcount first.");
+      const targetRows =
+        mode === "fillBlanks"
+          ? rows.filter((r) => !r.l4Activities || r.l4Activities.length === 0)
+          : rows;
+      if (targetRows.length === 0) {
+        throw new Error("Every L3 already has activities — nothing to generate.");
+      }
+      const apiInputs = targetRows.map((r) => ({ l2: r.l2, l3: r.l3 }));
+      const res = await clientGenerateL4Activities(towerId, apiInputs);
+      if (!res.ok) {
+        throw new Error(`L4 generation failed (${res.error})`);
+      }
+      const groupByKey = new Map<string, string[]>();
+      for (const g of res.result.groups) {
+        const key = `${g.l2}\u0000${g.l3}`;
+        groupByKey.set(key, g.activities ?? []);
+      }
+      const cur = getAssessProgram().towers[towerId];
+      if (!cur) throw new Error("Tower state missing — reload the page.");
+      let changedRows = 0;
+      const nextRows = cur.l3Rows.map((r) => {
+        const key = `${r.l2}\u0000${r.l3}`;
+        const generated = groupByKey.get(key);
+        if (!generated || generated.length === 0) return r;
+        if (mode === "fillBlanks" && r.l4Activities && r.l4Activities.length > 0) {
+          return r;
+        }
+        changedRows += 1;
+        return { ...r, l4Activities: generated };
+      });
+      setTowerAssess(towerId, { l3Rows: nextRows });
+      if (sync?.canSync) await sync.flushSave();
+      return {
+        changedRows,
+        totalRows: targetRows.length,
+        source: res.result.source,
+        warning: res.result.warning,
+      };
+    },
+    [rows, sync, towerId],
+  );
+
+  const sourceLabel = (s: "llm" | "fallback") =>
+    s === "llm" ? "AI generation" : "canonical-map fallback";
+
+  const generateBlanksOp = useAsyncOp<GenerateL4Outcome, []>({
+    run: () => runGenerateL4("fillBlanks"),
+    messages: {
+      loadingTitle: "Generating L4 activities...",
+      loadingDescription:
+        "Trying AI generation, falling back to canonical map / heuristic if unavailable.",
+      successTitle: ({ changedRows }) =>
+        `Generated activities for ${changedRows} L3 capabilit${changedRows === 1 ? "y" : "ies"}`,
+      successDescription: ({ source, warning }) =>
+        warning
+          ? `${warning} Filled blank L3s only.`
+          : `Sourced via ${sourceLabel(source)}. Existing activity lists were preserved.`,
+      errorTitle: "Couldn't generate L4 activities",
+    },
+  });
+
+  const regenerateAllOp = useAsyncOp<GenerateL4Outcome, []>({
+    run: () => runGenerateL4("regenerateAll"),
+    messages: {
+      loadingTitle: "Regenerating every L3's activities...",
+      successTitle: ({ changedRows }) =>
+        `Regenerated activities for ${changedRows} L3 capabilit${changedRows === 1 ? "y" : "ies"}`,
+      successDescription: ({ source, warning }) =>
+        warning
+          ? `${warning} All previous activity lists were replaced.`
+          : `Sourced via ${sourceLabel(source)}. All previous activity lists were replaced.`,
+      errorTitle: "Couldn't regenerate L4 activities",
+    },
+  });
 
   // Source-of-truth precedence: uploaded rows always win. The predefined
   // capability map (`src/data/capabilityMap/*.ts`) is a seed used by the
@@ -111,7 +209,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
             &gt; {towerName} · Capability Map
           </h1>
           <p className="text-xs text-forge-subtle">
-            Step 1 — confirm the <Term termKey="capability map">L1–L4 tree</Term> and headcount, then open{" "}
+            Step 1 — confirm the <Term termKey="capability map">L1–L3 tree</Term> and headcount, then open{" "}
             <Link href={getTowerHref(towerId, "impact-levers")} className="text-accent-purple-dark underline">
               Configure Impact Levers
             </Link>
@@ -155,6 +253,16 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
               authoredAt={tState.capabilityMapConfirmedAt}
               rowsCount={rows.length}
             />
+            {rows.length > 0 ? (
+              <GenerateL4Toolbar
+                blankL4Count={blankL4Count}
+                totalL3s={rows.length}
+                generatingBlanks={generateBlanksOp.state === "loading"}
+                regeneratingAll={regenerateAllOp.state === "loading"}
+                onGenerateBlanks={() => void generateBlanksOp.fire()}
+                onRegenerateAll={() => void regenerateAllOp.fire()}
+              />
+            ) : null}
             <CapabilityMapPanel view={view} rows={rows} isPreview={isPreview} />
           </div>
         ) : null}
@@ -190,7 +298,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
                 Capability map &amp; headcount set — configure your impact levers.
               </p>
               <p className="mt-1 text-sm text-forge-body">
-                Step 2: dial offshore and AI per L4 against the {tState.l4Rows.length} rows you just confirmed.
+                Step 2: dial offshore and AI per L3 across the {tState.l3Rows.length} L3 capabilit{tState.l3Rows.length === 1 ? "y" : "ies"} you just confirmed.
               </p>
             </div>
             <Link
@@ -234,7 +342,7 @@ function MapSourceBanner({
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent-green/35 bg-accent-green/8 px-3 py-1.5">
         <span className="inline-flex items-center gap-2 text-xs font-medium text-accent-green">
           <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-          Tower lead upload · {rowsCount} L4 row{rowsCount === 1 ? "" : "s"}
+          Tower lead upload · {rowsCount} L3 capabilit{rowsCount === 1 ? "y" : "ies"}
         </span>
         <span className="text-[11px] text-forge-subtle">
           Confirmed {formatRelative(authoredAt)} · drives the impact-lever dials &amp; impact estimate downstream.
@@ -247,11 +355,90 @@ function MapSourceBanner({
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-forge-border bg-forge-well/40 px-3 py-1.5">
       <span className="inline-flex items-center gap-2 text-xs font-medium text-forge-body">
         <Info className="h-3.5 w-3.5 text-accent-purple-dark" aria-hidden />
-        Sample seed loaded · {rowsCount} L4 row{rowsCount === 1 ? "" : "s"}
+        Sample seed loaded · {rowsCount} L3 capabilit{rowsCount === 1 ? "y" : "ies"}
       </span>
       <span className="text-[11px] text-forge-subtle">
         Upload your capability map &amp; headcount to confirm the tower lead version.
       </span>
+    </div>
+  );
+}
+
+/**
+ * Toolbar that lets tower leads (re)generate the L4 activity list under each
+ * L3. The activities are display-only metadata (they don't drive the math) but
+ * leads expect to see *something* under each L3 after they upload an L2/L3
+ * template. Two buttons keep the UX honest:
+ *
+ *   - Generate for blanks: only L3s with no `l4Activities` are filled. Safe
+ *     by default — runs LLM-first with canonical-map fallback.
+ *   - Regenerate all: explicit overwrite. Useful after a substantial upload
+ *     where canonical seeds no longer fit the lead's actual map.
+ */
+function GenerateL4Toolbar({
+  blankL4Count,
+  totalL3s,
+  generatingBlanks,
+  regeneratingAll,
+  onGenerateBlanks,
+  onRegenerateAll,
+}: {
+  blankL4Count: number;
+  totalL3s: number;
+  generatingBlanks: boolean;
+  regeneratingAll: boolean;
+  onGenerateBlanks: () => void;
+  onRegenerateAll: () => void;
+}) {
+  const noBlanks = blankL4Count === 0;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-forge-border bg-forge-surface/60 px-3 py-2">
+      <div className="text-[11px] text-forge-subtle">
+        L4 activities{" "}
+        <span className="font-mono text-forge-hint">
+          {totalL3s - blankL4Count}/{totalL3s} L3s have activities
+        </span>
+        {noBlanks ? null : (
+          <span className="ml-1 text-forge-body">
+            · {blankL4Count} L3{blankL4Count === 1 ? "" : "s"} need generation
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onGenerateBlanks}
+          disabled={generatingBlanks || noBlanks}
+          title={
+            noBlanks
+              ? "Every L3 already has activities. Use Regenerate all to replace them."
+              : "Generate L4 activities only for L3s that don't have any yet."
+          }
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition",
+            noBlanks
+              ? "border border-forge-border text-forge-hint"
+              : "bg-accent-purple text-white hover:bg-accent-purple-dark",
+            "disabled:opacity-60",
+          )}
+        >
+          <Wand2 className="h-3 w-3" aria-hidden />
+          {generatingBlanks
+            ? "Generating..."
+            : noBlanks
+              ? "All L3s have activities"
+              : `Generate for ${blankL4Count} blank${blankL4Count === 1 ? "" : "s"}`}
+        </button>
+        <button
+          type="button"
+          onClick={onRegenerateAll}
+          disabled={regeneratingAll}
+          title="Replace every L3's activity list (LLM-first, canonical-map fallback)."
+          className="inline-flex items-center gap-1.5 rounded-md border border-forge-border px-2.5 py-1 text-[11px] text-forge-body transition hover:border-accent-purple/30 disabled:opacity-60"
+        >
+          {regeneratingAll ? "Regenerating..." : "Regenerate all"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -287,8 +474,10 @@ function CapabilityMapCta({
               Upload your tower&rsquo;s capability map &amp; headcount
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-forge-body">
-              One row per <Term termKey="l4">L4</Term> with onshore / offshore <Term termKey="fte">FTE</Term> &amp;{" "}
-              <Term termKey="contractor">contractors</Term>. We infer the L1–L4 tree and headcount in one pass — no separate uploads.
+              One row per <Term termKey="l3">L3 capability</Term> with onshore / offshore{" "}
+              <Term termKey="fte">FTE</Term> &amp; <Term termKey="contractor">contractors</Term>.
+              We infer the L1–L3 tree from your file and generate the L4 activity list
+              underneath each capability — no separate uploads.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -446,17 +635,16 @@ function HeadcountTable({
   rows,
   onPatch,
 }: {
-  rows: L4WorkforceRow[];
-  onPatch: (id: string, patch: Partial<L4WorkforceRow>) => void;
+  rows: L3WorkforceRow[];
+  onPatch: (id: string, patch: Partial<L3WorkforceRow>) => void;
 }) {
   return (
     <div className="overflow-x-auto border-t border-forge-border">
-      <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+      <table className="w-full min-w-[760px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-forge-border bg-forge-well/50 text-xs text-forge-subtle">
             <th className="px-3 py-2 font-medium">L2</th>
             <th className="px-3 py-2 font-medium">L3</th>
-            <th className="px-3 py-2 font-medium">L4</th>
             <th className="px-3 py-2 font-medium" title="Full-time employees onshore (US)">
               FTE on
             </th>
@@ -477,9 +665,8 @@ function HeadcountTable({
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className="border-b border-forge-border/70">
-              <td className="max-w-[120px] px-3 py-1.5 text-forge-subtle">{r.l2}</td>
-              <td className="max-w-[120px] px-3 py-1.5 text-forge-subtle">{r.l3}</td>
-              <td className="max-w-[220px] px-3 py-1.5 text-forge-ink">{r.l4}</td>
+              <td className="max-w-[160px] px-3 py-1.5 text-forge-subtle">{r.l2}</td>
+              <td className="max-w-[260px] px-3 py-1.5 text-forge-ink">{r.l3}</td>
               {(["fteOnshore", "fteOffshore", "contractorOnshore", "contractorOffshore"] as const).map(
                 (k) => (
                   <td key={k} className="px-1 py-1">
@@ -491,7 +678,7 @@ function HeadcountTable({
                       value={r[k]}
                       onChange={(e) => {
                         const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
-                        onPatch(r.id, { [k]: n } as Partial<L4WorkforceRow>);
+                        onPatch(r.id, { [k]: n } as Partial<L3WorkforceRow>);
                       }}
                     />
                   </td>

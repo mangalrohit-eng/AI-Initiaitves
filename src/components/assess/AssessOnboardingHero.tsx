@@ -30,22 +30,23 @@ const STEPS: Step[] = [
     title: "Confirm the capability map",
     body: (
       <>
-        Validate the L1 → <Term termKey="l4">L4</Term> activities for your tower. Add or rename
-        anything missing.
+        Validate the L1 → <Term termKey="l3">L3 capabilities</Term> for your tower, then generate
+        L4 reference activities for context. Add or rename anything missing.
       </>
     ),
   },
   {
     icon: Target,
     title: "Enter the headcount",
-    body: <>Headcount, mix, and US/onshore split — straight from your operating plan.</>,
+    body: <>Headcount, mix, and US/onshore split per L3 — straight from your operating plan.</>,
   },
   {
     icon: Sliders,
     title: "Set the offshore + AI dials",
     body: (
       <>
-        Per L4 activity, dial in the <Term termKey="offshore dial">offshore %</Term> and{" "}
+        Per <Term termKey="l3">L3 capability</Term>, dial in the{" "}
+        <Term termKey="offshore dial">offshore %</Term> and{" "}
         <Term termKey="ai impact dial">AI impact %</Term>. Modeled value rolls up automatically.
       </>
     ),

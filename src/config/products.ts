@@ -46,9 +46,9 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     id: "impact-levers",
     name: "Configure Impact Levers",
     navLabel: "Impact Levers",
-    tagline: "Per tower: dial offshore and AI per L4 to see where modeled OpEx reduction lands.",
+    tagline: "Per tower: dial offshore and AI per L3 to see where modeled OpEx reduction lands.",
     shortDescription:
-      "Set offshore and AI dials per L4 against the confirmed capability map. The tool weights the dials by pool $ and rolls up to a live program-wide modeled impact with sensitivity bands.",
+      "Set offshore and AI dials per L3 against the confirmed capability map. The tool weights the dials by pool $ and rolls up to a live program-wide modeled impact with sensitivity bands.",
     path: "/impact-levers",
     iconId: "sliders",
     order: 15,

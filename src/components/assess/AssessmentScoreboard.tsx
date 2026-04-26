@@ -3,7 +3,7 @@
 import * as React from "react";
 import { CheckCircle2, Cpu, Globe2, TrendingUp } from "lucide-react";
 import { MoneyCounter, formatMoney } from "@/components/ui/MoneyCounter";
-import type { AssessProgramV2, L4WorkforceRow, TowerId } from "@/data/assess/types";
+import type { AssessProgramV2, L3WorkforceRow, TowerId } from "@/data/assess/types";
 import {
   programImpactSummary,
   rowAnnualCost,
@@ -23,7 +23,7 @@ type Props =
       variant: "tower";
       program: AssessProgramV2;
       towerId: TowerId;
-      rows: L4WorkforceRow[];
+      rows: L3WorkforceRow[];
       className?: string;
     };
 
@@ -118,20 +118,20 @@ export function AssessmentScoreboard(props: Props) {
         icon={<Globe2 className="h-3.5 w-3.5" />}
         label="Offshore (wt avg)"
         value={weighted ? `${weighted.offshorePct.toFixed(0)}%` : "—"}
-        subtle="across L4 rows"
+        subtle="across L3 capabilities"
         accent="purple"
       />
       <Tile
         icon={<Cpu className="h-3.5 w-3.5" />}
         label="AI impact (wt avg)"
         value={weighted ? `${weighted.aiPct.toFixed(0)}%` : "—"}
-        subtle="across L4 rows"
+        subtle="across L3 capabilities"
         accent="teal"
       />
       <Tile
         icon={<TrendingUp className="h-3.5 w-3.5" />}
         label="Modeled $"
-        subtle="at L4 dial settings"
+        subtle="at L3 dial settings"
         counter={
           outcome ? (
             <MoneyCounter

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { CheckCircle2, ListTree, MapPin, Network } from "lucide-react";
-import type { AssessProgramV2, L4WorkforceRow, TowerId } from "@/data/assess/types";
+import type { AssessProgramV2, L3WorkforceRow, TowerId } from "@/data/assess/types";
 import {
   programCapabilityCounts,
   towerCapabilityCounts,
@@ -19,7 +19,7 @@ type Props = {
   /** Required when variant is "tower". */
   towerId?: TowerId;
   /** Required when variant is "tower". */
-  rows?: L4WorkforceRow[];
+  rows?: L3WorkforceRow[];
   className?: string;
 };
 
@@ -30,7 +30,8 @@ type Props = {
  * towers and shows confirmation progress.
  *
  * Tower variant — used on each tower page: shows the same counts for that
- * tower plus footprint coverage (how many L4s have any headcount or spend).
+ * tower plus footprint coverage (how many L3 capabilities have any headcount
+ * or spend).
  */
 export function CapabilityScoreboard(props: Props) {
   const { variant, program, towerId, rows, className } = props;
@@ -120,20 +121,20 @@ export function CapabilityScoreboard(props: Props) {
             <span className="text-xs font-medium text-forge-hint">L3</span>
           </span>
         }
-        subtle="grouping the L4s"
+        subtle="assessed unit"
       />
       <Tile
         icon={<Network className="h-3.5 w-3.5" />}
         label="L4 activities"
         value={counts.l4}
-        subtle="assessed unit"
+        subtle="display only"
       />
       <Tile
         icon={<CheckCircle2 className="h-3.5 w-3.5" />}
         label="Headcount coverage"
-        value={`${coverage.confirmedL4s}/${coverage.totalL4s || counts.l4}`}
-        subtle={coverage.confirmedL4s > 0 ? "with headcount or spend" : "upload a capability map"}
-        accent={coverage.confirmedL4s > 0 ? "green" : undefined}
+        value={`${coverage.confirmedL3s}/${coverage.totalL3s || counts.l3}`}
+        subtle={coverage.confirmedL3s > 0 ? "with headcount or spend" : "upload a capability map"}
+        accent={coverage.confirmedL3s > 0 ? "green" : undefined}
       />
     </div>
   );

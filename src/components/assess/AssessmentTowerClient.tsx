@@ -2,14 +2,13 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Lock, Sparkles, Unlock } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { TowerJourneyStepper } from "@/components/layout/TowerJourneyStepper";
 import { Term } from "@/components/help/Term";
-import { AssessmentLeverRow } from "@/components/assess/AssessmentLeverRow";
+import { L3LeverRow } from "@/components/assess/L3LeverRow";
 import { AssessmentScoreboard } from "@/components/assess/AssessmentScoreboard";
-import { TowerChecklist } from "@/components/assess/TowerChecklist";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { useTowerAssessOps } from "@/lib/assess/useTowerAssessOps";
 import { useToast } from "@/components/feedback/ToastProvider";
@@ -23,7 +22,7 @@ import {
   weightedTowerLevers,
 } from "@/lib/assess/scenarioModel";
 import { getAssessProgram, setTowerAssess } from "@/lib/localStore";
-import type { L4WorkforceRow, TowerId } from "@/data/assess/types";
+import type { L3WorkforceRow, TowerId } from "@/data/assess/types";
 import { getTowerHref } from "@/lib/towerHref";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
@@ -33,9 +32,10 @@ type Props = { towerId: TowerId; towerName: string };
 /**
  * Tower-scoped Configure Impact Levers page. Step 2 of the workshop:
  *
- *   - Cinematic per-L4 lever rows (offshore + AI sliders, live modeled $).
+ *   - One slider card per L3 capability (offshore + AI sliders, live modeled $).
+ *     Tower leads dial impact at L3 granularity — that's where the math runs.
  *   - Top-of-page scoreboard (pool, weighted dials, modeled $).
- *   - Tower checklist + Mark complete to anchor the impact estimate summary.
+ *   - Single tower-lead sign-off button to anchor the impact estimate summary.
  *
  * Reuses `useTowerAssessOps` so saves and toasts stay in lock-step with the
  * Capability Map sibling page.
@@ -51,10 +51,6 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
     global,
     blanks,
     isComplete,
-    hasHeadcount,
-    hasAnyOffshoreInput,
-    hasAnyAiInput,
-    onConfirmStep,
     doMarkComplete,
     doUnmarkComplete,
   } = ops;
@@ -66,12 +62,13 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
     return arr;
   })();
 
-  const patchRow = React.useCallback(
-    (id: string, patch: Partial<L4WorkforceRow>) => {
+  /** Patch a single L3 row by id. */
+  const patchL3 = React.useCallback(
+    (rowId: string, patch: Partial<L3WorkforceRow>) => {
       const cur = getAssessProgram().towers[towerId];
       if (!cur) return;
       setTowerAssess(towerId, {
-        l4Rows: cur.l4Rows.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+        l3Rows: cur.l3Rows.map((r) => (r.id === rowId ? { ...r, ...patch } : r)),
         status: cur.status === "empty" ? "data" : cur.status,
       });
     },
@@ -89,7 +86,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
   const applyDefaults = React.useCallback(
     async (mode: "fillBlanks" | "overwriteAll"): Promise<ApplyDefaultsOutcome> => {
       if (!rows.length) throw new Error("Load a capability map & headcount first.");
-      const apiInputs = rows.map((r) => ({ l2: r.l2, l3: r.l3, l4: r.l4 }));
+      const apiInputs = rows.map((r) => ({ l2: r.l2, l3: r.l3 }));
       const apiRes = await clientInferTowerDefaults(towerId, apiInputs);
 
       let source: InferDefaultsSource;
@@ -106,8 +103,8 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
           : `Inference API unavailable (${apiRes.error}); used local heuristic.`;
         const local = applyTowerStarterDefaults(rows, towerId, "overwriteAll");
         inferred = local.rows.map((r) => ({
-          offshorePct: r.l4OffshoreAssessmentPct ?? 0,
-          aiPct: r.l4AiImpactAssessmentPct ?? 0,
+          offshorePct: r.offshoreAssessmentPct ?? 0,
+          aiPct: r.aiImpactAssessmentPct ?? 0,
         }));
       }
 
@@ -115,8 +112,8 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
       let changedRows = 0;
       const nextRows = rows.map((r, i) => {
         const d = inferred[i];
-        let nextOff = r.l4OffshoreAssessmentPct;
-        let nextAi = r.l4AiImpactAssessmentPct;
+        let nextOff = r.offshoreAssessmentPct;
+        let nextAi = r.aiImpactAssessmentPct;
         let touched = false;
         if (mode === "overwriteAll" || nextOff == null) {
           if (nextOff !== d.offshorePct) {
@@ -134,7 +131,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
         }
         if (touched) changedRows += 1;
         return touched
-          ? { ...r, l4OffshoreAssessmentPct: nextOff, l4AiImpactAssessmentPct: nextAi }
+          ? { ...r, offshoreAssessmentPct: nextOff, aiImpactAssessmentPct: nextAi }
           : r;
       });
 
@@ -144,7 +141,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
 
       const w = weightedTowerLevers(nextRows, tState.baseline, global);
       setTowerAssess(towerId, {
-        l4Rows: nextRows,
+        l3Rows: nextRows,
         baseline: {
           baselineOffshorePct: Math.round(w.offshorePct),
           baselineAIPct: Math.round(w.aiPct),
@@ -163,14 +160,14 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
   const fillBlanksOp = useAsyncOp<ApplyDefaultsOutcome, []>({
     run: () => applyDefaults("fillBlanks"),
     messages: {
-      loadingTitle: "Scoring blank rows...",
+      loadingTitle: "Scoring blank L3 groups...",
       loadingDescription: "Trying AI inference, falling back to heuristic if unavailable.",
       successTitle: ({ changedCells, changedRows }) =>
         `Filled ${changedCells} cell${changedCells === 1 ? "" : "s"} across ${changedRows} row${changedRows === 1 ? "" : "s"}`,
       successDescription: ({ source, warning }) =>
         warning
           ? `${warning} Filled blanks only.`
-          : `Sourced via ${sourceLabel(source)}. Existing explicit values were preserved.`,
+          : `Sourced via ${sourceLabel(source)}. Dialed at L3 — existing explicit values were preserved.`,
       errorTitle: "Couldn't apply defaults",
     },
   });
@@ -178,14 +175,14 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
   const overwriteAllOp = useAsyncOp<ApplyDefaultsOutcome, []>({
     run: () => applyDefaults("overwriteAll"),
     messages: {
-      loadingTitle: "Re-scoring every row...",
+      loadingTitle: "Re-scoring every L3...",
       loadingDescription: "Trying AI inference, falling back to heuristic if unavailable.",
       successTitle: ({ changedRows, changedCells }) =>
         `Re-seeded ${changedRows} row${changedRows === 1 ? "" : "s"} (${changedCells} cell${changedCells === 1 ? "" : "s"})`,
       successDescription: ({ source, warning }) =>
         warning
           ? `${warning} All explicit overrides were replaced.`
-          : `Sourced via ${sourceLabel(source)}. All explicit overrides were replaced.`,
+          : `Sourced via ${sourceLabel(source)}. Dialed at L3 — all explicit overrides were replaced.`,
       errorTitle: "Couldn't re-apply defaults",
     },
   });
@@ -215,14 +212,13 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
     }
   };
 
-  // Reset the row's overrides back to the tower default so the lever falls back
-  // to the per-tower seeded baseline.
-  const resetOverridesForRow = (id: string) => {
-    patchRow(id, {
-      l4OffshoreAssessmentPct: undefined,
-      l4AiImpactAssessmentPct: undefined,
+  // Reset both overrides on a single L3 row back to the tower baseline.
+  const resetOverridesForRow = (row: L3WorkforceRow) => {
+    patchL3(row.id, {
+      offshoreAssessmentPct: undefined,
+      aiImpactAssessmentPct: undefined,
     });
-    toast.info({ title: "Row overrides cleared" });
+    toast.info({ title: `${row.l3} overrides cleared` });
   };
 
   const noFootprint = rows.length === 0;
@@ -254,9 +250,8 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-forge-body">
               Dial <Term termKey="offshore dial">offshore</Term> and{" "}
-              <Term termKey="ai impact dial">AI impact</Term> per <Term termKey="l4">L4</Term> activity. The
-              tool weights every drag against the L4&apos;s pool $ and updates the modeled
-              saving live.
+              <Term termKey="ai impact dial">AI impact</Term> per L3 capability. The
+              modeled saving updates live against each capability&apos;s annual pool $.
             </p>
           </div>
           <Link
@@ -317,30 +312,30 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
                   onClick={() => setReseedDialogOpen(true)}
                   disabled={overwriteAllOp.state === "loading"}
                   className="rounded-md border border-forge-border px-2.5 py-1 text-xs text-forge-body hover:border-accent-purple/30 disabled:opacity-60"
-                  title="Re-score every row from scratch (replaces explicit overrides)"
+                  title="Re-score every L3 from scratch (replaces explicit overrides)"
                 >
-                  {overwriteAllOp.state === "loading" ? "Re-scoring..." : "Re-score every row"}
+                  {overwriteAllOp.state === "loading" ? "Re-scoring..." : "Re-score every L3"}
                 </button>
               </div>
             </div>
 
             <div className="mt-5 space-y-2">
-              {rows.map((row) => (
-                <div key={row.id} className="group">
-                  <AssessmentLeverRow
-                    row={row}
+              {rows.map((r) => (
+                <div key={r.id} className="group">
+                  <L3LeverRow
+                    row={r}
                     towerId={towerId}
                     baseline={tState.baseline}
                     global={global}
-                    onPatch={(patch) => patchRow(row.id, patch)}
+                    onPatch={(patch) => patchL3(r.id, patch)}
                   />
                   <div className="mt-1 hidden text-right text-[10px] text-forge-hint group-hover:block">
                     <button
                       type="button"
-                      onClick={() => resetOverridesForRow(row.id)}
+                      onClick={() => resetOverridesForRow(r)}
                       className="underline-offset-2 hover:text-forge-subtle hover:underline"
                     >
-                      Clear both overrides on this row
+                      Clear both overrides on this L3
                     </button>
                   </div>
                 </div>
@@ -361,14 +356,18 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
             </div>
 
             <div className="mt-10">
-              <TowerChecklist
-                state={tState}
-                hasRows={rows.length > 0}
-                hasHeadcount={hasHeadcount}
-                hasAnyOffshoreInput={hasAnyOffshoreInput}
-                hasAnyAiInput={hasAnyAiInput}
+              <TowerLeadSignoff
+                towerName={towerName}
                 isComplete={isComplete}
-                onConfirm={onConfirmStep}
+                hasRows={rows.length > 0}
+                reviewedAt={
+                  isComplete
+                    ? tState.aiConfirmedAt ??
+                      tState.offshoreConfirmedAt ??
+                      tState.headcountConfirmedAt ??
+                      tState.lastUpdated
+                    : undefined
+                }
                 onMarkComplete={() => setConfirmCompleteOpen(true)}
                 onUnmarkComplete={() => setConfirmUnmarkOpen(true)}
               />
@@ -415,10 +414,10 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
           setReseedDialogOpen(false);
           await overwriteAllOp.fire();
         }}
-        title={`Re-apply starter defaults to every row in ${towerName}?`}
+        title={`Re-apply starter defaults to every L3 in ${towerName}?`}
         description={
           <>
-            Every L4&apos;s offshore% and AI% will be replaced. Explicit overrides will be lost.
+            Every L3&apos;s offshore% and AI% will be replaced. Explicit overrides will be lost.
           </>
         }
         confirmLabel="Yes, replace"
@@ -456,5 +455,112 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
         busy={completeBusy}
       />
     </PageShell>
+  );
+}
+
+/**
+ * Single-button tower-lead sign-off card. Replaces the older 4-step checklist —
+ * the only signal we actually need is "the tower lead has reviewed and tuned
+ * the impact levers for this tower." That stamps `headcountConfirmedAt`,
+ * `offshoreConfirmedAt`, `aiConfirmedAt` (via `doMarkComplete`) and flips the
+ * tower to `status: "complete"` so it anchors the Impact Estimate roll-up.
+ */
+function TowerLeadSignoff({
+  towerName,
+  isComplete,
+  hasRows,
+  reviewedAt,
+  onMarkComplete,
+  onUnmarkComplete,
+}: {
+  towerName: string;
+  isComplete: boolean;
+  hasRows: boolean;
+  reviewedAt?: string;
+  onMarkComplete: () => void;
+  onUnmarkComplete: () => void;
+}) {
+  const fmt = (iso?: string) => {
+    if (!iso) return null;
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  return (
+    <section
+      aria-label="Tower lead sign-off"
+      className={
+        "rounded-2xl border p-5 transition " +
+        (isComplete
+          ? "border-accent-green/30 bg-accent-green/5"
+          : "border-accent-purple/30 bg-accent-purple/5")
+      }
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-display text-base font-semibold text-forge-ink">
+              Tower lead sign-off
+            </h2>
+            {isComplete ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-green/40 bg-accent-green/10 px-2 py-0.5 text-[11px] font-medium text-accent-green">
+                <Check className="h-3 w-3" />
+                Reviewed
+                {fmt(reviewedAt) ? (
+                  <span className="font-mono text-[10px] text-accent-green/80">
+                    · {fmt(reviewedAt)}
+                  </span>
+                ) : null}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-amber/40 bg-accent-amber/10 px-2 py-0.5 text-[11px] font-medium text-accent-amber">
+                Pending tower lead review
+              </span>
+            )}
+          </div>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-forge-body">
+            {isComplete
+              ? `${towerName} is anchored in the impact estimate. Reopen anytime if the offshore or AI dials need to change.`
+              : `Once you've reviewed and adjusted the offshore and AI dials per L3 for ${towerName}, mark the tower reviewed. The impact estimate locks your roll-up and the AI Initiatives handoff appears below.`}
+          </p>
+        </div>
+        <div className="flex flex-shrink-0 items-center">
+          {!isComplete ? (
+            <button
+              type="button"
+              onClick={onMarkComplete}
+              disabled={!hasRows}
+              title={
+                !hasRows
+                  ? "Load the sample or upload a capability map & headcount first."
+                  : "Sign this tower off as reviewed and unlock the AI Initiatives handoff."
+              }
+              className="inline-flex items-center gap-2 rounded-lg bg-accent-purple px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-purple-dark disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Lock className="h-4 w-4" />
+              Mark reviewed
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onUnmarkComplete}
+              className="inline-flex items-center gap-2 rounded-lg border border-forge-border bg-forge-surface px-4 py-2 text-sm font-medium text-forge-body transition hover:border-forge-border-strong"
+            >
+              <Unlock className="h-4 w-4" />
+              Reopen for review
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }

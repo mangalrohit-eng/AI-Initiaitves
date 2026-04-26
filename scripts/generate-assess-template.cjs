@@ -7,15 +7,14 @@ const rows = [
   [
     "L2",
     "L3",
-    "L4",
     "FTE_onshore",
     "FTE_offshore",
     "contractor_onshore",
     "contractor_offshore",
     "annual_spend_usd",
   ],
-  ["PillarA", "Sub1", "Activity example 1", 2, 0, 0, 0, ""],
-  ["PillarA", "Sub1", "Activity example 2", 1, 0, 0, 0, ""],
+  ["PillarA", "Sub1", 3, 0, 0, 0, ""],
+  ["PillarA", "Sub2", 2, 0, 1, 0, ""],
 ];
 const ws = XLSX.utils.aoa_to_sheet(rows);
 const wb = XLSX.utils.book_new();

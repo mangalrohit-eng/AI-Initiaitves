@@ -1,9 +1,9 @@
-import type { L4WorkforceRow, TowerId } from "./types";
+import type { L3WorkforceRow, TowerId } from "./types";
 
 /**
- * Versant-aware starter heuristic for L4 offshoring% and AI-impact%.
+ * Versant-aware starter heuristic for L3 offshoring% and AI-impact%.
  *
- * Inputs are the L2 / L3 / L4 capability labels (case-insensitive substring match) plus
+ * Inputs are the L2 / L3 capability labels (case-insensitive substring match) plus
  * the tower id, which sets a prior. Rules then add deltas. Output is clamped to a
  * realistic band (5–85% offshore, 10–75% AI) and rounded to the nearest 5 for a clean
  * workshop starting point.
@@ -12,8 +12,7 @@ import type { L4WorkforceRow, TowerId } from "./types";
  * on-air talent, political brand sensitivity, multi-entity JV, BB- credit) so:
  *   - Editorial, on-air, deal-making, executive judgment, live broadcast, regulatory
  *     filings → low offshore, low AI.
- *   - AP/AR, reconciliation, payroll, helpdesk, document review, transcription,
- *     monitoring/screening, analytics → high offshore, high AI.
+ *   - AP/AR, reconciliation, payroll, helpdesk, analytics → high offshore, high AI.
  *   - Things in between (FP&A, sales ops, tech engineering) sit mid-range.
  *
  * Not Versant-reported. Workshop starting point only.
@@ -42,52 +41,56 @@ type Rule = {
   ai?: number;
 };
 
-/** Routine, codified, transactional → higher offshore + AI. */
+/**
+ * Routine, codified, transactional → higher offshore + AI.
+ *
+ * These keywords describe L2/L3 capability buckets (e.g., "Accounts Payable",
+ * "Service Desk"), not L4 activity verbs. The heuristic now scores at L3, so
+ * very narrow per-activity tells (e.g., "match-pay-and-extract") have been
+ * removed in favor of the broader sub-capability vocabulary.
+ */
 const ROUTINE_RULES: Rule[] = [
-  { keywords: ["accounts payable", "invoice processing", "invoice approval"], offshore: 20, ai: 15 },
+  { keywords: ["accounts payable"], offshore: 20, ai: 15 },
   { keywords: ["accounts receivable", "billing"], offshore: 20, ai: 15 },
-  { keywords: ["reconciliation", "reconcile", "intercompany"], offshore: 15, ai: 15 },
+  { keywords: ["reconciliation", "intercompany"], offshore: 15, ai: 15 },
   { keywords: ["expense", "travel and expense", "t&e"], offshore: 15, ai: 10 },
   { keywords: ["payroll"], offshore: 15, ai: 10 },
-  { keywords: ["procurement", "sourcing", "purchase order", "vendor onboarding"], offshore: 10, ai: 10 },
-  { keywords: ["helpdesk", "service desk", "tier 1", "l1 support", "first line support"], offshore: 20, ai: 15 },
-  { keywords: ["data entry", "data ingestion", "data capture"], offshore: 15, ai: 15 },
-  { keywords: ["general ledger", "month-end", "journal entry"], offshore: 10, ai: 10 },
-  { keywords: ["tax filing", "tax compliance", "sales tax"], offshore: 5, ai: 10 },
-  { keywords: ["benefit administration", "leave administration", "case management"], offshore: 10, ai: 5 },
-  { keywords: ["shared service", "back-office", "administr", "operations support"], offshore: 10, ai: 5 },
-  { keywords: ["software test", "qa test", "test automation"], offshore: 15, ai: 10 },
+  { keywords: ["procurement", "sourcing", "vendor onboarding"], offshore: 10, ai: 10 },
+  { keywords: ["helpdesk", "service desk", "tier 1", "first line support"], offshore: 20, ai: 15 },
+  { keywords: ["general ledger", "month-end", "close"], offshore: 10, ai: 10 },
+  { keywords: ["tax", "tax compliance"], offshore: 5, ai: 10 },
+  { keywords: ["benefit", "leave", "case management"], offshore: 10, ai: 5 },
+  { keywords: ["shared service", "back-office", "operations support"], offshore: 10, ai: 5 },
+  { keywords: ["software test", "qa", "test automation"], offshore: 15, ai: 10 },
   { keywords: ["category management", "spend analysis"], offshore: 10, ai: 10 },
   { keywords: ["billing operations", "subscription operations"], offshore: 15, ai: 15 },
 ];
 
 /** AI-friendly patterns regardless of geography (analytics, models, doc work). */
 const AI_FRIENDLY_RULES: Rule[] = [
-  { keywords: ["forecast", "valuation", "prediction", "scoring"], ai: 15 },
+  { keywords: ["forecast", "valuation", "prediction"], ai: 15 },
   { keywords: ["report", "dashboard", "analytics", "insight"], ai: 10 },
   { keywords: ["detection", "monitoring", "surveillance", "screening", "fraud"], ai: 15 },
   { keywords: ["personaliz", "recommend", "targeting", "segmentation"], ai: 15 },
-  { keywords: ["document review", "contract review", "nda", "template"], ai: 15 },
+  { keywords: ["document review", "contract review"], ai: 15 },
   { keywords: ["search", "research", "discovery"], ai: 10 },
-  { keywords: ["categoriz", "extract", "summari", "tag", "metadata", "transcrib", "translation", "captioning"], ai: 20, offshore: 5 },
-  { keywords: ["chatbot", "first line", "intake", "ticket triage"], ai: 15 },
-  { keywords: ["lead qualification", "lead scoring", "outreach", "sales enablement"], ai: 10 },
+  { keywords: ["chatbot", "intake", "ticket triage"], ai: 15 },
+  { keywords: ["lead qualification", "lead scoring", "sales enablement"], ai: 10 },
   { keywords: ["compliance check", "compliance monitoring", "audit support"], ai: 15 },
 ];
 
 /** US-required / sensitive / relationship-driven → lower offshore (and usually lower AI). */
 const SENSITIVE_RULES: Rule[] = [
-  { keywords: ["editorial", "journalism", "journal", "anchor", "reporter", "fact-check", "fact check", "news judgment"], offshore: -25, ai: -15 },
-  { keywords: ["editorial decision", "story selection"], offshore: -25, ai: -20 },
-  { keywords: ["political", "regulator", "regulatory", "securities filing", "disclosure", "10-k", "10-q", "lobby"], offshore: -15 },
-  { keywords: ["negotiat", "deal making", "partner relationship", "client relationship", "key account", "account executive", "carriage"], offshore: -15, ai: -15 },
+  { keywords: ["editorial", "journalism", "news judgment"], offshore: -25, ai: -15 },
+  { keywords: ["political", "regulator", "regulatory", "securities", "disclosure", "10-k", "10-q", "lobby"], offshore: -15 },
+  { keywords: ["negotiation", "deal", "partner relationship", "client relationship", "key account", "carriage"], offshore: -15, ai: -15 },
   { keywords: ["m&a", "acquisition", "investment thesis"], offshore: -10, ai: -10 },
   { keywords: ["counsel", "litigation", "outside counsel"], offshore: -15, ai: -10 },
-  { keywords: ["live broadcast", "live production", "on-camera", "on-air", "host", "talent management"], offshore: -15, ai: -10 },
-  { keywords: ["studio", "set design", "wardrobe", "location scouting", "stage", "physical security"], offshore: -15, ai: -15 },
+  { keywords: ["live broadcast", "live production", "on-camera", "on-air", "talent management"], offshore: -15, ai: -10 },
+  { keywords: ["studio", "set design", "wardrobe", "stage", "physical security"], offshore: -15, ai: -15 },
   { keywords: ["brand identity", "brand strategy", "creative direction", "creative strategy", "visual identity"], offshore: -20, ai: -10 },
   { keywords: ["culture", "change management", "org design", "workforce planning", "talent strategy", "leadership development"], offshore: -10, ai: -10 },
-  { keywords: ["strategy", "strategic plan", "board", "c-suite", "csuite", "executive search"], offshore: -10, ai: -10 },
+  { keywords: ["strategy", "strategic plan", "board", "c-suite", "executive search"], offshore: -10, ai: -10 },
   { keywords: ["crisis", "incident response"], offshore: -15, ai: -10 },
   { keywords: ["treasury", "credit rating", "covenant", "debt management"], offshore: -10, ai: -5 },
   { keywords: ["real estate", "facilities", "office services"], offshore: -10, ai: -10 },
@@ -105,18 +108,17 @@ function clampRound5(value: number, min: number, max: number): number {
   return Math.round(clamped / 5) * 5;
 }
 
-export type L4Defaults = { offshorePct: number; aiPct: number };
+export type L3Defaults = { offshorePct: number; aiPct: number };
 
-export function inferL4Defaults(
+export function inferL3Defaults(
   towerId: TowerId,
   l2: string,
   l3: string,
-  l4: string,
-): L4Defaults {
+): L3Defaults {
   const priors = TOWER_PRIORS[towerId] ?? { offshore: 30, ai: 40 };
   let offshore = priors.offshore;
   let ai = priors.ai;
-  const text = `${l2} ${l3} ${l4}`.toLowerCase();
+  const text = `${l2} ${l3}`.toLowerCase();
   for (const rule of ALL_RULES) {
     if (rule.keywords.some((k) => text.includes(k))) {
       if (rule.offshore != null) offshore += rule.offshore;
@@ -132,7 +134,7 @@ export function inferL4Defaults(
 export type ApplyDefaultsMode = "fillBlanks" | "overwriteAll";
 
 export type ApplyDefaultsResult = {
-  rows: L4WorkforceRow[];
+  rows: L3WorkforceRow[];
   /** Number of cells that were actually changed (offshore + AI). */
   changedCells: number;
   /** Number of rows that received any change. */
@@ -140,24 +142,23 @@ export type ApplyDefaultsResult = {
 };
 
 /**
- * Apply the Versant-aware starter offshore% / AI% to every L4 row of a tower.
+ * Apply the Versant-aware starter offshore% / AI% to every L3 row of a tower.
  *
- * - `fillBlanks`: only set the value when the row's existing value is `undefined` or
- *   `null`. Existing explicit values are preserved. Always safe.
- * - `overwriteAll`: replace every row's offshore% and AI% with the inferred starter.
- *   Used when a tower lead wants to reset after editing the L1–L4 maps or rules.
+ *   - `fillBlanks`: only set values for rows where the field is currently blank.
+ *   - `overwriteAll`: replace every row's offshore% and AI% with the heuristic
+ *     output. Used when a tower lead wants to reset after editing the maps.
  */
 export function applyTowerStarterDefaults(
-  rows: L4WorkforceRow[],
+  rows: L3WorkforceRow[],
   towerId: TowerId,
   mode: ApplyDefaultsMode = "fillBlanks",
 ): ApplyDefaultsResult {
   let changedCells = 0;
   let changedRows = 0;
   const next = rows.map((r) => {
-    const d = inferL4Defaults(towerId, r.l2, r.l3, r.l4);
-    let nextOff = r.l4OffshoreAssessmentPct;
-    let nextAi = r.l4AiImpactAssessmentPct;
+    const d = inferL3Defaults(towerId, r.l2, r.l3);
+    let nextOff = r.offshoreAssessmentPct;
+    let nextAi = r.aiImpactAssessmentPct;
     let touched = false;
     if (mode === "overwriteAll" || nextOff == null) {
       if (nextOff !== d.offshorePct) {
@@ -175,14 +176,14 @@ export function applyTowerStarterDefaults(
     }
     if (touched) changedRows += 1;
     return touched
-      ? { ...r, l4OffshoreAssessmentPct: nextOff, l4AiImpactAssessmentPct: nextAi }
+      ? { ...r, offshoreAssessmentPct: nextOff, aiImpactAssessmentPct: nextAi }
       : r;
   });
   return { rows: next, changedCells, changedRows };
 }
 
 /** How many rows are missing offshore%, AI%, or either. */
-export function countBlankL4Defaults(rows: L4WorkforceRow[]): {
+export function countBlankL3Defaults(rows: L3WorkforceRow[]): {
   offshoreBlanks: number;
   aiBlanks: number;
   totalBlanks: number;
@@ -191,8 +192,8 @@ export function countBlankL4Defaults(rows: L4WorkforceRow[]): {
   let aiBlanks = 0;
   let totalBlanks = 0;
   for (const r of rows) {
-    const offMissing = r.l4OffshoreAssessmentPct == null;
-    const aiMissing = r.l4AiImpactAssessmentPct == null;
+    const offMissing = r.offshoreAssessmentPct == null;
+    const aiMissing = r.aiImpactAssessmentPct == null;
     if (offMissing) offshoreBlanks += 1;
     if (aiMissing) aiBlanks += 1;
     if (offMissing || aiMissing) totalBlanks += 1;

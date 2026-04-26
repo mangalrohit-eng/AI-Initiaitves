@@ -1,4 +1,4 @@
-import type { L4WorkforceRow } from "@/data/assess/types";
+import type { L3WorkforceRow } from "@/data/assess/types";
 import * as XLSX from "xlsx";
 
 function normKey(s: string): string {
@@ -13,8 +13,7 @@ function normKey(s: string): string {
 function mapHeader(n: string): string | null {
   const m: [string, string[]][] = [
     ["l2", ["l2", "level_2", "level2", "pillar", "l2_name", "l_2"]],
-    ["l3", ["l3", "level_3", "level3", "l3_name", "l_3", "sub_tower", "subtower"]],
-    ["l4", ["l4", "level_4", "level4", "l4_name", "l_4", "activity", "capability", "l4_activity"]],
+    ["l3", ["l3", "level_3", "level3", "l3_name", "l_3", "sub_tower", "subtower", "capability", "sub_capability"]],
     [
       "fteOnshore",
       [
@@ -65,26 +64,6 @@ function mapHeader(n: string): string | null {
         "pool_usd",
       ],
     ],
-    [
-      "l4OffshoreAssessmentPct",
-      [
-        "l4_offshoring_assessment",
-        "offshoring_assessment",
-        "l4_offshore",
-        "offshoring_pct",
-        "assess_offshoring",
-      ],
-    ],
-    [
-      "l4AiImpactAssessmentPct",
-      [
-        "l4_ai_impact_assessment",
-        "ai_impact_assessment",
-        "l4_ai_impact",
-        "ai_impact_pct",
-        "assess_ai",
-      ],
-    ],
   ];
   for (const [canonical, aliases] of m) {
     if (aliases.includes(n)) return canonical;
@@ -101,9 +80,19 @@ function toNum(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function slugify(s: string): string {
+  return (
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 24) || "x"
+  );
+}
+
 export type ParseAssessFileResult = {
   ok: boolean;
-  rows: L4WorkforceRow[];
+  rows: L3WorkforceRow[];
   errors: string[];
   rawRowCount: number;
 };
@@ -111,18 +100,24 @@ export type ParseAssessFileResult = {
 type Resolved = {
   l2: string;
   l3: string;
-  l4: string;
   fteOnshore: number;
   fteOffshore: number;
   contractorOnshore: number;
   contractorOffshore: number;
   annualSpendUsd?: number;
-  l4OffshoreAssessmentPct?: number;
-  l4AiImpactAssessmentPct?: number;
 };
 
 /**
- * Read first sheet of .xlsx or .csv. Required: L2, L3, L4 and four FTE/contractor columns.
+ * Read first sheet of .xlsx or .csv. Required columns: L2, L3 and four
+ * FTE/contractor counts. Optional: annual_spend.
+ *
+ * Tower leads upload at L3 granularity — one row per (L2, L3). Duplicate
+ * (L2, L3) keys are summed (handy when a sheet was authored at a finer grain
+ * and then collapsed). L4 activities are NOT part of the upload; they're
+ * generated separately on the Capability Map page.
+ *
+ * Impact-lever percentages are also dropped from the upload — tower leads
+ * dial those on the Configure Impact Levers page after the headcount lands.
  */
 export function parseAssessFileBuffer(
   data: ArrayBuffer,
@@ -144,7 +139,18 @@ export function parseAssessFileBuffer(
     raw: false,
   });
   const errors: string[] = [];
-  const rows: L4WorkforceRow[] = [];
+  type Acc = {
+    l2: string;
+    l3: string;
+    fteOnshore: number;
+    fteOffshore: number;
+    contractorOnshore: number;
+    contractorOffshore: number;
+    annualSpendUsd: number;
+    hasSpend: boolean;
+  };
+  const order: string[] = [];
+  const groups = new Map<string, Acc>();
 
   json.forEach((obj, i) => {
     const line = i + 2;
@@ -153,19 +159,8 @@ export function parseAssessFileBuffer(
       const nk = normKey(k);
       const field = mapHeader(nk);
       if (!field) continue;
-      if (field === "l2" || field === "l3" || field === "l4") {
+      if (field === "l2" || field === "l3") {
         (r as Record<string, string>)[field] = String(v ?? "").trim();
-        continue;
-      }
-      if (field === "l4OffshoreAssessmentPct" || field === "l4AiImpactAssessmentPct") {
-        const s = String(v ?? "").trim();
-        if (s === "") continue;
-        const n = toNum(v);
-        if (n === null) {
-          errors.push(`Line ${line}: ${field} is not a number.`);
-          return;
-        }
-        (r as Record<string, number>)[field] = Math.min(100, Math.max(0, n));
         continue;
       }
       if (field === "annualSpendUsd") {
@@ -185,10 +180,10 @@ export function parseAssessFileBuffer(
       if (n < 0) errors.push(`Line ${line}: ${field} cannot be negative.`);
       (r as Record<string, number>)[field] = n;
     }
-    if (!r.l2?.trim() && !r.l3?.trim() && !r.l4?.trim()) return;
-    if (!r.l2?.trim() || !r.l3?.trim() || !r.l4?.trim()) {
+    if (!r.l2?.trim() && !r.l3?.trim()) return;
+    if (!r.l2?.trim() || !r.l3?.trim()) {
       errors.push(
-        `Line ${line}: L2, L3, and L4 are required (got L2=${r.l2 || "—"}, L3=${r.l3 || "—"}, L4=${r.l4 || "—"}).`,
+        `Line ${line}: L2 and L3 are required (got L2=${r.l2 || "—"}, L3=${r.l3 || "—"}).`,
       );
       return;
     }
@@ -204,27 +199,47 @@ export function parseAssessFileBuffer(
       }
     }
     const rFull = r as Resolved;
-    const id = `l4-${i}-${[rFull.l2, rFull.l3, rFull.l4]
-      .map((s) => s.slice(0, 24).replace(/\s/g, "-"))
-      .join("-")}`;
-    const out: L4WorkforceRow = {
-      id,
-      l2: rFull.l2,
-      l3: rFull.l3,
-      l4: rFull.l4,
-      fteOnshore: rFull.fteOnshore,
-      fteOffshore: rFull.fteOffshore,
-      contractorOnshore: rFull.contractorOnshore,
-      contractorOffshore: rFull.contractorOffshore,
+    const l2Norm = rFull.l2.trim();
+    const l3Norm = rFull.l3.trim();
+    const key = `${l2Norm.toLowerCase()}\u0000${l3Norm.toLowerCase()}`;
+    let acc = groups.get(key);
+    if (!acc) {
+      acc = {
+        l2: l2Norm,
+        l3: l3Norm,
+        fteOnshore: 0,
+        fteOffshore: 0,
+        contractorOnshore: 0,
+        contractorOffshore: 0,
+        annualSpendUsd: 0,
+        hasSpend: false,
+      };
+      groups.set(key, acc);
+      order.push(key);
+    }
+    acc.fteOnshore += rFull.fteOnshore;
+    acc.fteOffshore += rFull.fteOffshore;
+    acc.contractorOnshore += rFull.contractorOnshore;
+    acc.contractorOffshore += rFull.contractorOffshore;
+    if (rFull.annualSpendUsd != null && rFull.annualSpendUsd > 0) {
+      acc.annualSpendUsd += rFull.annualSpendUsd;
+      acc.hasSpend = true;
+    }
+  });
+
+  const rows: L3WorkforceRow[] = order.map((k) => {
+    const a = groups.get(k)!;
+    const out: L3WorkforceRow = {
+      id: `${slugify(a.l2)}::${slugify(a.l3)}`,
+      l2: a.l2,
+      l3: a.l3,
+      fteOnshore: a.fteOnshore,
+      fteOffshore: a.fteOffshore,
+      contractorOnshore: a.contractorOnshore,
+      contractorOffshore: a.contractorOffshore,
     };
-    if (rFull.annualSpendUsd != null) out.annualSpendUsd = rFull.annualSpendUsd;
-    if (rFull.l4OffshoreAssessmentPct != null) {
-      out.l4OffshoreAssessmentPct = rFull.l4OffshoreAssessmentPct;
-    }
-    if (rFull.l4AiImpactAssessmentPct != null) {
-      out.l4AiImpactAssessmentPct = rFull.l4AiImpactAssessmentPct;
-    }
-    rows.push(out);
+    if (a.hasSpend) out.annualSpendUsd = a.annualSpendUsd;
+    return out;
   });
 
   return {

@@ -137,7 +137,7 @@ export function ImpactHero({
             </div>
           ) : (
             <p className="mt-2 max-w-md text-sm text-forge-subtle">
-              Confirm the capability map, set headcount, and dial offshore + AI per L4 — the
+              Confirm the capability map, set headcount, and dial offshore + AI per L3 — the
               modeled value lights up here as you go.
             </p>
           )}

@@ -35,7 +35,7 @@ type RowStatus = "not-started" | "in-progress" | "complete";
 
 function rowStatus(program: AssessProgramV2, towerId: TowerId): RowStatus {
   const t = program.towers[towerId];
-  if (!t || !t.l4Rows.length) return "not-started";
+  if (!t || !t.l3Rows.length) return "not-started";
   return t.status === "complete" ? "complete" : "in-progress";
 }
 

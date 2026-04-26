@@ -2,12 +2,26 @@ import type { Tower } from "@/data/types";
 
 export type TowerId = Tower["id"];
 
-/** One L4 / lowest row from the tower footprint file. */
-export type L4WorkforceRow = {
+/**
+ * One L3 (sub-capability) row in the tower workforce footprint.
+ *
+ * Tower leads upload a flat list at L3 granularity — one row per
+ * (L2 pillar, L3 capability) — with onshore/offshore FTE and contractor
+ * headcount, plus optional annual spend. The impact-lever workshop scores
+ * each L3 once for offshore-movability and AI-impact headroom.
+ *
+ * `l4Activities` is a display-only list of activity names that sit under
+ * the L3 (e.g., "Invoice processing", "Match-pay-and-extract"). It is:
+ *   - seeded from the canonical capability map when the sample is loaded,
+ *   - left empty after a tower-lead upload (the upload is L2/L3 only),
+ *   - populated post-upload via the "Generate L4 activities" LLM action.
+ *
+ * The activity list is purely informational — it never feeds the math.
+ */
+export type L3WorkforceRow = {
   id: string;
   l2: string;
   l3: string;
-  l4: string;
   fteOnshore: number;
   fteOffshore: number;
   contractorOnshore: number;
@@ -15,14 +29,20 @@ export type L4WorkforceRow = {
   /** When present in file, used for $ pool; else derived from headcount × blended rates. */
   annualSpendUsd?: number;
   /**
-   * Step 2 — workshop: 0–100 share of L4 work plausibly offshore-movable.
+   * Workshop dial: 0–100 share of L3 work plausibly offshore-movable.
    * When missing, the tower baseline is used in weighted rollups.
    */
-  l4OffshoreAssessmentPct?: number;
+  offshoreAssessmentPct?: number;
   /**
-   * Step 2 — workshop: 0–100 AI improvement / automation headroom for the L4.
+   * Workshop dial: 0–100 AI improvement / automation headroom for the L3.
    */
-  l4AiImpactAssessmentPct?: number;
+  aiImpactAssessmentPct?: number;
+  /**
+   * Reference list of L4 activity labels under this L3 (display only — not
+   * part of the math). Populated from the canonical map at seed time, or
+   * generated post-upload via the LLM "Generate L4 activities" action.
+   */
+  l4Activities?: string[];
 };
 
 /** Workshop anchor before stress-test on the summary page. */
@@ -49,7 +69,7 @@ export type TowerAssessReview = {
 };
 
 export type TowerAssessState = {
-  l4Rows: L4WorkforceRow[];
+  l3Rows: L3WorkforceRow[];
   baseline: TowerBaseline;
   status: TowerAssessStatus;
   lastUpdated?: string;
@@ -66,9 +86,9 @@ export type ChecklistStepId =
  * Global assumptions for the Configure Impact Levers flow. These are the ONLY
  * knobs on the Assumptions tab and the ONLY rates the savings math reads.
  *
- * Every $ in the app is derived from these four rates plus the per-L4
- * inputs (headcount mix, dials). No magic lever weights, no caps, no
- * combine-mode toggles — see `scenarioModel.ts` for the math.
+ * Every $ in the app is derived from these four rates plus per-L3 headcount
+ * mix and per-L3 dials. No magic lever weights, no caps, no combine-mode
+ * toggles — see `scenarioModel.ts` for the math.
  */
 export type GlobalAssessAssumptions = {
   /** Illustrative $ / FTE-year (user-entered, not Versant-reported). */
@@ -86,18 +106,25 @@ export const defaultGlobalAssessAssumptions: GlobalAssessAssumptions = {
 };
 
 /**
- * V3 program shape — current. Drops the V2 `scenarios` slice and the four
- * lever-weight / combine-mode / cap fields that hid the math behind magic
- * numbers. Migration from V2 lives in `localStore.ts`.
+ * V4 program shape — current.
+ *
+ * V4 collapses the per-L4 workforce footprint into per-L3 rows. The math now
+ * runs at L3 granularity (headcount, dials, savings) and L4 activity names
+ * are a display-only reference list on each L3 row. Migration from V3 lives
+ * in `localStore.ts` (groups old `l4Rows` by L2+L3, sums headcount, cost-
+ * weighted-averages percentages, and preserves L4 names in `l4Activities`).
  */
-export type AssessProgramV3 = {
-  version: 3;
+export type AssessProgramV4 = {
+  version: 4;
   towers: Partial<Record<TowerId, TowerAssessState>>;
   global: GlobalAssessAssumptions;
 };
 
-/** Back-compat alias for callers that still import the old name. */
-export type AssessProgramV2 = AssessProgramV3;
+/** Back-compat alias — every caller importing `AssessProgramV3` gets V4. */
+export type AssessProgramV3 = AssessProgramV4;
+
+/** Back-compat alias — every caller importing `AssessProgramV2` gets V4. */
+export type AssessProgramV2 = AssessProgramV4;
 
 export const defaultTowerBaseline: TowerBaseline = {
   baselineOffshorePct: 20,
@@ -106,15 +133,15 @@ export const defaultTowerBaseline: TowerBaseline = {
 
 export function defaultTowerState(): TowerAssessState {
   return {
-    l4Rows: [],
+    l3Rows: [],
     baseline: { ...defaultTowerBaseline },
     status: "empty",
   };
 }
 
-export function defaultAssessProgramV2(): AssessProgramV3 {
+export function defaultAssessProgramV2(): AssessProgramV4 {
   return {
-    version: 3,
+    version: 4,
     towers: {},
     global: { ...defaultGlobalAssessAssumptions },
   };

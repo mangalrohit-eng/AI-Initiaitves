@@ -1,8 +1,12 @@
 /**
- * Server-only OpenAI helper for inferring per-L4 offshore% / AI% on Versant
- * capability map rows. Used when a tower lead uploads a brand-new L1-L4
+ * Server-only OpenAI helper for inferring per-L3 offshore% / AI% on Versant
+ * capability map rows. Used when a tower lead uploads a brand-new L1-L3
  * hierarchy whose labels won't match the deterministic keyword rules in
  * `seedAssessmentDefaults.ts`.
+ *
+ * Tower leads dial impact at L3 granularity, and uploads are L2/L3-only
+ * (L4 activities are display-only and generated separately by
+ * `generateL4ActivitiesLLM.ts`).
  *
  * Design notes:
  *  - Single batched call per tower (one request, N row scores back). We do NOT
@@ -24,7 +28,6 @@ import type { TowerId } from "@/data/assess/types";
 export type LLMRowInput = {
   l2: string;
   l3: string;
-  l4: string;
 };
 
 export type LLMRowResult = {
@@ -84,7 +87,7 @@ function buildSystemPrompt(towerId: TowerId): string {
     "",
     "Versant Media Group (NASDAQ: VSNT) is the spin-off of NBCUniversal's news, sports, streaming, and digital portfolio: MS NOW, CNBC, Golf Channel, GolfNow, GolfPass, USA Network, E!, Syfy, Oxygen True Crime, Fandango, Rotten Tomatoes, SportsEngine, Free TV Networks. ~$6.7B revenue, ~$2.4B Adj. EBITDA, ~$2.75B debt (BB-), running on NBCU shared services until the TSA expires.",
     "",
-    "For every L2 / L3 / L4 row I send you, return TWO scores:",
+    "For every L2 / L3 row I send you, return TWO scores:",
     "  - offshorePct (5-85, integer, multiple of 5): share of the WORK that can plausibly move to a global delivery centre (India/Philippines/etc.). LOWER for editorial judgment, on-air talent, US-physical work, deal-making, regulator-facing work, high-trust client relationships, brand strategy. HIGHER for routine processing (AP, AR, reconciliation, payroll), helpdesk, data prep, analytics support, software test, document review.",
     "  - aiPct (10-75, integer, multiple of 5): share of the WORK that AI (LLMs, agents, classifiers, copilots) can realistically displace or 10x today. HIGHER for summarization, transcription, captioning, translation, document review, anomaly detection, monitoring, lead scoring, structured extraction. LOWER for executive judgment, in-person relationships, on-camera work, crisis decisions.",
     "",
@@ -107,10 +110,10 @@ function buildSystemPrompt(towerId: TowerId): string {
 
 function buildUserPrompt(rows: LLMRowInput[]): string {
   const lines = rows.map(
-    (r, i) => `${i + 1}. L2="${truncate(r.l2)}" / L3="${truncate(r.l3)}" / L4="${truncate(r.l4)}"`,
+    (r, i) => `${i + 1}. L2="${truncate(r.l2)}" / L3="${truncate(r.l3)}"`,
   );
   return [
-    `Score these ${rows.length} rows. Preserve order.`,
+    `Score these ${rows.length} L3 capabilities. Preserve order.`,
     "",
     ...lines,
   ].join("\n");

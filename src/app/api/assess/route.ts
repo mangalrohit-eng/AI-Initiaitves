@@ -78,8 +78,8 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
   const program: AssessProgramV2 = parsed.program;
-  if (program.version !== 3) {
-    return NextResponse.json({ error: "version must be 3" }, { status: 400 });
+  if (program.version !== 4) {
+    return NextResponse.json({ error: "version must be 4" }, { status: 400 });
   }
 
   const sql = getDb()!;

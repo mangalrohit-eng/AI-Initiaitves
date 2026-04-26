@@ -1,4 +1,4 @@
-import type { AssessProgramV2, L4WorkforceRow, TowerId } from "@/data/assess/types";
+import type { AssessProgramV2, L3WorkforceRow, TowerId } from "@/data/assess/types";
 import { getCapabilityMapForTower } from "@/data/capabilityMap/maps";
 import { towers } from "@/data/towers";
 import {
@@ -20,7 +20,8 @@ export type CapabilityCounts = {
  *
  * Resolution order — uploaded rows are the source of truth; the per-tower
  * predefined map is only a seed/preview:
- *   1. If the user has loaded any footprint rows, infer L1-L4 from those rows.
+ *   1. If the user has loaded any footprint rows, infer L1-L3 from those rows
+ *      and L4 from each row's `l4Activities` reference list.
  *   2. Otherwise, fall back to the predefined map (rendered as Preview on the
  *      Capability Map page).
  *   3. Otherwise, zeroes (no map yet — coverage starts at the L1 placeholder).
@@ -28,7 +29,10 @@ export type CapabilityCounts = {
  * The L1 count is 1 whenever any L2 nodes exist; this matches the visual
  * "tower = L1" framing used in `CapabilityMapPanel`.
  */
-export function towerCapabilityCounts(towerId: TowerId, rows: L4WorkforceRow[]): CapabilityCounts {
+export function towerCapabilityCounts(
+  towerId: TowerId,
+  rows: L3WorkforceRow[],
+): CapabilityCounts {
   const tower = towers.find((t) => t.id === towerId);
   if (!tower) return { l1: 0, l2: 0, l3: 0, l4: 0 };
   const def = getCapabilityMapForTower(towerId);
@@ -69,7 +73,7 @@ export function programCapabilityCounts(state: AssessProgramV2): CapabilityCount
   let l4 = 0;
   let contributing = 0;
   for (const t of towers) {
-    const rows = state.towers[t.id]?.l4Rows ?? [];
+    const rows = state.towers[t.id]?.l3Rows ?? [];
     const hasMap = Boolean(getCapabilityMapForTower(t.id));
     if (rows.length === 0 && !hasMap) continue;
     const c = towerCapabilityCounts(t.id, rows);
@@ -84,16 +88,17 @@ export function programCapabilityCounts(state: AssessProgramV2): CapabilityCount
 }
 
 /**
- * Footprint coverage — how many of the canonical L4s have non-zero headcount or
- * spend in the current rows. Used by Capability Map scoreboards to show "how
- * confirmed are we?" without relying on the user's explicit reviewedAt stamps.
+ * Footprint coverage — how many of the L3 capabilities have non-zero headcount
+ * or spend in the current rows. Used by Capability Map scoreboards to show
+ * "how confirmed is the footprint?" without relying on the user's explicit
+ * reviewedAt stamps.
  */
 export function towerFootprintCoverage(
   towerId: TowerId,
-  rows: L4WorkforceRow[],
-): { confirmedL4s: number; totalL4s: number } {
+  rows: L3WorkforceRow[],
+): { confirmedL3s: number; totalL3s: number } {
   const counts = towerCapabilityCounts(towerId, rows);
-  const totalL4s = counts.l4;
+  const totalL3s = counts.l3;
   let confirmed = 0;
   for (const r of rows) {
     const hc =
@@ -103,5 +108,5 @@ export function towerFootprintCoverage(
       (r.contractorOffshore || 0);
     if (hc > 0 || (r.annualSpendUsd ?? 0) > 0) confirmed += 1;
   }
-  return { confirmedL4s: Math.min(confirmed, totalL4s), totalL4s };
+  return { confirmedL3s: Math.min(confirmed, totalL3s), totalL3s };
 }

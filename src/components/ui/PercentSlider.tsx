@@ -30,7 +30,7 @@ type Props = {
 };
 
 /**
- * Premium per-L4 lever slider — purple for offshore, teal for AI.
+ * Premium impact-lever slider — purple for offshore, teal for AI.
  *
  * Replaces the Excel-grade <input type="number"> with a range control that:
  *   - emits onChange on every drag tick (live $ recalc),

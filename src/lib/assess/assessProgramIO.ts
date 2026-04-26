@@ -1,14 +1,15 @@
 import type {
   AssessProgramV2,
   GlobalAssessAssumptions,
-  L4WorkforceRow,
+  L3WorkforceRow,
   TowerId,
 } from "@/data/assess/types";
 import { defaultGlobalAssessAssumptions, defaultTowerBaseline, defaultTowerState } from "@/data/assess/types";
 import { towers } from "@/data/towers";
+import { groupL4RowsToL3RowsForImport } from "@/lib/localStore";
 
-export const ASSESS_PROGRAM_FILE_FORMAT = "forge-assess-program-v3" as const;
-const SUPPORTED_PROGRAM_VERSIONS: ReadonlyArray<number> = [2, 3];
+export const ASSESS_PROGRAM_FILE_FORMAT = "forge-assess-program-v4" as const;
+const SUPPORTED_PROGRAM_VERSIONS: ReadonlyArray<number> = [2, 3, 4];
 
 export type AssessProgramFileEnvelope = {
   format: typeof ASSESS_PROGRAM_FILE_FORMAT;
@@ -33,46 +34,64 @@ function coalesceNumber(x: unknown, d: number): number {
   return d;
 }
 
-function asL4Row(x: unknown): L4WorkforceRow | null {
+function slugify(s: string): string {
+  return (
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 24) || "x"
+  );
+}
+
+function asL3Row(x: unknown): L3WorkforceRow | null {
   if (!isRecord(x)) return null;
   const id = x.id;
   const l2 = x.l2;
   const l3 = x.l3;
-  const l4 = x.l4;
-  if (typeof l2 !== "string" || typeof l3 !== "string" || typeof l4 !== "string") return null;
+  if (typeof l2 !== "string" || typeof l3 !== "string") return null;
   const clamp01 = (v: number) => Math.min(100, Math.max(0, v));
-  return {
-    id: typeof id === "string" ? id : `l4-${l2.slice(0, 12)}-${l4.slice(0, 12)}`,
+  const out: L3WorkforceRow = {
+    id: typeof id === "string" && id ? id : `${slugify(l2)}::${slugify(l3)}`,
     l2,
     l3,
-    l4,
     fteOnshore: coalesceNumber(x.fteOnshore, 0),
     fteOffshore: coalesceNumber(x.fteOffshore, 0),
     contractorOnshore: coalesceNumber(x.contractorOnshore, 0),
     contractorOffshore: coalesceNumber(x.contractorOffshore, 0),
-    annualSpendUsd: (() => {
-      const n = coalesceNumber(x.annualSpendUsd, NaN);
-      return Number.isFinite(n) && n > 0 ? n : undefined;
-    })(),
-    l4OffshoreAssessmentPct: (() => {
-      const raw = x.l4OffshoreAssessmentPct ?? x["l4_offshoring_assessment"];
-      if (raw === undefined) return undefined;
-      const n = coalesceNumber(raw, NaN);
-      return Number.isFinite(n) ? clamp01(n) : undefined;
-    })(),
-    l4AiImpactAssessmentPct: (() => {
-      const raw = x.l4AiImpactAssessmentPct ?? x["l4_ai_impact_assessment"];
-      if (raw === undefined) return undefined;
-      const n = coalesceNumber(raw, NaN);
-      return Number.isFinite(n) ? clamp01(n) : undefined;
-    })(),
   };
+  const sp = (() => {
+    const n = coalesceNumber(x.annualSpendUsd, NaN);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  })();
+  if (sp != null) out.annualSpendUsd = sp;
+  const off = (() => {
+    const raw = x.offshoreAssessmentPct;
+    if (raw === undefined) return undefined;
+    const n = coalesceNumber(raw, NaN);
+    return Number.isFinite(n) ? clamp01(n) : undefined;
+  })();
+  if (off != null) out.offshoreAssessmentPct = off;
+  const ai = (() => {
+    const raw = x.aiImpactAssessmentPct;
+    if (raw === undefined) return undefined;
+    const n = coalesceNumber(raw, NaN);
+    return Number.isFinite(n) ? clamp01(n) : undefined;
+  })();
+  if (ai != null) out.aiImpactAssessmentPct = ai;
+  if (Array.isArray(x.l4Activities)) {
+    const names = (x.l4Activities as unknown[])
+      .filter((n): n is string => typeof n === "string" && n.trim().length > 0)
+      .map((n) => n.trim());
+    if (names.length > 0) out.l4Activities = names;
+  }
+  return out;
 }
 
 /**
  * Coalesce the global assumptions blob, ignoring fields that no longer exist
  * (offshoreLeverWeight, aiLeverWeight, combineMode, combinedCapPct from v2).
- * v2 exports load cleanly — the obsolete fields are silently dropped.
+ * v2 / v3 exports load cleanly — the obsolete fields are silently dropped.
  */
 function parseGlobal(x: unknown): GlobalAssessAssumptions {
   if (!isRecord(x)) return { ...defaultGlobalAssessAssumptions };
@@ -104,6 +123,7 @@ export function importAssessProgramFromJsonText(
   let programRaw: unknown;
   if (
     raw.format === ASSESS_PROGRAM_FILE_FORMAT ||
+    raw.format === "forge-assess-program-v3" ||
     raw.format === "forge-assess-program-v2"
   ) {
     if (
@@ -120,7 +140,11 @@ export function importAssessProgramFromJsonText(
   ) {
     programRaw = raw;
   } else {
-    return { ok: false, error: "Unrecognized file: use a Forge export (.json) or program version 2 / 3." };
+    return {
+      ok: false,
+      error:
+        "Unrecognized file: use a Forge export (.json) with program version 2, 3, or 4.",
+    };
   }
 
   if (!isRecord(programRaw)) {
@@ -133,8 +157,10 @@ export function importAssessProgramFromJsonText(
     return { ok: false, error: `Unsupported program version: ${String(programRaw.version)}.` };
   }
 
+  const inputVersion = programRaw.version;
+
   const program: AssessProgramV2 = {
-    version: 3,
+    version: 4,
     global: parseGlobal(programRaw.global),
     towers: {},
   };
@@ -144,14 +170,19 @@ export function importAssessProgramFromJsonText(
     for (const [k, v] of Object.entries(towersObj)) {
       if (!isTowerId(k) || !isRecord(v)) continue;
       const base = defaultTowerState();
-      const l4Rows: L4WorkforceRow[] = Array.isArray(v.l4Rows)
-        ? (v.l4Rows.map((r) => asL4Row(r)).filter(Boolean) as L4WorkforceRow[])
-        : base.l4Rows;
+      let l3Rows: L3WorkforceRow[];
+      if (inputVersion >= 4 && Array.isArray(v.l3Rows)) {
+        l3Rows = (v.l3Rows.map((r) => asL3Row(r)).filter(Boolean) as L3WorkforceRow[]);
+      } else if (Array.isArray(v.l4Rows)) {
+        l3Rows = groupL4RowsToL3RowsForImport(v.l4Rows as unknown[]);
+      } else {
+        l3Rows = base.l3Rows;
+      }
       const bRaw = isRecord(v.baseline) ? { ...defaultTowerBaseline, ...v.baseline } : defaultTowerBaseline;
       const st = v.status;
       const status = st === "empty" || st === "data" || st === "complete" ? st : base.status;
       program.towers[k] = {
-        l4Rows: l4Rows as typeof base.l4Rows,
+        l3Rows,
         baseline: {
           baselineOffshorePct: coalesceNumber(
             bRaw.baselineOffshorePct,
@@ -161,6 +192,16 @@ export function importAssessProgramFromJsonText(
         },
         status,
         lastUpdated: typeof v.lastUpdated === "string" ? v.lastUpdated : base.lastUpdated,
+        capabilityMapConfirmedAt:
+          typeof v.capabilityMapConfirmedAt === "string"
+            ? v.capabilityMapConfirmedAt
+            : undefined,
+        headcountConfirmedAt:
+          typeof v.headcountConfirmedAt === "string" ? v.headcountConfirmedAt : undefined,
+        offshoreConfirmedAt:
+          typeof v.offshoreConfirmedAt === "string" ? v.offshoreConfirmedAt : undefined,
+        aiConfirmedAt:
+          typeof v.aiConfirmedAt === "string" ? v.aiConfirmedAt : undefined,
       };
     }
   }

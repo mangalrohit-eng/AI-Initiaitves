@@ -2,18 +2,17 @@
 
 import * as React from "react";
 import { ChevronDown, Eye } from "lucide-react";
-import type { L4WorkforceRow } from "@/data/assess/types";
+import type { L3WorkforceRow } from "@/data/assess/types";
 import type {
   CapabilityMapViewModel,
   MapViewL3,
-  MapViewL4,
 } from "@/lib/assess/capabilityMapTree";
-import { findRowForMapL4 } from "@/lib/assess/capabilityMapTree";
+import { findRowForMapL3 } from "@/lib/assess/capabilityMapTree";
 import { cn } from "@/lib/utils";
 
 type Props = {
   view: CapabilityMapViewModel;
-  rows: L4WorkforceRow[];
+  rows: L3WorkforceRow[];
   /**
    * When true the rendered tree is the predefined seed map (no rows uploaded
    * yet). Adds a Preview banner and suppresses every per-box headcount cell —
@@ -51,7 +50,9 @@ export function CapabilityMapPanel({ view, rows, isPreview = false }: Props) {
     [view],
   );
 
-  // Pre-compute headcount per row id so per-L4 / per-L3 / per-L2 sums are O(rows + tree).
+  // Per-L3 headcount comes straight from the L3 workforce row. L4 activities
+  // are display-only metadata and don't carry their own headcount in this
+  // model — they show as anonymous chips under the active L3.
   const hcByRowId = React.useMemo(() => {
     const m = new Map<string, number>();
     for (const r of rows) {
@@ -66,31 +67,14 @@ export function CapabilityMapPanel({ view, rows, isPreview = false }: Props) {
     return m;
   }, [rows]);
 
-  const l4Headcount = React.useCallback(
-    (l2Name: string, l3Name: string, l4: MapViewL4): number | null => {
+  const l3Headcount = React.useCallback(
+    (l2Name: string, l3: MapViewL3): number | null => {
       if (isPreview) return null;
-      const r = findRowForMapL4(rows, l2Name, l3Name, l4);
+      const r = findRowForMapL3(rows, l2Name, l3.name);
       if (!r) return null;
       return hcByRowId.get(r.id) ?? 0;
     },
     [hcByRowId, rows, isPreview],
-  );
-
-  const l3Headcount = React.useCallback(
-    (l2Name: string, l3: MapViewL3): number | null => {
-      if (isPreview) return null;
-      let any = false;
-      let sum = 0;
-      for (const l4 of l3.l4) {
-        const v = l4Headcount(l2Name, l3.name, l4);
-        if (v != null) {
-          any = true;
-          sum += v;
-        }
-      }
-      return any ? sum : null;
-    },
-    [l4Headcount, isPreview],
   );
 
   const l2Headcount = React.useCallback(
@@ -201,7 +185,6 @@ export function CapabilityMapPanel({ view, rows, isPreview = false }: Props) {
                   l2Name={l2.name}
                   l3Nodes={l2.l3}
                   active={active}
-                  l4HeadcountFn={(l3, l4) => l4Headcount(l2.name, l3.name, l4)}
                 />
               ))}
             </div>
@@ -323,12 +306,10 @@ function L4BandColumn({
   l2Name,
   l3Nodes,
   active,
-  l4HeadcountFn,
 }: {
   l2Name: string;
   l3Nodes: MapViewL3[];
   active: Set<string>;
-  l4HeadcountFn: (l3: MapViewL3, l4: MapViewL4) => number | null;
 }) {
   const activeL3sInThisL2 = l3Nodes.filter((l3) =>
     active.has(keyOf(l2Name, l3.name)),
@@ -351,9 +332,9 @@ function L4BandColumn({
             {l3.l4.length === 0 ? (
               <Box
                 tier="l4-empty"
-                name="No L4 activities recorded."
+                name="No L4 activities yet — Generate above."
                 hc={null}
-                title="No L4 activities recorded."
+                title="No L4 activities recorded for this L3 capability. Use Generate above to create them."
               />
             ) : (
               l3.l4.map((l4) => (
@@ -361,7 +342,7 @@ function L4BandColumn({
                   key={l4.id}
                   tier="l4"
                   name={l4.name}
-                  hc={l4HeadcountFn(l3, l4)}
+                  hc={null}
                   title={l4.name}
                   data-l4={l4.id}
                   ariaLabel={`L4 ${l4.name}`}

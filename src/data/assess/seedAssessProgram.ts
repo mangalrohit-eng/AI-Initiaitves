@@ -2,9 +2,9 @@ import { getCapabilityMapForTower } from "@/data/capabilityMap/maps";
 import type { CapabilityMapDefinition } from "@/data/capabilityMap/types";
 import { towers } from "@/data/towers";
 import { weightedTowerLevers } from "@/lib/assess/scenarioModel";
-import type { AssessProgramV2, L4WorkforceRow, TowerAssessState, TowerId } from "./types";
+import type { AssessProgramV2, L3WorkforceRow, TowerAssessState, TowerId } from "./types";
 import { defaultGlobalAssessAssumptions, defaultTowerBaseline } from "./types";
-import { inferL4Defaults } from "./seedAssessmentDefaults";
+import { inferL3Defaults } from "./seedAssessmentDefaults";
 
 /**
  * Seeded with illustrative, workshop-only data — not Versant-reported. No offshore
@@ -50,23 +50,25 @@ const CONTRACTOR_L2_HINT: Partial<Record<TowerId, string[]>> = {
   "programming-dev": ["Content Development & Greenlight", "Content Acquisition & Licensing"],
 };
 
-/** Walk a capability map definition into flat L4 workforce rows (no FTE/contractor yet). */
-function flattenCapabilityMap(map: CapabilityMapDefinition): L4WorkforceRow[] {
-  const rows: L4WorkforceRow[] = [];
+/**
+ * Walk a capability map definition into per-L3 workforce rows. Each row gets
+ * the canonical L4 names (display-only `l4Activities`) but no headcount yet.
+ * Headcount and dials are layered on by `applyHeadcountToRows` / `withL3Defaults`.
+ */
+function flattenCapabilityMap(map: CapabilityMapDefinition): L3WorkforceRow[] {
+  const rows: L3WorkforceRow[] = [];
   for (const l2 of map.l2) {
     for (const l3 of l2.l3) {
-      for (const l4 of l3.l4) {
-        rows.push({
-          id: l4.id,
-          l2: l2.name,
-          l3: l3.name,
-          l4: l4.name,
-          fteOnshore: 0,
-          fteOffshore: 0,
-          contractorOnshore: 0,
-          contractorOffshore: 0,
-        });
-      }
+      rows.push({
+        id: l3.id,
+        l2: l2.name,
+        l3: l3.name,
+        fteOnshore: 0,
+        fteOffshore: 0,
+        contractorOnshore: 0,
+        contractorOffshore: 0,
+        l4Activities: l3.l4.map((x) => x.name),
+      });
     }
   }
   return rows;
@@ -80,13 +82,13 @@ function evenSpread(total: number, n: number): number[] {
   return Array.from({ length: n }, (_, i) => base + (i < rem ? 1 : 0));
 }
 
-/** Distribute FTE across all rows; concentrate contractor in hint L2s when present. */
+/** Distribute FTE across all L3 rows; concentrate contractor in hint L2s when present. */
 function applyHeadcountToRows(
-  rows: L4WorkforceRow[],
+  rows: L3WorkforceRow[],
   fte: number,
   contractor: number,
   contractorL2Hint?: string[],
-): L4WorkforceRow[] {
+): L3WorkforceRow[] {
   if (rows.length === 0) return rows;
 
   const fteSpread = evenSpread(fte, rows.length);
@@ -101,9 +103,8 @@ function applyHeadcountToRows(
         if (contractorL2Hint.includes(rows[i].l2)) hintRows.push(i);
       }
     }
-    const targetRows = hintRows.length > 0
-      ? hintRows
-      : Array.from({ length: rows.length }, (_, i) => i);
+    const targetRows =
+      hintRows.length > 0 ? hintRows : Array.from({ length: rows.length }, (_, i) => i);
     const conSpread = evenSpread(contractor, targetRows.length);
     for (let k = 0; k < targetRows.length; k++) {
       rows[targetRows[k]].contractorOnshore = conSpread[k];
@@ -113,24 +114,29 @@ function applyHeadcountToRows(
   return rows;
 }
 
-/** Apply Versant-aware starter offshore% / AI% to every L4 row. */
-function withL4Defaults(rows: L4WorkforceRow[], towerId: TowerId): L4WorkforceRow[] {
+/**
+ * Apply Versant-aware starter offshore% / AI% to every L3 row. Rounded to the
+ * nearest 5 so seeded sliders sit on tidy positions. Tower leads can adjust
+ * each L3 dial individually on the Configure Impact Levers page.
+ */
+function withL3Defaults(rows: L3WorkforceRow[], towerId: TowerId): L3WorkforceRow[] {
   return rows.map((r) => {
-    const d = inferL4Defaults(towerId, r.l2, r.l3, r.l4);
+    const d = inferL3Defaults(towerId, r.l2, r.l3);
     return {
       ...r,
-      l4OffshoreAssessmentPct: d.offshorePct,
-      l4AiImpactAssessmentPct: d.aiPct,
+      offshoreAssessmentPct: Math.round(d.offshorePct / 5) * 5,
+      aiImpactAssessmentPct: Math.round(d.aiPct / 5) * 5,
     };
   });
 }
 
 /**
- * L4 sample rows for one tower (used by seeded program and by sample downloads).
+ * L3 sample rows for one tower (used by the seeded program and by sample downloads).
  * No offshore FTE/contractor — the workshop fills that via the offshore lever.
- * Each row carries a workshop-starter `l4OffshoreAssessmentPct` and `l4AiImpactAssessmentPct`.
+ * Each row carries a workshop-starter `offshoreAssessmentPct` / `aiImpactAssessmentPct`
+ * plus the canonical `l4Activities` list for display in the capability map.
  */
-export function getTowerSeedRows(towerId: TowerId): L4WorkforceRow[] {
+export function getTowerSeedRows(towerId: TowerId): L3WorkforceRow[] {
   const map = getCapabilityMapForTower(towerId);
   if (!map) return [];
   const tw = towers.find((t) => t.id === towerId);
@@ -138,11 +144,11 @@ export function getTowerSeedRows(towerId: TowerId): L4WorkforceRow[] {
   const { fte, contractor } = TOWER_HEADCOUNT[towerId] ?? { fte: 50, contractor: 5 };
   const flat = flattenCapabilityMap(map);
   const sized = applyHeadcountToRows(flat, fte, contractor, CONTRACTOR_L2_HINT[towerId]);
-  return withL4Defaults(sized, towerId);
+  return withL3Defaults(sized, towerId);
 }
 
 /**
- * Full per-tower starter state: rows with L4 assessments, plus baseline computed as the
+ * Full per-tower starter state: rows with L3 assessments, plus baseline computed as the
  * cost-weighted roll-up of those assessments (so the baseline matches what the summary
  * shows for the seeded scenario).
  */
@@ -150,7 +156,7 @@ export function getTowerSeedState(towerId: TowerId): TowerAssessState {
   const rows = getTowerSeedRows(towerId);
   if (rows.length === 0) {
     return {
-      l4Rows: rows,
+      l3Rows: rows,
       baseline: { ...defaultTowerBaseline },
       status: "empty",
       lastUpdated: ASSESS_SEED_REFERENCE_AT,
@@ -166,7 +172,7 @@ export function getTowerSeedState(towerId: TowerId): TowerAssessState {
   // should promote a tower to "complete". Otherwise the hub falsely reads
   // "Reviewed by Tower Lead" before any human review has happened.
   return {
-    l4Rows: rows,
+    l3Rows: rows,
     baseline: {
       baselineOffshorePct: Math.round(w.offshorePct),
       baselineAIPct: Math.round(w.aiPct),
@@ -183,7 +189,7 @@ export function buildSeededAssessProgramV2(): AssessProgramV2 {
     tmap[id] = getTowerSeedState(id);
   }
   return {
-    version: 3,
+    version: 4,
     towers: tmap,
     global: { ...defaultGlobalAssessAssumptions },
   };

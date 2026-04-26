@@ -1,8 +1,8 @@
-import type { L4WorkforceRow, TowerId } from "./types";
+import type { L3WorkforceRow, TowerId } from "./types";
 
 /**
  * Generates a 1 to 2 line rationale for the offshore% / AI% starter default
- * applied to a single L4 row.
+ * applied to a single L3 row.
  *
  * The rules below mirror `seedAssessmentDefaults.ts` — when the seed bumps a
  * row up or down on offshore or AI, the rationale here should explain why so a
@@ -151,8 +151,8 @@ const KEYWORD_NOTES: Array<{
 
 const FALLBACK: RowRationale = {
   offshore:
-    "Starter blended from the tower prior plus L4 keyword cues (complexity, US requirement, AI feasibility).",
-  ai: "Starter blended from the tower prior plus L4 keyword cues for AI fit.",
+    "Starter blended from the tower prior plus L3 keyword cues (complexity, US requirement, AI feasibility).",
+  ai: "Starter blended from the tower prior plus L3 keyword cues for AI fit.",
 };
 
 /**
@@ -160,9 +160,9 @@ const FALLBACK: RowRationale = {
  * additively: if a row matches multiple, the most specific override wins for
  * each lever (last match in the array). Falls back to the tower-level note.
  */
-export function rowStarterRationale(towerId: TowerId, row: L4WorkforceRow): RowRationale {
+export function rowStarterRationale(towerId: TowerId, row: L3WorkforceRow): RowRationale {
   const towerNote = TOWER_NOTES[towerId] ?? FALLBACK;
-  const text = `${row.l2} ${row.l3} ${row.l4}`.toLowerCase();
+  const text = `${row.l2} ${row.l3}`.toLowerCase();
   let offshore = towerNote.offshore;
   let ai = towerNote.ai;
   for (const rule of KEYWORD_NOTES) {

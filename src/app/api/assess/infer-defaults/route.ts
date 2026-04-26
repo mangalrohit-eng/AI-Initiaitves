@@ -4,7 +4,7 @@
  * Body:
  *   {
  *     towerId: TowerId,
- *     rows: [{ l2: string, l3: string, l4: string }, ...]
+ *     rows: [{ l2: string, l3: string }, ...]
  *   }
  *
  * Returns:
@@ -29,8 +29,8 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE_NAME, isValidSessionToken } from "@/lib/auth";
 import {
-  inferL4Defaults,
-  type L4Defaults,
+  inferL3Defaults,
+  type L3Defaults,
 } from "@/data/assess/seedAssessmentDefaults";
 import {
   inferTowerDefaultsWithLLM,
@@ -50,7 +50,7 @@ type InferDefaultsBody = {
   rows?: unknown;
 };
 
-type RowDefault = L4Defaults & { rationale?: string };
+type RowDefault = L3Defaults & { rationale?: string };
 
 export async function POST(req: Request) {
   if (!(await isAuthed())) {
@@ -90,7 +90,6 @@ export async function POST(req: Request) {
     return {
       l2: typeof r.l2 === "string" ? r.l2 : "",
       l3: typeof r.l3 === "string" ? r.l3 : "",
-      l4: typeof r.l4 === "string" ? r.l4 : "",
     };
   });
 
@@ -126,7 +125,7 @@ export async function POST(req: Request) {
   // Heuristic fallback. Wrapped in try/catch only because it's the last line
   // of defence — if the heuristic itself throws, that IS a 500.
   try {
-    const defaults: RowDefault[] = rows.map((r) => inferL4Defaults(towerId, r.l2, r.l3, r.l4));
+    const defaults: RowDefault[] = rows.map((r) => inferL3Defaults(towerId, r.l2, r.l3));
     return NextResponse.json(
       { ok: true, source: "heuristic" as const, defaults, warning },
       { status: 200 },

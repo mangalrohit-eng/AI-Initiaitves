@@ -1,13 +1,13 @@
 import type {
   AssessProgramV2,
   GlobalAssessAssumptions,
-  L4WorkforceRow,
+  L3WorkforceRow,
   TowerBaseline,
   TowerId,
 } from "@/data/assess/types";
 import { towers } from "@/data/towers";
 
-export type RowCostResult = { row: L4WorkforceRow; annualCost: number };
+export type RowCostResult = { row: L3WorkforceRow; annualCost: number };
 
 /* =====================================================================
  * SAVINGS MODEL — single source of truth
@@ -18,7 +18,7 @@ export type RowCostResult = { row: L4WorkforceRow; annualCost: number };
  * — i.e., the Assumptions tab. There are no magic lever weights, caps,
  * or combine-mode toggles in this file by design.
  *
- * Math (per L4 row):
+ * Math (per L3 row):
  *   POOL  = annualSpendUsd  if set, else
  *           fteOn  × g.blendedFteOnshore
  *         + fteOff × g.blendedFteOffshore
@@ -39,9 +39,9 @@ export type RowCostResult = { row: L4WorkforceRow; annualCost: number };
  *
  * ==================================================================== */
 
-/** $ pool for one L4 row — sum of rates × headcount, or annualSpendUsd override. */
+/** $ pool for one L3 row — sum of rates × headcount, or annualSpendUsd override. */
 export function rowAnnualCost(
-  row: L4WorkforceRow,
+  row: L3WorkforceRow,
   g: GlobalAssessAssumptions,
 ): number {
   if (row.annualSpendUsd != null && row.annualSpendUsd > 0) {
@@ -55,17 +55,17 @@ export function rowAnnualCost(
   );
 }
 
-export function towerPoolUsd(rows: L4WorkforceRow[], g: GlobalAssessAssumptions): number {
+export function towerPoolUsd(rows: L3WorkforceRow[], g: GlobalAssessAssumptions): number {
   return rows.reduce((s, r) => s + rowAnnualCost(r, g), 0);
 }
 
 /**
- * Cost-weighted offshore / AI dials across L4 rows. Used for *display only*
+ * Cost-weighted offshore / AI dials across L3 rows. Used for *display only*
  * (e.g., "this tower averages 32% offshore"). Not used to compute $ —
  * the $ comes from per-row math summed, not from these aggregates.
  */
 export function weightedTowerLevers(
-  rows: L4WorkforceRow[],
+  rows: L3WorkforceRow[],
   baseline: TowerBaseline,
   g: GlobalAssessAssumptions,
 ): { offshorePct: number; aiPct: number } {
@@ -76,8 +76,8 @@ export function weightedTowerLevers(
     const c = rowAnnualCost(r, g);
     if (c <= 0) continue;
     w += c;
-    wO += c * (r.l4OffshoreAssessmentPct ?? baseline.baselineOffshorePct);
-    wA += c * (r.l4AiImpactAssessmentPct ?? baseline.baselineAIPct);
+    wO += c * (r.offshoreAssessmentPct ?? baseline.baselineOffshorePct);
+    wA += c * (r.aiImpactAssessmentPct ?? baseline.baselineAIPct);
   }
   if (w <= 0) {
     return { offshorePct: baseline.baselineOffshorePct, aiPct: baseline.baselineAIPct };
@@ -87,7 +87,7 @@ export function weightedTowerLevers(
 
 /** Cost share by L2 name — drives the concentration tile on tower pages. */
 export function l2Concentration(
-  rows: L4WorkforceRow[],
+  rows: L3WorkforceRow[],
   g: GlobalAssessAssumptions,
 ): { l2: string; sharePct: number; subtotal: number }[] {
   const byL2 = new Map<string, number>();
@@ -119,16 +119,15 @@ export type RowSavings = {
  * tower baseline. All rates come from `g`.
  */
 export function rowModeledSaving(
-  row: L4WorkforceRow,
+  row: L3WorkforceRow,
   baseline: TowerBaseline,
   g: GlobalAssessAssumptions,
 ): RowSavings {
   const pool = rowAnnualCost(row, g);
-  const offshorePct = row.l4OffshoreAssessmentPct ?? baseline.baselineOffshorePct;
-  const aiPct = row.l4AiImpactAssessmentPct ?? baseline.baselineAIPct;
+  const offshorePct = row.offshoreAssessmentPct ?? baseline.baselineOffshorePct;
+  const aiPct = row.aiImpactAssessmentPct ?? baseline.baselineAIPct;
   const offshore = computeRowOffshore(row, offshorePct, g);
   const ai = pool * (aiPct / 100);
-  // Sequential combine: AI removes work first, offshore arbitrage on what's left.
   const combined = ai + offshore * (1 - aiPct / 100);
   return { pool, offshorePct, aiPct, offshore, ai, combined };
 }
@@ -138,7 +137,7 @@ export function rowModeledSaving(
  * Two branches: headcount-based (preferred) and annualSpendUsd fallback.
  */
 function computeRowOffshore(
-  row: L4WorkforceRow,
+  row: L3WorkforceRow,
   offshoreDialPct: number,
   g: GlobalAssessAssumptions,
 ): number {
@@ -148,8 +147,6 @@ function computeRowOffshore(
   const fteTotal = row.fteOnshore + row.fteOffshore;
   const ctrTotal = row.contractorOnshore + row.contractorOffshore;
 
-  // Fallback: row has only annualSpendUsd, no headcount counts. Use the
-  // FTE wage-gap factor against the whole spend × dial. Still rate-driven.
   if (fteTotal <= 0 && ctrTotal <= 0) {
     if (row.annualSpendUsd == null || row.annualSpendUsd <= 0) return 0;
     const onshoreRate = g.blendedFteOnshore;
@@ -158,7 +155,6 @@ function computeRowOffshore(
     return row.annualSpendUsd * dial * wageGapFactor;
   }
 
-  // Headcount-based: only the headcount that needs to *move* offshore generates savings.
   const targetOffFte = fteTotal * dial;
   const movableFte = Math.max(0, targetOffFte - row.fteOffshore);
   const fteSavings = movableFte * Math.max(0, g.blendedFteOnshore - g.blendedFteOffshore);
@@ -192,7 +188,7 @@ export type TowerSavings = {
  * Returns the cost-weighted offshore/AI % for display (not used to compute $).
  */
 export function modeledSavingsForTower(
-  rows: L4WorkforceRow[],
+  rows: L3WorkforceRow[],
   baseline: TowerBaseline,
   g: GlobalAssessAssumptions,
 ): TowerSavings {
@@ -233,8 +229,8 @@ export function towerOutcomeForState(
   state: AssessProgramV2,
 ): TowerOutcome | null {
   const t = state.towers[towerId];
-  if (!t?.l4Rows.length) return null;
-  return modeledSavingsForTower(t.l4Rows, t.baseline, state.global);
+  if (!t?.l3Rows.length) return null;
+  return modeledSavingsForTower(t.l3Rows, t.baseline, state.global);
 }
 
 export function allTowerIdsValid(id: string): id is TowerId {
@@ -246,20 +242,20 @@ export function allTowerIdsValid(id: string): id is TowerId {
  * (or AI) dial bumped +10 pts? Used by tooltips next to a row.
  */
 export function rowSensitivityDeltas(
-  row: L4WorkforceRow,
+  row: L3WorkforceRow,
   baseline: TowerBaseline,
   g: GlobalAssessAssumptions,
 ): { dOff10: number; dAi10: number } {
   const cur = rowModeledSaving(row, baseline, g).combined;
-  const offDial = (row.l4OffshoreAssessmentPct ?? baseline.baselineOffshorePct) + 10;
-  const aiDial = (row.l4AiImpactAssessmentPct ?? baseline.baselineAIPct) + 10;
+  const offDial = (row.offshoreAssessmentPct ?? baseline.baselineOffshorePct) + 10;
+  const aiDial = (row.aiImpactAssessmentPct ?? baseline.baselineAIPct) + 10;
   const offBumped = rowModeledSaving(
-    { ...row, l4OffshoreAssessmentPct: Math.min(100, offDial) },
+    { ...row, offshoreAssessmentPct: Math.min(100, offDial) },
     baseline,
     g,
   ).combined;
   const aiBumped = rowModeledSaving(
-    { ...row, l4AiImpactAssessmentPct: Math.min(100, aiDial) },
+    { ...row, aiImpactAssessmentPct: Math.min(100, aiDial) },
     baseline,
     g,
   ).combined;
@@ -267,7 +263,7 @@ export function rowSensitivityDeltas(
 }
 
 export type ProgramImpactSummary = {
-  /** Tower ids with at least one L4 row contributing to the program total. */
+  /** Tower ids with at least one L3 row contributing to the program total. */
   contributingTowers: TowerId[];
   /** Sum of pool $ across contributing towers. */
   totalPool: number;
@@ -317,9 +313,9 @@ export function programImpactSummary(state: AssessProgramV2): ProgramImpactSumma
 }
 
 /**
- * Program-level sensitivity ribbon: net $ if every L4's offshore (or AI) dial
- * bumped +10 pts. Computed by re-running each row with the bumped dial and
- * summing the deltas.
+ * Program-level sensitivity ribbon: net $ if every L3's offshore (or AI) dial
+ * bumped +10 pts. Each L3 row holds one dial pair, so summing the +10 delta
+ * across every L3 row is exactly the program-wide +10 sensitivity.
  */
 export function programSensitivityDeltas(state: AssessProgramV2): {
   dOff10: number;
@@ -329,8 +325,8 @@ export function programSensitivityDeltas(state: AssessProgramV2): {
   let dAi10 = 0;
   for (const t of towers) {
     const st = state.towers[t.id];
-    if (!st?.l4Rows.length) continue;
-    for (const r of st.l4Rows) {
+    if (!st?.l3Rows.length) continue;
+    for (const r of st.l3Rows) {
       const d = rowSensitivityDeltas(r, st.baseline, state.global);
       dOff10 += d.dOff10;
       dAi10 += d.dAi10;
@@ -345,7 +341,7 @@ export function buildExportCsv(program: AssessProgramV2): string {
   ];
   for (const t of towers) {
     const st = program.towers[t.id];
-    if (!st?.l4Rows.length) continue;
+    if (!st?.l3Rows.length) continue;
     const o = towerOutcomeForState(t.id, program);
     if (!o) continue;
     lines.push(

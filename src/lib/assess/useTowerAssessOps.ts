@@ -3,12 +3,12 @@
 import * as React from "react";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
-import type { L4WorkforceRow, TowerId } from "@/data/assess/types";
+import type { L3WorkforceRow, TowerId } from "@/data/assess/types";
 import { defaultTowerState } from "@/data/assess/types";
 import { getTowerSeedState } from "@/data/assess/seedAssessProgram";
 import {
   applyTowerStarterDefaults,
-  countBlankL4Defaults,
+  countBlankL3Defaults,
 } from "@/data/assess/seedAssessmentDefaults";
 import { parseAssessFile } from "@/lib/assess/parseAssessFile";
 import { weightedTowerLevers } from "@/lib/assess/scenarioModel";
@@ -54,28 +54,28 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
   }, []);
 
   const tState = program.towers[towerId] ?? { ...defaultTowerState() };
-  const rows = tState.l4Rows;
+  const rows = tState.l3Rows;
   const global = program.global;
   const isComplete = tState.status === "complete";
 
   const hasHeadcount = rows.some(
     (r) => r.fteOnshore + r.fteOffshore + r.contractorOnshore + r.contractorOffshore > 0,
   );
-  const hasAnyOffshoreInput = rows.some((r) => r.l4OffshoreAssessmentPct != null);
-  const hasAnyAiInput = rows.some((r) => r.l4AiImpactAssessmentPct != null);
+  const hasAnyOffshoreInput = rows.some((r) => r.offshoreAssessmentPct != null);
+  const hasAnyAiInput = rows.some((r) => r.aiImpactAssessmentPct != null);
 
   const patchRow = React.useCallback(
-    (id: string, patch: Partial<L4WorkforceRow>) => {
+    (id: string, patch: Partial<L3WorkforceRow>) => {
       const cur = getAssessProgram().towers[towerId] ?? defaultTowerState();
       setTowerAssess(towerId, {
-        l4Rows: cur.l4Rows.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+        l3Rows: cur.l3Rows.map((r) => (r.id === id ? { ...r, ...patch } : r)),
         status: cur.status === "empty" ? "data" : cur.status,
       });
     },
     [towerId],
   );
 
-  const importOp = useAsyncOp<{ rows: L4WorkforceRow[]; warnings: string[] }, [File]>({
+  const importOp = useAsyncOp<{ rows: L3WorkforceRow[]; warnings: string[] }, [File]>({
     run: async (f) => {
       const res = await parseAssessFile(f);
       if (!res.rows.length) {
@@ -85,7 +85,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       // confirmation timestamp so the journey stepper marks Capability Map
       // complete and downstream consumers know the map is authored, not seeded.
       setTowerAssess(towerId, {
-        l4Rows: res.rows,
+        l3Rows: res.rows,
         status: "data",
         capabilityMapConfirmedAt: new Date().toISOString(),
       });
@@ -112,25 +112,25 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       // prior confirmation so the journey stepper reverts the Capability Map
       // step to "in progress" until the lead actually uploads.
       setTowerAssess(towerId, {
-        l4Rows: seed.l4Rows,
+        l3Rows: seed.l3Rows,
         baseline: seed.baseline,
         status: seed.status,
         capabilityMapConfirmedAt: undefined,
       });
       if (sync?.canSync) await sync.flushSave();
-      return { rows: seed.l4Rows.length };
+      return { rows: seed.l3Rows.length };
     },
     messages: {
       loadingTitle: `Loading sample for ${towerName}`,
       successTitle: ({ rows: r }) =>
         `Loaded ${r} starter row${r === 1 ? "" : "s"} for ${towerName}`,
       successDescription:
-        "Heuristic starter defaults applied. Review and override per L4 in Configure Impact Levers.",
+        "Heuristic starter defaults applied. Review and override per L3 in Configure Impact Levers.",
       errorTitle: "Could not load sample",
     },
   });
 
-  const blanks = React.useMemo(() => countBlankL4Defaults(rows), [rows]);
+  const blanks = React.useMemo(() => countBlankL3Defaults(rows), [rows]);
 
   const fillBlanksOp = useAsyncOp<{ changedRows: number; changedCells: number }, []>({
     run: async () => {
@@ -141,7 +141,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       }
       const w = weightedTowerLevers(result.rows, tState.baseline, global);
       setTowerAssess(towerId, {
-        l4Rows: result.rows,
+        l3Rows: result.rows,
         baseline: {
           baselineOffshorePct: Math.round(w.offshorePct),
           baselineAIPct: Math.round(w.aiPct),
@@ -169,7 +169,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       const result = applyTowerStarterDefaults(rows, towerId, "overwriteAll");
       const w = weightedTowerLevers(result.rows, tState.baseline, global);
       setTowerAssess(towerId, {
-        l4Rows: result.rows,
+        l3Rows: result.rows,
         baseline: {
           baselineOffshorePct: Math.round(w.offshorePct),
           baselineAIPct: Math.round(w.aiPct),
@@ -190,31 +190,32 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     },
   });
 
-  const onConfirmStep = React.useCallback(
-    (key: keyof typeof CHECKLIST_LABELS) => {
-      setTowerAssess(towerId, { [key]: new Date().toISOString() });
-      toast.success({ title: `${CHECKLIST_LABELS[key]} marked reviewed` });
-    },
-    [towerId, toast],
-  );
-
   const doMarkComplete = React.useCallback(async () => {
     if (!rows.length) {
       toast.error({ title: "Load a capability map & headcount first" });
       return false;
     }
     const w = weightedTowerLevers(rows, tState.baseline, global);
+    const now = new Date().toISOString();
     setTowerAssess(towerId, {
       baseline: {
         baselineOffshorePct: w.offshorePct,
         baselineAIPct: w.aiPct,
       },
+      // Stamp the three impact-lever review timestamps so the read-time
+      // migration (`migrateBuggySeedComplete`) won't demote this back to
+      // "data" on the next reload. We deliberately leave
+      // `capabilityMapConfirmedAt` alone — that's set on the Capability Map
+      // page when a tower lead uploads or confirms their map.
+      headcountConfirmedAt: now,
+      offshoreConfirmedAt: now,
+      aiConfirmedAt: now,
       status: "complete",
     });
     if (sync?.canSync) await sync.flushSave();
     toast.success({
       title: `${towerName} reviewed by tower lead`,
-      description: "It now anchors the scenario summary. Open AI Initiatives next.",
+      description: "It now anchors the impact estimate. Open AI Initiatives next.",
       action: {
         label: "Open AI Initiatives",
         onClick: () => {
@@ -250,15 +251,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     sampleLoadOp,
     fillBlanksOp,
     overwriteAllOp,
-    onConfirmStep,
     doMarkComplete,
     doUnmarkComplete,
   };
 }
-
-const CHECKLIST_LABELS = {
-  capabilityMapConfirmedAt: "Capability map",
-  headcountConfirmedAt: "Headcount",
-  offshoreConfirmedAt: "Offshore dials",
-  aiConfirmedAt: "AI dials",
-} as const;

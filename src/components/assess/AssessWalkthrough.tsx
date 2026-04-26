@@ -95,7 +95,7 @@ export function AssessWalkthrough() {
 
   return (
     <section
-      aria-label="How to run the workshop"
+      aria-label="How the assessment works"
       className="relative overflow-hidden rounded-3xl border border-forge-border bg-gradient-to-br from-accent-purple/5 via-forge-surface to-forge-surface p-5 shadow-card sm:p-6"
     >
       <button
@@ -108,7 +108,7 @@ export function AssessWalkthrough() {
       </button>
       <div className="inline-flex items-center gap-2 rounded-full border border-forge-border bg-forge-surface px-3 py-1 text-xs font-medium text-forge-subtle">
         <Sparkles className="h-3 w-3 text-accent-purple" aria-hidden />
-        Workshop walkthrough — 60 seconds
+        How it works — 60 seconds
       </div>
       <h2 className="mt-3 max-w-2xl font-display text-lg font-semibold leading-tight text-forge-ink sm:text-xl">
         {headline}

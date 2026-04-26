@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import { CapabilityScoreboard } from "@/components/assess/CapabilityScoreboard";
-import { WorkshopToolsDrawer } from "@/components/assess/WorkshopToolsDrawer";
+import { ProgramToolsDrawer } from "@/components/assess/ProgramToolsDrawer";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PageShell } from "@/components/PageShell";
 import { Term } from "@/components/help/Term";
@@ -52,8 +52,8 @@ function statusCopy(s: RowStatus): { label: string; className: string } {
  * Confirm the L1 to L4 tree and the headcount per tower. The hub
  * shows the program-wide capability scoreboard at the top, a focused "next
  * tower" CTA, and a tight tower list. Templates / backup / admin re-seed have
- * been demoted to `WorkshopToolsDrawer` at the bottom so the page stays
- * focused on the workshop loop.
+ * been demoted to `ProgramToolsDrawer` at the bottom so the page stays
+ * focused on the assessment loop.
  */
 export function CapabilityMapHubClient() {
   const sync = useAssessSync();
@@ -76,8 +76,8 @@ export function CapabilityMapHubClient() {
       if (sync?.canSync) await sync.flushSave();
     },
     messages: {
-      loadingTitle: "Loading sample workshop across 13 towers",
-      successTitle: "Sample workshop loaded",
+      loadingTitle: "Loading sample program across 13 towers",
+      successTitle: "Sample program loaded",
       successDescription:
         "All 13 towers seeded with capability maps, headcount, and starter dials.",
       errorTitle: "Couldn't load sample",
@@ -116,7 +116,7 @@ export function CapabilityMapHubClient() {
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">
               <span className="font-mono">&gt;</span>
-              Step 1 of the workshop
+              Step 1
             </div>
             <h1 className="mt-2 font-display text-3xl font-semibold text-forge-ink">
               &gt; Tower Capability Map
@@ -132,9 +132,9 @@ export function CapabilityMapHubClient() {
           </div>
           <span
             className="rounded-full border border-forge-hint/40 bg-forge-well/50 px-3 py-1 text-[11px] font-medium text-forge-subtle"
-            title="Workshop model — figures are not Versant-reported and not a system of record."
+            title="Illustrative model — figures are not Versant-reported and not a system of record."
           >
-            Workshop — illustrative, not reported
+            Illustrative — not Versant-reported
           </span>
         </div>
 
@@ -153,7 +153,7 @@ export function CapabilityMapHubClient() {
                   Start here
                 </div>
                 <h2 className="mt-2 font-display text-lg font-semibold text-forge-ink">
-                  See the workshop in action
+                  See the assessment in action
                 </h2>
                 <p className="mt-1 text-sm text-forge-body">
                   Load the illustrative sample across all 13 towers, then jump to any tower
@@ -168,7 +168,7 @@ export function CapabilityMapHubClient() {
                   className="inline-flex items-center gap-2 rounded-lg bg-accent-purple px-4 py-2 text-sm font-medium text-white hover:bg-accent-purple-dark disabled:opacity-60"
                 >
                   <Sparkles className="h-4 w-4" />
-                  {sampleLoadOp.state === "loading" ? "Loading..." : "Load sample workshop"}
+                  {sampleLoadOp.state === "loading" ? "Loading..." : "Load sample program"}
                 </button>
                 <a
                   href="#tower-list"
@@ -248,7 +248,7 @@ export function CapabilityMapHubClient() {
           })}
         </ul>
 
-        <WorkshopToolsDrawer />
+        <ProgramToolsDrawer />
       </div>
     </PageShell>
   );

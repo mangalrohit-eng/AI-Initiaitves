@@ -140,7 +140,7 @@ export type GenerateL4ActivitiesResult = {
  * something to display. Generated lists are persisted via `l4Activities`.
  *
  * On any LLM failure the server returns a deterministic canonical-map-derived
- * fallback so the action never blocks the workshop.
+ * fallback so the action never blocks the program.
  */
 export async function clientGenerateL4Activities(
   towerId: TowerId,

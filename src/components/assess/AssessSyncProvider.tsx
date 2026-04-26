@@ -161,7 +161,7 @@ export function AssessSyncProvider({ children }: { children: React.ReactNode }) 
     if (!loadError || !toast) return;
     toast.error({
       id: "assess-load-error",
-      title: "Couldn't load workshop data",
+      title: "Couldn't load assessment data",
       description: loadError,
       action: {
         label: "Retry",
@@ -200,7 +200,7 @@ export function AssessSyncProvider({ children }: { children: React.ReactNode }) 
         </>
       ) : (
         <div className="mx-auto max-w-lg px-4 py-20 text-center text-sm text-forge-hint">
-          Loading assess workshop…
+          Loading assessment…
         </div>
       )}
     </AssessSyncContext.Provider>

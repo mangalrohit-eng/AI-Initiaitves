@@ -94,7 +94,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     },
     messages: {
       loadingTitle: `Importing ${towerName} capability map & headcount`,
-      loadingDescription: "Parsing rows and saving to the workshop...",
+      loadingDescription: "Parsing rows and saving to the program...",
       successTitle: ({ rows: r }) =>
         `Imported ${r.length} row${r.length === 1 ? "" : "s"} for ${towerName}`,
       successDescription: ({ warnings }) =>

@@ -1,6 +1,6 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Assess workshop database (optional)
+## Assess program database (optional)
 
 The `/assess` product can persist the full `AssessProgramV2` document to **Postgres** (one row, JSONB). Without a DB URL in the environment, assess data stays in the browser only. The app accepts **`DATABASE_URL`**, or **`POSTGRES_URL` / `POSTGRES_PRISMA_URL`** (Neon + Vercel templates) in that order.
 

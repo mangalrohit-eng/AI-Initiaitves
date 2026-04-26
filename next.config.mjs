@@ -14,7 +14,7 @@ const nextConfig = {
     return [
       // The original /assess hub split into /capability-map (step 1) and
       // /impact-levers (step 2). External links from older docs / decks land
-      // on /capability-map by default — that's the workshop's first step.
+      // on /capability-map by default — that's the assessment's first step.
       {
         source: "/assess",
         destination: "/capability-map",

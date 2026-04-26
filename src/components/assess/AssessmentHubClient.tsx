@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { AssessmentScoreboard } from "@/components/assess/AssessmentScoreboard";
 import { ImpactHero } from "@/components/assess/ImpactHero";
-import { WorkshopToolsDrawer } from "@/components/assess/WorkshopToolsDrawer";
+import { ProgramToolsDrawer } from "@/components/assess/ProgramToolsDrawer";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PageShell } from "@/components/PageShell";
 import { Term } from "@/components/help/Term";
@@ -52,7 +52,7 @@ function dialStatusCopy(s: DialStatus): { label: string; className: string } {
  * Lands the user on the live program-wide impact (animated $) and a tower
  * grid showing whether dials have been moved off the heuristic defaults. The
  * grid links straight into per-tower lever pages. Templates / backup / admin
- * re-seed live in `WorkshopToolsDrawer` at the bottom.
+ * re-seed live in `ProgramToolsDrawer` at the bottom.
  */
 export function AssessmentHubClient() {
   const [program, setProgram] = React.useState<AssessProgramV2>(getAssessProgram);
@@ -320,7 +320,7 @@ export function AssessmentHubClient() {
           })}
         </ul>
 
-        <WorkshopToolsDrawer />
+        <ProgramToolsDrawer />
       </div>
     </PageShell>
   );

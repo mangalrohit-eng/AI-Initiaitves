@@ -282,7 +282,7 @@ export function AssessmentSummaryClient() {
           <div className="mt-8 rounded-2xl border border-dashed border-forge-border bg-forge-well/40 p-6 text-center">
             <p className="text-sm text-forge-subtle">
               No tower capability map &amp; headcount loaded yet. Start by loading the sample
-              workshop or picking a tower on the Capability Map.
+              program or picking a tower on the Capability Map.
             </p>
             <Link
               href="/capability-map"

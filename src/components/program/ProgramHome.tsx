@@ -13,31 +13,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
-import type { ForgeProduct } from "@/config/products";
-import type { PortalAudience } from "@/lib/portalAudience";
-import {
-  getPersona,
-  setPersona as persistPersona,
-  subscribe,
-  type Persona,
-} from "@/lib/localStore";
-
-type Props = {
-  /** Currently unused — kept for API compatibility while the landing page is
-   *  intentionally a slim 5-step router. Remove if/when the caller drops it. */
-  products?: ForgeProduct[];
-  portalMode: PortalAudience;
-};
-
-const PERSONA_OPTIONS: ReadonlyArray<{
-  id: Persona;
-  label: string;
-  showInClientMode: boolean;
-}> = [
-  { id: "versant", label: "Versant tower lead", showInClientMode: true },
-  { id: "accenture", label: "Accenture tower lead", showInClientMode: false },
-  { id: "executive", label: "Executive sponsor", showInClientMode: true },
-];
 
 type StepStatus = "active" | "coming-soon";
 
@@ -110,23 +85,7 @@ const FLOW: ReadonlyArray<FlowStep> = [
   },
 ];
 
-export function ProgramHome({ portalMode }: Props) {
-  const [persona, setPersonaState] = React.useState<Persona | null>(null);
-
-  React.useEffect(() => {
-    setPersonaState(getPersona());
-    return subscribe("persona", () => setPersonaState(getPersona()));
-  }, []);
-
-  const visiblePersonas = PERSONA_OPTIONS.filter(
-    (p) => portalMode !== "client" || p.showInClientMode,
-  );
-
-  const onChoosePersona = (id: Persona) => {
-    persistPersona(id);
-    setPersonaState(id);
-  };
-
+export function ProgramHome() {
   return (
     <PageShell>
       <div className="mx-auto max-w-6xl px-4 pb-10 pt-4 sm:px-6 lg:px-8">
@@ -136,34 +95,6 @@ export function ProgramHome({ portalMode }: Props) {
             <Sparkles className="h-3 w-3" aria-hidden />
             Forge Program · Accenture × Versant
           </span>
-          <div
-            className="flex flex-wrap items-center gap-1"
-            role="group"
-            aria-label="Pick your persona"
-          >
-            <span className="mr-1 text-[10px] uppercase tracking-wider text-forge-hint">
-              I&apos;m a:
-            </span>
-            {visiblePersonas.map((p) => {
-              const selected = persona === p.id;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => onChoosePersona(p.id)}
-                  className={
-                    "rounded-full border px-2 py-0.5 text-[11px] font-medium transition " +
-                    (selected
-                      ? "border-accent-purple bg-accent-purple text-white"
-                      : "border-forge-border bg-forge-surface text-forge-body hover:border-accent-purple/40")
-                  }
-                >
-                  {p.label}
-                </button>
-              );
-            })}
-          </div>
         </header>
 
         {/* ========== INTRO ========== */}
@@ -205,7 +136,7 @@ export function ProgramHome({ portalMode }: Props) {
             Design initiatives — steps 4–5
           </span>
           <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-forge-border bg-forge-surface px-2 py-0.5">
-            Workshop modelling — illustrative, not Versant-reported
+            Illustrative model — not Versant-reported
           </span>
         </div>
       </div>

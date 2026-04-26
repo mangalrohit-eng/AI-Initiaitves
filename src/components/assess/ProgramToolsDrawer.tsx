@@ -33,10 +33,10 @@ type Section = "samples" | "backup" | "reseed";
  * and samples, Backup and restore, and Admin re-seed.
  *
  * Renders at the bottom of the Capability Map and Configure Impact Levers hubs,
- * collapsed by default so the page stays focused on the live workshop. Internal-only
+ * collapsed by default so the page stays focused on the live program. Internal-only
  * facilities (Re-seed) are hidden when the portal audience is external.
  */
-export function WorkshopToolsDrawer() {
+export function ProgramToolsDrawer() {
   const sync = useAssessSync();
   const toast = useToast();
   const allowedInternal = isInternalSurfaceAllowed(getPortalAudience());
@@ -53,8 +53,8 @@ export function WorkshopToolsDrawer() {
       if (sync?.canSync) await sync.flushSave();
     },
     messages: {
-      loadingTitle: "Loading sample workshop across 13 towers",
-      successTitle: "Sample workshop loaded",
+      loadingTitle: "Loading sample program across 13 towers",
+      successTitle: "Sample program loaded",
       successDescription: "All 13 towers seeded with capability maps, headcount, and starter dials.",
       errorTitle: "Couldn't load sample",
     },
@@ -97,7 +97,7 @@ export function WorkshopToolsDrawer() {
     },
     messages: {
       loadingTitle: "Importing JSON backup",
-      loadingDescription: "Replacing the workshop state with the file's contents...",
+      loadingDescription: "Replacing the program state with the file's contents...",
       successTitle: "Backup imported",
       successDescription: () =>
         sync?.canSync
@@ -122,7 +122,7 @@ export function WorkshopToolsDrawer() {
       return { towers: data.towers ?? 0 };
     },
     messages: {
-      loadingTitle: "Re-seeding workshop from latest defaults",
+      loadingTitle: "Re-seeding program from latest defaults",
       loadingDescription: "Rebuilding L1-L4 maps and starter heuristic for all 13 towers...",
       successTitle: ({ towers }) => `Re-seeded ${towers} towers from latest defaults`,
       successDescription:
@@ -144,7 +144,7 @@ export function WorkshopToolsDrawer() {
 
   return (
     <section
-      id="workshop-tools"
+      id="program-tools"
       className="mt-12 rounded-2xl border border-forge-border bg-forge-surface/40"
     >
       <button
@@ -156,7 +156,7 @@ export function WorkshopToolsDrawer() {
         <span className="inline-flex items-center gap-2">
           <Wrench className="h-3.5 w-3.5 text-forge-hint" aria-hidden />
           <span className="font-mono text-[11px] uppercase tracking-wider text-forge-subtle">
-            Workshop tools
+            Program tools
           </span>
           <span className="text-xs text-forge-hint">
             templates, backup, {allowedInternal ? "admin · " : ""}rarely needed
@@ -236,7 +236,7 @@ export function WorkshopToolsDrawer() {
                     className="inline-flex items-center gap-2 rounded-lg border border-accent-purple/30 bg-accent-purple/10 px-3 py-2 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/20 disabled:opacity-60"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
-                    {sampleLoadOp.state === "loading" ? "Loading..." : "Load sample workshop"}
+                    {sampleLoadOp.state === "loading" ? "Loading..." : "Load sample program"}
                   </button>
                 </div>
               </div>
@@ -246,7 +246,7 @@ export function WorkshopToolsDrawer() {
               <div className="space-y-3">
                 <p className="text-xs text-forge-subtle">
                   {dbReady
-                    ? "Workshop state syncs to Postgres on every change. Use JSON export to snapshot for SharePoint, Teams, or email."
+                    ? "Program state syncs to Postgres on every change. Use JSON export to snapshot for SharePoint, Teams, or email."
                     : "Without DATABASE_URL, assess data stays in this browser only. JSON export still backs up everything for handoff."}
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -328,15 +328,15 @@ export function WorkshopToolsDrawer() {
           const ok = await importOp.fire(f);
           if (ok !== undefined) {
             toast.info({
-              title: "Workshop state replaced",
+              title: "Program state replaced",
               description: f.name,
             });
           }
         }}
-        title="Replace the current workshop with this file?"
+        title="Replace the current program with this file?"
         description={
           <>
-            All current workshop state (capability map, headcount, dials, scenarios) will be replaced by
+            All current program state (capability map, headcount, dials, scenarios) will be replaced by
             the contents of <span className="font-mono">{pendingFile?.name ?? "this file"}</span>.
             Use Export first if you want to keep the current state as a backup.
           </>
@@ -354,7 +354,7 @@ export function WorkshopToolsDrawer() {
           setConfirmReseedOpen(false);
           await reseedOp.fire();
         }}
-        title="Replace the workshop program with the latest seed?"
+        title="Replace the program with the latest seed?"
         description={
           <>
             All 13 towers will be rebuilt from the latest L1-L4 maps and starter heuristic.

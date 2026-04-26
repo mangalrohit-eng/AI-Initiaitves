@@ -108,7 +108,7 @@ export function AssessOnboardingHero({
 
   return (
     <section
-      aria-label="How to run the capability map workshop"
+      aria-label="How to run the capability map review"
       className="relative overflow-hidden rounded-3xl border border-forge-border bg-gradient-to-br from-accent-purple/5 via-forge-surface to-forge-surface p-6 shadow-card sm:p-8"
     >
       <button
@@ -127,7 +127,7 @@ export function AssessOnboardingHero({
             New here? Three steps and your tower is done.
           </div>
           <h2 className="mt-4 font-display text-xl font-semibold leading-tight text-forge-ink sm:text-2xl">
-            Capability Map workshop — about 30 minutes per tower.
+            Capability Map review — about 30 minutes per tower.
           </h2>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-forge-body">
             Every tower lead does the same three things. The portal saves to the program database
@@ -167,11 +167,11 @@ export function AssessOnboardingHero({
 
           <div className="mt-5 flex flex-wrap items-center gap-2 text-[11px] text-forge-hint">
             <CheckCircle2 className="h-3 w-3 text-accent-green" />
-            Saves automatically · workshop model only — not a system of record.
+            Saves automatically · illustrative model — not a system of record.
           </div>
         </div>
 
-        <ol className="grid gap-3" aria-label="Workshop steps">
+        <ol className="grid gap-3" aria-label="Assessment steps">
           {STEPS.map((s, i) => {
             const Icon = s.icon;
             return (

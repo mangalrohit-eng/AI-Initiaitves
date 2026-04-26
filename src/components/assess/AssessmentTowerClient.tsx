@@ -30,7 +30,7 @@ import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
 type Props = { towerId: TowerId; towerName: string };
 
 /**
- * Tower-scoped Configure Impact Levers page. Step 2 of the workshop:
+ * Tower-scoped Configure Impact Levers page. Step 2 of the assessment:
  *
  *   - One slider card per L3 capability (offshore + AI sliders, live modeled $).
  *     Tower leads dial impact at L3 granularity — that's where the math runs.

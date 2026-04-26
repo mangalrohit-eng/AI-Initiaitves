@@ -29,14 +29,14 @@ const ITEMS: HelpItem[] = [
   {
     id: "walkthrough",
     label: "How to use this portal",
-    description: "60-second workshop walkthrough — capability map, headcount, dials, complete.",
+    description: "60-second walkthrough — capability map, headcount, dials, complete.",
     href: "/capability-map?walkthrough=open",
     Icon: Compass,
   },
   {
     id: "glossary",
     label: "Glossary",
-    description: "L2 / L3 / L4, offshore dial, AI dial, modeled value — the workshop vocabulary.",
+    description: "L2 / L3 / L4, offshore dial, AI dial, modeled value — the program vocabulary.",
     href: "/glossary",
     Icon: BookOpen,
   },
@@ -51,7 +51,7 @@ const ITEMS: HelpItem[] = [
   {
     id: "sample",
     label: "Sample workbook",
-    description: "13-tower Excel sample — one sheet per tower, ready to drop into the workshop.",
+    description: "13-tower Excel sample — one sheet per tower, ready to drop into the program.",
     href: "/capability-map?sample=open",
     Icon: Download,
   },

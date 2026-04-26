@@ -47,7 +47,7 @@ function renderPill(
       return (
         <span
           className="inline-flex items-center gap-1.5 rounded-full border border-forge-border bg-forge-well/60 px-2.5 py-1 text-[11px] font-medium text-forge-subtle"
-          title="No database configured. Workshop changes stay in this browser only."
+          title="No database configured. Assessment changes stay in this browser only."
         >
           <Wifi className="h-3 w-3" aria-hidden />
           <span className="hidden sm:inline">Local only · changes not shared</span>

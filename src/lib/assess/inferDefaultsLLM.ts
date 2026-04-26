@@ -83,7 +83,7 @@ class LLMError extends Error {
 function buildSystemPrompt(towerId: TowerId): string {
   const towerContext = TOWER_CONTEXT[towerId] ?? "Versant tower (context not authored).";
   return [
-    "You score Versant Media Group capability-map rows for a workshop.",
+    "You score Versant Media Group capability-map rows for an illustrative impact model.",
     "",
     "Versant Media Group (NASDAQ: VSNT) is the spin-off of NBCUniversal's news, sports, streaming, and digital portfolio: MS NOW, CNBC, Golf Channel, GolfNow, GolfPass, USA Network, E!, Syfy, Oxygen True Crime, Fandango, Rotten Tomatoes, SportsEngine, Free TV Networks. ~$6.7B revenue, ~$2.4B Adj. EBITDA, ~$2.75B debt (BB-), running on NBCU shared services until the TSA expires.",
     "",

@@ -69,8 +69,7 @@ export function AssumptionsClient() {
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
               Four blended rates feed every modeled dollar in the app. Edit them here and
               every total on the Impact Levers hub, the Impact Estimate, and per-tower pages
-              recomputes on the next render. Workshop modelling — illustrative, not
-              Versant-reported.
+              recomputes on the next render. Illustrative model — not Versant-reported.
             </p>
           </div>
           <button
@@ -291,8 +290,8 @@ offshore    = fteSavings + ctrSavings`}
         </section>
 
         <p className="mt-6 text-center text-xs text-forge-hint">
-          All values are workshop modelling, not Versant-reported. Roll-ups are illustrative
-          for planning only.
+          All values are illustrative model output, not Versant-reported. Roll-ups are
+          illustrative for planning only.
         </p>
       </div>
     </PageShell>

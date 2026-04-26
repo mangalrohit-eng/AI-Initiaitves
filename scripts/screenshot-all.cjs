@@ -103,7 +103,7 @@ const SCREENS = [
       await page.waitForLoadState("networkidle", { timeout: 45000 }).catch(() => {});
       await page
         .waitForFunction(
-          () => !document.body.innerText.includes("Loading assess workshop"),
+          () => !document.body.innerText.includes("Loading assessment"),
           undefined,
           { timeout: 25000 },
         )

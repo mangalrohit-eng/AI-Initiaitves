@@ -7,7 +7,7 @@ import { defaultGlobalAssessAssumptions, defaultTowerBaseline } from "./types";
 import { inferL3Defaults } from "./seedAssessmentDefaults";
 
 /**
- * Seeded with illustrative, workshop-only data — not Versant-reported. No offshore
+ * Seeded with illustrative-only data — not Versant-reported. No offshore
  * FTE/contractor in the footprint; baseline offshore dial for scenarios starts at 0.
  */
 export const ASSESS_SEED_REFERENCE_AT = "2026-01-15T00:00:00.000Z";
@@ -132,8 +132,8 @@ function withL3Defaults(rows: L3WorkforceRow[], towerId: TowerId): L3WorkforceRo
 
 /**
  * L3 sample rows for one tower (used by the seeded program and by sample downloads).
- * No offshore FTE/contractor — the workshop fills that via the offshore lever.
- * Each row carries a workshop-starter `offshoreAssessmentPct` / `aiImpactAssessmentPct`
+ * No offshore FTE/contractor — the assessment fills that via the offshore lever.
+ * Each row carries a starter `offshoreAssessmentPct` / `aiImpactAssessmentPct`
  * plus the canonical `l4Activities` list for display in the capability map.
  */
 export function getTowerSeedRows(towerId: TowerId): L3WorkforceRow[] {

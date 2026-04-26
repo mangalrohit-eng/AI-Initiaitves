@@ -94,7 +94,7 @@ export async function POST(req: Request) {
   });
 
   // Try LLM first when configured. On ANY failure, fall back to the
-  // deterministic heuristic — the workshop must never lose this CTA.
+  // deterministic heuristic — the program must never lose this CTA.
   let llmDefaults: LLMRowResult[] | null = null;
   let warning: string | undefined;
   if (isLLMConfigured()) {

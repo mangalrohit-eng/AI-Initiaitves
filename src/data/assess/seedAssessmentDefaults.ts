@@ -6,7 +6,7 @@ import type { L3WorkforceRow, TowerId } from "./types";
  * Inputs are the L2 / L3 capability labels (case-insensitive substring match) plus
  * the tower id, which sets a prior. Rules then add deltas. Output is clamped to a
  * realistic band (5–85% offshore, 10–75% AI) and rounded to the nearest 5 for a clean
- * workshop starting point.
+ * starting point.
  *
  * Logic considers Versant's profile (US news / sports / streaming under a TSA expiration,
  * on-air talent, political brand sensitivity, multi-entity JV, BB- credit) so:
@@ -15,7 +15,7 @@ import type { L3WorkforceRow, TowerId } from "./types";
  *   - AP/AR, reconciliation, payroll, helpdesk, analytics → high offshore, high AI.
  *   - Things in between (FP&A, sales ops, tech engineering) sit mid-range.
  *
- * Not Versant-reported. Workshop starting point only.
+ * Not Versant-reported. Illustrative starting point only.
  */
 type Priors = { offshore: number; ai: number };
 

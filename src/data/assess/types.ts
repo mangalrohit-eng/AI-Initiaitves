@@ -7,7 +7,7 @@ export type TowerId = Tower["id"];
  *
  * Tower leads upload a flat list at L3 granularity — one row per
  * (L2 pillar, L3 capability) — with onshore/offshore FTE and contractor
- * headcount, plus optional annual spend. The impact-lever workshop scores
+ * headcount, plus optional annual spend. The impact-lever step scores
  * each L3 once for offshore-movability and AI-impact headroom.
  *
  * `l4Activities` is a display-only list of activity names that sit under
@@ -29,12 +29,12 @@ export type L3WorkforceRow = {
   /** When present in file, used for $ pool; else derived from headcount × blended rates. */
   annualSpendUsd?: number;
   /**
-   * Workshop dial: 0–100 share of L3 work plausibly offshore-movable.
+   * Tower-lead dial: 0–100 share of L3 work plausibly offshore-movable.
    * When missing, the tower baseline is used in weighted rollups.
    */
   offshoreAssessmentPct?: number;
   /**
-   * Workshop dial: 0–100 AI improvement / automation headroom for the L3.
+   * Tower-lead dial: 0–100 AI improvement / automation headroom for the L3.
    */
   aiImpactAssessmentPct?: number;
   /**
@@ -45,7 +45,7 @@ export type L3WorkforceRow = {
   l4Activities?: string[];
 };
 
-/** Workshop anchor before stress-test on the summary page. */
+/** Tower-lead anchor dialed once and held steady before stress-test on the summary page. */
 export type TowerBaseline = {
   baselineOffshorePct: number;
   baselineAIPct: number;

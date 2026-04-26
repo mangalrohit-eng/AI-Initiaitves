@@ -194,7 +194,7 @@ export type StaticNavLink = {
 /**
  * Static links shown in the top nav.
  * Trimmed to the bare minimum — the home logo handles the home link, and
- * the three workshop steps live as primary cards on the landing page.
+ * the three primary steps live as cards on the landing page.
  * Reference / utility links (Glossary, What's new, Executive summary)
  * live in the footer instead.
  */

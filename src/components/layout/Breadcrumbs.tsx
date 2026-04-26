@@ -1,24 +1,47 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
 
-export type Crumb = { label: string; href?: string };
+export type BreadcrumbItem = {
+  label: string;
+  /** Omit on the active (last) crumb. */
+  href?: string;
+};
 
-export function Breadcrumbs({ items }: { items: Crumb[] }) {
+/**
+ * Compact breadcrumb trail using the Accenture `>` chevron motif.
+ * Renders nothing when fewer than 2 items are provided.
+ */
+export function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
+  if (!items || items.length < 2) return null;
   return (
-    <nav aria-label="Breadcrumb" className="text-sm text-forge-subtle">
-      <ol className="flex flex-wrap items-center gap-2">
-        {items.map((c, i) => (
-          <li key={`${c.label}-${i}`} className="flex items-center gap-2">
-            {i > 0 ? <ChevronRight className="h-4 w-4 text-forge-hint" aria-hidden /> : null}
-            {c.href ? (
-              <Link href={c.href} className="text-forge-body transition hover:text-accent-purple-dark">
-                {c.label}
-              </Link>
-            ) : (
-              <span className="font-medium text-forge-ink">{c.label}</span>
-            )}
-          </li>
-        ))}
+    <nav aria-label="Breadcrumb" className="no-print text-xs text-forge-subtle">
+      <ol className="flex flex-wrap items-center gap-1.5">
+        {items.map((item, idx) => {
+          const isLast = idx === items.length - 1;
+          return (
+            <li key={`${idx}-${item.label}`} className="flex items-center gap-1.5">
+              {idx > 0 ? (
+                <span aria-hidden className="font-mono text-forge-hint">
+                  &gt;
+                </span>
+              ) : null}
+              {item.href && !isLast ? (
+                <Link
+                  href={item.href}
+                  className="rounded transition hover:text-forge-ink hover:underline"
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <span
+                  className={isLast ? "font-medium text-forge-body" : "text-forge-subtle"}
+                  aria-current={isLast ? "page" : undefined}
+                >
+                  {item.label}
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ol>
     </nav>
   );

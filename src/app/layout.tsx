@@ -4,6 +4,7 @@ import "./globals.css";
 import { TopNav } from "@/components/layout/TopNav";
 import { Footer } from "@/components/layout/Footer";
 import { ChromeGate } from "@/components/layout/ChromeGate";
+import { ToastProvider } from "@/components/feedback/ToastProvider";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -25,9 +26,9 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Forge Program — Agentic AI Tower Explorer",
+  title: "Versant Forge Program",
   description:
-    "Versant Media Group Forge Program: interactive view of 13 functional towers, AI-eligible processes, and agent architectures.",
+    "Versant Forge Program — Accenture × Versant Media Group joint transformation. A 5-module portfolio (Tower Capability Map, Tower AI Initiatives, Offshore Plan, Prototypes, Delivery Plan) sized to reset operating cost and compound revenue across the 13 functional towers.",
 };
 
 export default function RootLayout({
@@ -40,15 +41,17 @@ export default function RootLayout({
       <body
         className={`${dmSans.variable} ${ibmPlex.variable} ${jetbrains.variable} min-h-screen bg-forge-page font-sans text-forge-ink antialiased`}
       >
-        <div className="relative z-10 flex min-h-screen flex-col">
-          <ChromeGate>
-            <TopNav />
-          </ChromeGate>
-          <main className="flex-1">{children}</main>
-          <ChromeGate>
-            <Footer />
-          </ChromeGate>
-        </div>
+        <ToastProvider>
+          <div className="relative z-10 flex min-h-screen flex-col">
+            <ChromeGate>
+              <TopNav />
+            </ChromeGate>
+            <main className="flex-1">{children}</main>
+            <ChromeGate>
+              <Footer />
+            </ChromeGate>
+          </div>
+        </ToastProvider>
       </body>
     </html>
   );

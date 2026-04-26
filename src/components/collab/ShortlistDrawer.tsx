@@ -209,7 +209,7 @@ function EmptyState({ onClose }: { onClose: () => void }) {
         one click away from the top bar.
       </p>
       <Link
-        href="/"
+        href="/towers"
         onClick={onClose}
         className="mt-4 inline-flex items-center gap-1 rounded-lg border border-forge-border bg-forge-surface px-3 py-1.5 text-xs font-medium text-forge-body transition hover:border-accent-purple/40 hover:text-accent-purple-dark"
       >

@@ -6,9 +6,9 @@ import { changelog, type ChangelogKind } from "@/data/changelog";
 import { ChangelogClient } from "@/components/collab/ChangelogClient";
 
 export const metadata = {
-  title: "What's new — Forge Tower Explorer",
+  title: "What's new — Forge Program portal",
   description:
-    "Human-readable history of updates to the Versant AI operating-model explorer.",
+    "Human-readable history of updates to the Versant Forge Program portal.",
 };
 
 const KIND_LABEL: Record<ChangelogKind, string> = {
@@ -44,10 +44,10 @@ export default function ChangelogPage() {
               What&apos;s new
             </h1>
             <p className="mt-3 text-sm leading-relaxed text-forge-body">
-              A running log of meaningful changes to the explorer — new
-              releases, polish, and tower-level content updates. Subscribe to
-              the RSS feed to get alerts in Outlook, Teams, or Slack without
-              us having to send another email.
+              A running log of meaningful changes to the portal — new releases,
+              polish, and tower-level content updates. Subscribe to the RSS
+              feed to get alerts in Outlook, Teams, or Slack without us having
+              to send another email.
             </p>
           </div>
           <Link

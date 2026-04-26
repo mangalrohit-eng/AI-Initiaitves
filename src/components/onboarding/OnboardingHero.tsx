@@ -111,7 +111,7 @@ export function OnboardingHero({ onFocusSearch }: { onFocusSearch?: () => void }
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      aria-label="How to use the Tower Explorer"
+      aria-label="How to use Tower AI Initiatives"
       className="relative overflow-hidden rounded-3xl border border-forge-border bg-gradient-to-br from-accent-purple/5 via-forge-surface to-forge-surface p-6 shadow-card sm:p-8"
     >
       <button
@@ -133,7 +133,7 @@ export function OnboardingHero({ onFocusSearch }: { onFocusSearch?: () => void }
             {mounted && persona ? (
               <>Welcome back — pick up where you left off.</>
             ) : (
-              <>New to the Tower Explorer? Three steps and you&apos;re oriented.</>
+              <>New to Tower AI Initiatives? Three steps and you&apos;re oriented.</>
             )}
           </h2>
 

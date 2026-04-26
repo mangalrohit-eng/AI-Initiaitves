@@ -1,5 +1,19 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Assess workshop database (optional)
+
+The `/assess` product can persist the full `AssessProgramV2` document to **Postgres** (one row, JSONB). Without a DB URL in the environment, assess data stays in the browser only. The app accepts **`DATABASE_URL`**, or **`POSTGRES_URL` / `POSTGRES_PRISMA_URL`** (Neon + Vercel templates) in that order.
+
+1. Create a free dev database (Neon, Supabase, or Vercel Postgres).
+2. Copy `.env.example` to `.env.local` and set **`DATABASE_URL`** (pooled) or paste Neon’s **`POSTGRES_URL`** as-is.
+3. From the `forge-tower-explorer` directory, with the same env loaded:
+
+   ```bash
+   npm run db:migrate
+   ```
+
+4. Set `DATABASE_URL` in your deployment environment (e.g. Vercel) and run the same migration against production once.
+
 ## Getting Started
 
 First, run the development server:

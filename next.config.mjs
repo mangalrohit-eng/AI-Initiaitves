@@ -4,6 +4,7 @@ const nextConfig = {
   experimental: {
     webpackBuildWorker: false,
   },
+  serverExternalPackages: ["postgres"],
 };
 
 export default nextConfig;

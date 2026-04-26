@@ -10,9 +10,9 @@ const CATEGORY_ORDER: GlossaryCategory[] = [
 ];
 
 export const metadata = {
-  title: "Glossary — Forge Tower Explorer",
+  title: "Glossary — Forge Program portal",
   description:
-    "Plain-English definitions of the terms used across the Tower Explorer — agents, orchestration, lenses, priority tiers, and more.",
+    "Plain-English definitions of the terms used across the Forge Program portal — capability maps, dials, agents, orchestration, priority tiers, and more.",
 };
 
 export default function GlossaryPage() {
@@ -31,9 +31,9 @@ export default function GlossaryPage() {
             Glossary
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-forge-body">
-            Plain-English definitions of the terms used across the explorer. Hover the{" "}
-            <span className="font-semibold">?</span> icon anywhere in the app to see the
-            short version; this page has the full set.
+            Plain-English definitions of the terms used across the portal. Hover any
+            dotted-underlined term in the workshop to see the short version; this page
+            has the full set, grouped by category.
           </p>
         </div>
 

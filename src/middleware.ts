@@ -4,8 +4,24 @@ import { AUTH_COOKIE_NAME, isValidSessionToken } from "@/lib/auth";
 const PUBLIC_PATHS = new Set<string>(["/login"]);
 const PUBLIC_API_PATHS = new Set<string>(["/api/login", "/api/logout"]);
 
+function clientPortalBlock(pathname: string, req: NextRequest): ReturnType<typeof NextResponse.redirect> | null {
+  const mode = process.env.NEXT_PUBLIC_PORTAL_AUDIENCE?.toLowerCase().trim();
+  if (mode !== "client") return null;
+  const internalOnly = ["/changelog"];
+  if (internalOnly.includes(pathname)) {
+    const u = req.nextUrl.clone();
+    u.pathname = "/";
+    u.search = "";
+    return NextResponse.redirect(u);
+  }
+  return null;
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
+
+  const block = clientPortalBlock(pathname, req);
+  if (block) return block;
 
   if (PUBLIC_PATHS.has(pathname) || PUBLIC_API_PATHS.has(pathname)) {
     return NextResponse.next();

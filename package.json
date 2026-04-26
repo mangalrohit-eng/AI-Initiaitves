@@ -4,6 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:clean": "node -e \"const fs=require('fs'); for (const p of ['.next','node_modules/.cache']){ try { fs.rmSync(p,{recursive:true,force:true}); } catch (e) { if (e.code!=='ENOENT') throw e; } }\"",
+    "dev:fresh": "npm run dev:clean && next dev",
+    "db:migrate": "node scripts/migrate-assess.cjs",
+    "db:seed": "tsx scripts/seed-assess-defaults.ts",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -13,22 +17,24 @@
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.8.0",
     "next": "14.2.35",
+    "postgres": "^3.4.9",
     "react": "^18",
     "react-dom": "^18",
     "recharts": "^3.8.1",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/xlsx": "^0.0.35",
+    "dotenv": "^16.4.5",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.21.0",
-    "typescript": "^5",
-    "xlsx": "^0.18.5"
+    "typescript": "^5"
   }
 }

@@ -1,4 +1,9 @@
 // Typed, SSR-safe wrapper over localStorage for all P1 collaboration state.
+import type { AssessProgramV2, GlobalAssessAssumptions, TowerId, TowerScenario } from "@/data/assess/types";
+import { buildSeededAssessProgramV2 } from "@/data/assess/seedAssessProgram";
+import { defaultTowerState, type TowerAssessState } from "@/data/assess/types";
+import type { CapabilitySavingsAssumptions, L4LeadInputs } from "@/data/capabilityMap/types";
+import { defaultCapabilitySavingsAssumptions } from "@/data/capabilityMap/types";
 //
 // Conventions:
 //   - Every key is prefixed `forge.` to avoid collisions with other apps.
@@ -43,6 +48,10 @@ const KEYS = {
   recent: "forge.recent.v1", // JSON: RecentRef[] (capped)
   displayName: "forge.displayName.v1",
   lastChangelogVisit: "forge.lastChangelogVisit.v1",
+  capabilityMap: "forge.capabilityMapState.v1",
+  assessProgram: "forge.assessProgram.v2",
+  myTowers: "forge.myTowers.v1", // TowerId[]
+  persona: "forge.persona", // legacy unversioned key from OnboardingHero
 } as const;
 
 const RECENT_CAP = 12;
@@ -250,6 +259,160 @@ function cryptoId(): string {
     }
   }
   return `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// ----- capability map (local; not a system of record) ------------------
+
+export type CapabilityMapPersistedStateV1 = {
+  version: 1;
+  mapId: string;
+  l4Inputs: Record<string, L4LeadInputs>;
+  assumptions: CapabilitySavingsAssumptions;
+};
+
+const defaultCapabilityMapState: CapabilityMapPersistedStateV1 = {
+  version: 1,
+  mapId: "hr-localize-versant",
+  l4Inputs: {},
+  assumptions: { ...defaultCapabilitySavingsAssumptions },
+};
+
+export function getCapabilityMapState(): CapabilityMapPersistedStateV1 {
+  return safeGet(KEYS.capabilityMap, defaultCapabilityMapState);
+}
+
+export function setCapabilityMapState(next: CapabilityMapPersistedStateV1): void {
+  safeSet(KEYS.capabilityMap, next);
+}
+
+export function updateCapabilityMapState(
+  patch: Partial<Pick<CapabilityMapPersistedStateV1, "mapId" | "l4Inputs" | "assumptions">>,
+): CapabilityMapPersistedStateV1 {
+  const cur = getCapabilityMapState();
+  const next: CapabilityMapPersistedStateV1 = {
+    version: 1,
+    mapId: patch.mapId ?? cur.mapId,
+    l4Inputs:
+      patch.l4Inputs !== undefined ? { ...cur.l4Inputs, ...patch.l4Inputs } : { ...cur.l4Inputs },
+    assumptions:
+      patch.assumptions !== undefined
+        ? { ...cur.assumptions, ...patch.assumptions }
+        : { ...cur.assumptions },
+  };
+  safeSet(KEYS.capabilityMap, next);
+  return next;
+}
+
+// ----- assess program (13-tower, v2) -----------------------------------
+
+export function getAssessProgram(): AssessProgramV2 {
+  return safeGet(KEYS.assessProgram, buildSeededAssessProgramV2());
+}
+
+export function setAssessProgram(next: AssessProgramV2): void {
+  safeSet(KEYS.assessProgram, next);
+}
+
+export function updateAssessProgram(
+  fn: (cur: AssessProgramV2) => AssessProgramV2,
+): AssessProgramV2 {
+  const next = fn(getAssessProgram());
+  setAssessProgram(next);
+  return next;
+}
+
+export function setTowerAssess(towerId: TowerId, patch: Partial<TowerAssessState>): void {
+  updateAssessProgram((p) => {
+    const cur = p.towers[towerId] ?? { ...defaultTowerState() };
+    return {
+      ...p,
+      towers: {
+        ...p.towers,
+        [towerId]: {
+          ...cur,
+          ...patch,
+          l4Rows: patch.l4Rows ?? cur.l4Rows,
+          baseline: patch.baseline ? { ...cur.baseline, ...patch.baseline } : cur.baseline,
+          status: patch.status ?? cur.status,
+          lastUpdated: new Date().toISOString(),
+        },
+      },
+    };
+  });
+}
+
+export function setGlobalAssessAssumptions(patch: Partial<GlobalAssessAssumptions>): void {
+  updateAssessProgram((p) => ({
+    ...p,
+    global: { ...p.global, ...patch },
+  }));
+}
+
+export function setTowerScenario(towerId: TowerId, s: TowerScenario): void {
+  updateAssessProgram((p) => ({
+    ...p,
+    scenarios: { ...p.scenarios, [towerId]: s },
+  }));
+}
+
+// ----- "my towers" personalisation -------------------------------------
+
+export function getMyTowers(): TowerId[] {
+  return safeGet<TowerId[]>(KEYS.myTowers, []);
+}
+
+export function setMyTowers(ids: TowerId[]): TowerId[] {
+  // Deduplicate while preserving insertion order.
+  const seen = new Set<TowerId>();
+  const next = ids.filter((id) => {
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  safeSet(KEYS.myTowers, next);
+  return next;
+}
+
+export function toggleMyTower(id: TowerId): TowerId[] {
+  const cur = getMyTowers();
+  const exists = cur.includes(id);
+  const next = exists ? cur.filter((t) => t !== id) : [...cur, id];
+  safeSet(KEYS.myTowers, next);
+  return next;
+}
+
+// ----- persona (executive / Versant lead / Accenture lead) -------------
+
+export type Persona = "versant" | "accenture" | "executive";
+
+export function getPersona(): Persona | null {
+  // Stored as a raw string by OnboardingHero historically; safeGet wraps in
+  // JSON.parse, so we read with a manual fallback for the legacy raw value.
+  if (!canUse()) return null;
+  try {
+    const raw = window.localStorage.getItem(KEYS.persona);
+    if (!raw) return null;
+    const value = raw.startsWith('"') ? (JSON.parse(raw) as string) : raw;
+    if (value === "versant" || value === "accenture" || value === "executive") return value;
+  } catch {
+    /* noop */
+  }
+  return null;
+}
+
+export function setPersona(p: Persona | null): void {
+  if (!canUse()) return;
+  try {
+    if (p === null) {
+      window.localStorage.removeItem(KEYS.persona);
+    } else {
+      // Match the OnboardingHero legacy format (raw string, not JSON-encoded).
+      window.localStorage.setItem(KEYS.persona, p);
+    }
+    emit(KEYS.persona);
+  } catch {
+    /* noop */
+  }
 }
 
 export const LOCAL_STORE_KEYS = KEYS;

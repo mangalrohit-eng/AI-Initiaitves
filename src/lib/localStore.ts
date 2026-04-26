@@ -309,8 +309,43 @@ export function updateCapabilityMapState(
 
 // ----- assess program (13-tower, v2) -----------------------------------
 
+/**
+ * Read-time migration for snapshots seeded by the original (buggy) seed
+ * builder, which marked every tower `status: "complete"` even though no tower
+ * lead had reviewed anything. A genuine Mark-complete requires all four
+ * `*ConfirmedAt` timestamps (gated by the checklist), so any "complete" tower
+ * with zero `*ConfirmedAt` stamps is a buggy-seed leftover and should be
+ * demoted to `"data"` (= "Pending Tower Lead review").
+ *
+ * Idempotent and side-effect free at read time — we don't write back here so
+ * actual user actions (Mark complete, edits) are still the only thing that
+ * persists state changes. The corrected status will be saved next time the
+ * user mutates the program.
+ */
+function migrateBuggySeedComplete(program: AssessProgramV2): AssessProgramV2 {
+  let touched = false;
+  const towers: AssessProgramV2["towers"] = {};
+  for (const [k, t] of Object.entries(program.towers)) {
+    if (!t) continue;
+    const noStamps =
+      !t.capabilityMapConfirmedAt &&
+      !t.headcountConfirmedAt &&
+      !t.offshoreConfirmedAt &&
+      !t.aiConfirmedAt;
+    if (t.status === "complete" && noStamps) {
+      towers[k as TowerId] = { ...t, status: "data" };
+      touched = true;
+    } else {
+      towers[k as TowerId] = t;
+    }
+  }
+  if (!touched) return program;
+  return { ...program, towers };
+}
+
 export function getAssessProgram(): AssessProgramV2 {
-  return safeGet(KEYS.assessProgram, buildSeededAssessProgramV2());
+  const raw = safeGet(KEYS.assessProgram, buildSeededAssessProgramV2());
+  return migrateBuggySeedComplete(raw);
 }
 
 export function setAssessProgram(next: AssessProgramV2): void {

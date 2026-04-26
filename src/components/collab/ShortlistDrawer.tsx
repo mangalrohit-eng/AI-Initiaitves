@@ -251,9 +251,9 @@ const QUICK_STARTS: ReadonlyArray<{
     Icon: MapIcon,
   },
   {
-    href: "/assessment",
-    label: "Assessment",
-    description: "Dial offshore + AI per L4",
+    href: "/impact-levers",
+    label: "Impact Levers",
+    description: "Configure offshore + AI per L4",
     Icon: Sliders,
   },
   {

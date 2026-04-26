@@ -9,7 +9,7 @@ import type { TowerId } from "@/data/assess/types";
  */
 export type TowerScopedModule =
   | "capability-map"
-  | "assessment"
+  | "impact-levers"
   | "ai-initiatives"
   | "offshore-plan";
 
@@ -17,8 +17,8 @@ export function getTowerHref(towerId: TowerId, module: TowerScopedModule): strin
   switch (module) {
     case "capability-map":
       return `/capability-map/tower/${towerId}`;
-    case "assessment":
-      return `/assessment/tower/${towerId}`;
+    case "impact-levers":
+      return `/impact-levers/tower/${towerId}`;
     case "ai-initiatives":
       return `/tower/${towerId}`;
     case "offshore-plan":
@@ -40,7 +40,7 @@ export const TOWER_JOURNEY_MODULES: ReadonlyArray<{
   active: boolean;
 }> = [
   { id: "capability-map", label: "Capability Map", active: true },
-  { id: "assessment", label: "Assessment", active: true },
+  { id: "impact-levers", label: "Impact Levers", active: true },
   { id: "ai-initiatives", label: "AI Initiatives", active: true },
   { id: "offshore-plan", label: "Offshore Plan", active: false },
 ];

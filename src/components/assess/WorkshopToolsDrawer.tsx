@@ -32,8 +32,8 @@ type Section = "samples" | "backup" | "reseed";
  * Single quiet drawer that consolidates all three secondary surfaces — Templates
  * and samples, Backup and restore, and Admin re-seed.
  *
- * Renders at the bottom of the Capability Map and Assessment hubs, collapsed by
- * default so the page stays focused on the live workshop. Internal-only
+ * Renders at the bottom of the Capability Map and Configure Impact Levers hubs,
+ * collapsed by default so the page stays focused on the live workshop. Internal-only
  * facilities (Re-seed) are hidden when the portal audience is external.
  */
 export function WorkshopToolsDrawer() {

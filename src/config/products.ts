@@ -34,7 +34,7 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     navLabel: "Capability Map",
     tagline: "Per tower: confirm the L1 to L4 capability tree and the headcount behind it.",
     shortDescription:
-      "For each functional tower, confirm the in-scope L1 to L4 capabilities and the headcount that delivers them. Sets the canvas the Assessment dials operate on.",
+      "For each functional tower, confirm the in-scope L1 to L4 capabilities and the headcount that delivers them. Sets the canvas the impact-lever dials operate on.",
     path: "/capability-map",
     iconId: "map",
     order: 10,
@@ -43,13 +43,13 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     status: "active",
   },
   {
-    id: "assessment",
-    name: "Offshore + AI Assessment",
-    navLabel: "Assessment",
+    id: "impact-levers",
+    name: "Configure Impact Levers",
+    navLabel: "Impact Levers",
     tagline: "Per tower: dial offshore and AI per L4 to see where modeled OpEx reduction lands.",
     shortDescription:
       "Set offshore and AI dials per L4 against the confirmed capability map. The tool weights the dials by pool $ and rolls up to a live program-wide modeled impact with sensitivity bands.",
-    path: "/assessment",
+    path: "/impact-levers",
     iconId: "sliders",
     order: 15,
     audience: "both",
@@ -127,7 +127,7 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     status: "coming-soon",
     comingSoonLabel: "Planned",
     comingSoonBullets: [
-      "Effort and run-rate cost per tower translated from the modeled levers in the Assessment.",
+      "Effort and run-rate cost per tower translated from the configured impact levers.",
       "Sequencing across the 0-6 / 6-12 / 12-24 horizons keyed off the NBCU TSA expiration.",
       "Value tracking against the $2.43B adj. EBITDA and $0.375 dividend commitments.",
       "Governance — Steering, Tower Leads, Editorial Standards review — to keep the brand intact.",
@@ -139,7 +139,7 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     navLabel: "Workshops",
     tagline: "Facilitator-led tower workshops with agenda, attendance, and decision logs.",
     shortDescription:
-      "The connective tissue between the Capability Map and the Assessment — facilitator-led workshops with Versant tower leads. Pre-read packs, structured decisions on offshore carve-outs and AI priorities, and an audit trail of who agreed to what.",
+      "The connective tissue between the Capability Map and the Impact Levers — facilitator-led workshops with Versant tower leads. Pre-read packs, structured decisions on offshore carve-outs and AI priorities, and an audit trail of who agreed to what.",
     path: "/workshops",
     iconId: "users-round",
     order: 60,
@@ -151,7 +151,7 @@ const ALL_PRODUCTS: ForgeProduct[] = [
       "Workshop calendar across the 13 towers with Versant tower-lead and Accenture facilitator pairing.",
       "Pre-read packs auto-generated from the tower's capability map and starter dial defaults.",
       "Structured decision log for editorial / news / political-brand carve-outs (BB- credit, on-air talent).",
-      "Attendance + sign-off so the Assessment dials carry the names of the people who agreed to them.",
+      "Attendance + sign-off so the impact-lever dials carry the names of the people who agreed to them.",
     ],
   },
 ];

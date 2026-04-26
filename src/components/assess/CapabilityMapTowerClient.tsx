@@ -36,7 +36,7 @@ type Props = { towerId: TowerId; towerName: string };
  *   1. Confirm the L1 to L4 capability tree.
  *   2. Confirm the headcount behind it (FTE, contractors, optional spend).
  *
- * The Assessment dials live on the sibling `/assessment/tower/[id]` route.
+ * The Impact-Levers dials live on the sibling `/impact-levers/tower/[id]` route.
  * Both routes share state via `useTowerAssessOps` so the capability map &
  * headcount loaded here is immediately available to the dials, and the
  * program-wide impact updates.
@@ -63,7 +63,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   // Capability-map step counts as "complete" the moment the tower lead has
   // uploaded a real capability map & headcount (i.e. they replaced the seed
   // map). The dials step still requires explicit Mark-complete on the
-  // Assessment page.
+  // Configure Impact Levers page.
   const isCapabilityMapAuthored = tState.capabilityMapConfirmedAt != null;
   const completedModules: ReadonlyArray<"capability-map"> =
     isCapabilityMapAuthored || ops.isComplete ? ["capability-map"] : [];
@@ -111,9 +111,9 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
             &gt; {towerName} · Capability Map
           </h1>
           <p className="text-xs text-forge-subtle">
-            Step 1 — confirm the <Term termKey="capability map">L1–L4 tree</Term> and headcount, then open the{" "}
-            <Link href={getTowerHref(towerId, "assessment")} className="text-accent-purple-dark underline">
-              Assessment
+            Step 1 — confirm the <Term termKey="capability map">L1–L4 tree</Term> and headcount, then open{" "}
+            <Link href={getTowerHref(towerId, "impact-levers")} className="text-accent-purple-dark underline">
+              Configure Impact Levers
             </Link>
             .
           </p>
@@ -187,17 +187,17 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-accent-purple/30 bg-accent-purple/5 p-5">
             <div>
               <p className="font-display text-base font-semibold text-forge-ink">
-                Capability map &amp; headcount set — open the Assessment dials.
+                Capability map &amp; headcount set — configure your impact levers.
               </p>
               <p className="mt-1 text-sm text-forge-body">
                 Step 2: dial offshore and AI per L4 against the {tState.l4Rows.length} rows you just confirmed.
               </p>
             </div>
             <Link
-              href={getTowerHref(towerId, "assessment")}
+              href={getTowerHref(towerId, "impact-levers")}
               className="inline-flex items-center gap-2 rounded-lg bg-accent-purple px-4 py-2 text-sm font-semibold text-white hover:bg-accent-purple-dark"
             >
-              Open Assessment
+              Configure Impact Levers
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
@@ -237,7 +237,7 @@ function MapSourceBanner({
           Tower lead upload · {rowsCount} L4 row{rowsCount === 1 ? "" : "s"}
         </span>
         <span className="text-[11px] text-forge-subtle">
-          Confirmed {formatRelative(authoredAt)} · drives the assessment &amp; impact downstream.
+          Confirmed {formatRelative(authoredAt)} · drives the impact-lever dials &amp; impact estimate downstream.
         </span>
       </div>
     );

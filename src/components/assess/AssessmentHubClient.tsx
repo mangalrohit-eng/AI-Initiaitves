@@ -48,7 +48,7 @@ function dialStatusCopy(s: DialStatus): { label: string; className: string } {
 }
 
 /**
- * Step 2 hub — Assessment.
+ * Step 2 hub — Configure Impact Levers.
  *
  * Lands the user on the live program-wide impact (animated $) and a tower
  * grid showing whether dials have been moved off the heuristic defaults. The
@@ -99,17 +99,17 @@ export function AssessmentHubClient() {
         <Breadcrumbs
           items={[
             { label: "Program home", href: "/" },
-            { label: "Assessment" },
+            { label: "Impact Levers" },
           ]}
         />
         <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">
               <span className="font-mono">&gt;</span>
-              Step 2 of the workshop
+              Step 2 — Configure Impact Levers
             </div>
             <h1 className="mt-2 font-display text-3xl font-semibold text-forge-ink">
-              &gt; Offshore + AI Assessment
+              &gt; Configure Impact Levers
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
               Dial <Term termKey="offshore dial">offshore</Term> and{" "}
@@ -141,10 +141,10 @@ export function AssessmentHubClient() {
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-forge-border bg-forge-surface/60 p-3">
           <ScenarioPresetButtons size="md" />
           <Link
-            href="/assessment/summary"
+            href="/impact-levers/summary"
             className="inline-flex items-center gap-1.5 rounded-lg border border-accent-purple/40 bg-accent-purple/10 px-3 py-1.5 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/20"
           >
-            Open scenario summary
+            Open impact estimate
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
@@ -191,7 +191,7 @@ export function AssessmentHubClient() {
               </div>
             </div>
             <Link
-              href={getTowerHref(nextRecommended.id as TowerId, "assessment")}
+              href={getTowerHref(nextRecommended.id as TowerId, "impact-levers")}
               className="inline-flex items-center gap-1.5 rounded-lg bg-accent-purple px-4 py-2 text-sm font-medium text-white hover:bg-accent-purple-dark"
             >
               Open dials
@@ -264,7 +264,7 @@ export function AssessmentHubClient() {
                         ) : (
                           <Circle className="h-3 w-3" aria-hidden />
                         )}
-                        {isComplete ? "Reviewed by Tower Lead" : "To be reviewed by Tower Lead"}
+                        {isComplete ? "Reviewed by Tower Lead" : "Pending Tower Lead review"}
                       </div>
                     ) : null}
                   </div>
@@ -308,7 +308,7 @@ export function AssessmentHubClient() {
                     </Link>
                   ) : (
                     <Link
-                      href={getTowerHref(tid, "assessment")}
+                      href={getTowerHref(tid, "impact-levers")}
                       className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent-purple px-3 py-2 text-sm font-medium text-white hover:bg-accent-purple-dark"
                     >
                       {status === "dialed" ? "Refine dials" : "Set dials"}

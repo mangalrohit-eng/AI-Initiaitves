@@ -3,12 +3,12 @@ import { Suspense } from "react";
 import { AssessmentSummaryClient } from "@/components/assess/AssessmentSummaryClient";
 
 export const metadata: Metadata = {
-  title: "Assessment Summary — Versant Forge Program",
+  title: "Impact Estimate — Versant Forge Program",
   description:
     "Live program-wide modeled impact, scenario presets, per-tower lever cards, and a print-ready snapshot for leadership decks.",
 };
 
-export default function AssessmentSummaryPage() {
+export default function ImpactEstimateSummaryPage() {
   return (
     <Suspense fallback={<div className="px-6 py-12 text-sm text-forge-subtle">Loading...</div>}>
       <AssessmentSummaryClient />

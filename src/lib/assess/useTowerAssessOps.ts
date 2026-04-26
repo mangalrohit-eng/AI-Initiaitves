@@ -23,7 +23,7 @@ import {
 export type TowerAssessOps = ReturnType<typeof useTowerAssessOps>;
 
 /**
- * Shared async operations for the Capability Map and Assessment tower pages.
+ * Shared async operations for the Capability Map and Configure Impact Levers tower pages.
  *
  * The two routes manipulate the same underlying tower state — we extract every
  * persistence + toast + sync-flush concern here so both clients render only the
@@ -130,7 +130,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       successTitle: ({ rows: r }) =>
         `Loaded ${r} starter row${r === 1 ? "" : "s"} for ${towerName}`,
       successDescription:
-        "Heuristic starter defaults applied. Review and override per L4 in the Assessment.",
+        "Heuristic starter defaults applied. Review and override per L4 in Configure Impact Levers.",
       errorTitle: "Could not load sample",
     },
   });

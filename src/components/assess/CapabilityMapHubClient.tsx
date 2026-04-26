@@ -42,7 +42,7 @@ function rowStatus(program: AssessProgramV2, towerId: TowerId): RowStatus {
 function statusCopy(s: RowStatus): { label: string; className: string } {
   if (s === "complete") return { label: "Reviewed by Tower Lead", className: "text-accent-green" };
   if (s === "in-progress")
-    return { label: "To be reviewed by Tower Lead", className: "text-accent-amber" };
+    return { label: "Pending Tower Lead review", className: "text-accent-amber" };
   return { label: "Not started", className: "text-forge-subtle" };
 }
 
@@ -124,8 +124,8 @@ export function CapabilityMapHubClient() {
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
               For each tower, confirm the in-scope <Term termKey="capability map">L1 to L4 capability tree</Term>{" "}
               and the headcount that delivers it. Once a tower&apos;s capability map &amp; headcount is in,{" "}
-              <Link href="/assessment" className="text-accent-purple-dark underline">
-                step 2 — the Assessment dials
+              <Link href="/impact-levers" className="text-accent-purple-dark underline">
+                step 2 — Configure Impact Levers
               </Link>{" "}
               lights up.
             </p>

@@ -161,13 +161,17 @@ export function getTowerSeedState(towerId: TowerId): TowerAssessState {
     defaultTowerBaseline,
     defaultGlobalAssessAssumptions,
   );
+  // Seed rows are illustrative — they land towers at "data" (rows present,
+  // not signed off). Only an explicit Mark-complete on the Configure Impact Levers page
+  // should promote a tower to "complete". Otherwise the hub falsely reads
+  // "Reviewed by Tower Lead" before any human review has happened.
   return {
     l4Rows: rows,
     baseline: {
       baselineOffshorePct: Math.round(w.offshorePct),
       baselineAIPct: Math.round(w.aiPct),
     },
-    status: "complete",
+    status: "data",
     lastUpdated: ASSESS_SEED_REFERENCE_AT,
   };
 }

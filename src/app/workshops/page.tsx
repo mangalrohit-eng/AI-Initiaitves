@@ -6,7 +6,7 @@ import { getProductById } from "@/config/products";
 export const metadata: Metadata = {
   title: "Workshops — Versant Forge Program",
   description:
-    "Facilitator-led tower workshops with agenda, attendance, and decision logs — the connective tissue between the Capability Map and the Assessment.",
+    "Facilitator-led tower workshops with agenda, attendance, and decision logs — the connective tissue between the Capability Map and Configure Impact Levers.",
 };
 
 export default function WorkshopsPage() {

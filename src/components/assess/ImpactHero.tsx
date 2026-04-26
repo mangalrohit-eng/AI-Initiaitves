@@ -25,7 +25,8 @@ type Props = {
 
 /**
  * Live program-wide modeled impact in dollar terms — the hero on Program Home
- * and the Assessment Summary, and a compact variant inside the Assessment hub.
+ * and the Impact Estimate page, and a compact variant inside the Configure
+ * Impact Levers hub.
  *
  * The headline animates via `MoneyCounter` so dial drags on any tower tick the
  * number live. The sensitivity ribbon below explains the marginal value of an

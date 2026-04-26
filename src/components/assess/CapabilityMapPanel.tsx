@@ -236,9 +236,12 @@ function L1Banner({ name, hc }: { name: string; hc: number | null }) {
       data-l1
       className="flex items-center justify-between gap-3 rounded-lg border border-accent-purple/50 bg-accent-purple/20 px-4 py-2"
     >
-      <span className="font-display text-sm font-semibold tracking-wide text-forge-ink">
-        {name}
-      </span>
+      <div className="flex min-w-0 items-center gap-2">
+        <TierBadge tier="l1" />
+        <span className="truncate font-display text-sm font-semibold tracking-wide text-forge-ink">
+          {name}
+        </span>
+      </div>
       {hc != null ? (
         <span
           className="inline-flex items-baseline gap-1 rounded-md border border-accent-purple/40 bg-forge-surface/70 px-2 py-0.5"
@@ -307,8 +310,9 @@ function L2Column({
 function BandDivider() {
   return (
     <div className="flex items-center gap-3 pt-1">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-accent-purple">
-        L4 details
+      <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-accent-purple">
+        <TierBadge tier="l4" />
+        Activities
       </span>
       <div className="h-px flex-1 bg-gradient-to-r from-accent-purple/40 via-forge-border to-transparent" />
     </div>
@@ -374,9 +378,10 @@ function L4BandColumn({
 function GhostL3Caption({ name }: { name: string }) {
   return (
     <div
-      className="flex h-7 w-full items-center rounded-md border border-dashed border-accent-purple/35 bg-accent-purple/5 px-2.5"
+      className="flex h-7 w-full items-center gap-1.5 rounded-md border border-dashed border-accent-purple/35 bg-accent-purple/5 px-2"
       title={name}
     >
+      <TierBadge tier="l3" muted />
       <span className="truncate text-[11px] font-medium leading-none text-accent-purple">
         {name}
       </span>
@@ -385,6 +390,39 @@ function GhostL3Caption({ name }: { name: string }) {
 }
 
 type BoxTier = "l2" | "l3" | "l4" | "l4-empty";
+type TierKey = "l1" | "l2" | "l3" | "l4";
+
+/**
+ * Compact, color-graded tier label rendered inside every chip and banner.
+ * Reinforces the hierarchy textually so readers don't have to decode the
+ * purple-intensity gradient. Color saturation tracks the tier so the badge
+ * itself participates in the gradient.
+ */
+function TierBadge({ tier, muted = false }: { tier: TierKey; muted?: boolean }) {
+  const label = tier.toUpperCase();
+  const base = "inline-flex shrink-0 items-center justify-center rounded font-mono font-semibold uppercase tabular-nums";
+  // Two slightly different sizes — the banner uses a chunkier pill, chips a
+  // tighter one. We keep both in one place so the tier system stays consistent.
+  const size = "px-1 py-px text-[9px] tracking-wider";
+  const palette = (() => {
+    if (muted) return "border border-accent-purple/40 bg-transparent text-accent-purple";
+    switch (tier) {
+      case "l1":
+        return "bg-accent-purple text-white";
+      case "l2":
+        return "bg-accent-purple/40 text-accent-purple-dark";
+      case "l3":
+        return "bg-accent-purple/20 text-accent-purple-dark";
+      case "l4":
+        return "border border-accent-purple/45 bg-forge-surface text-accent-purple-dark";
+    }
+  })();
+  return (
+    <span className={cn(base, size, palette)} aria-hidden>
+      {label}
+    </span>
+  );
+}
 
 type BoxBaseProps = {
   tier: BoxTier;
@@ -446,8 +484,13 @@ function Box(props: BoxBaseProps) {
     tier === "l4" ? "text-forge-hint" : "text-forge-subtle",
   );
 
+  // L4-empty placeholder doesn't show a badge — keeps the dashed empty state quiet.
+  const badgeTier: TierKey | null =
+    tier === "l2" ? "l2" : tier === "l3" ? "l3" : tier === "l4" ? "l4" : null;
+
   const inner = (
     <>
+      {badgeTier ? <TierBadge tier={badgeTier} /> : null}
       <span className={nameClass}>{name}</span>
       {hc != null ? <span className={hcClass}>{hc} h/c</span> : null}
     </>

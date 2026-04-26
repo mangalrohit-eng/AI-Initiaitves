@@ -36,12 +36,12 @@ import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
 type Props = { towerId: TowerId; towerName: string };
 
 /**
- * Tower-scoped Assessment page. Step 2 of the workshop:
+ * Tower-scoped Configure Impact Levers page. Step 2 of the workshop:
  *
  *   - Cinematic per-L4 lever rows (offshore + AI sliders, live modeled $).
  *   - Top-of-page scoreboard (pool, weighted dials, modeled $).
  *   - Scenario presets (Conservative / Base / Aggressive) for one-click frames.
- *   - Tower checklist + Mark complete to anchor the scenario summary.
+ *   - Tower checklist + Mark complete to anchor the impact estimate summary.
  *
  * Reuses `useTowerAssessOps` so saves and toasts stay in lock-step with the
  * Capability Map sibling page.
@@ -65,10 +65,10 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
     doUnmarkComplete,
   } = ops;
 
-  const completedModules: ReadonlyArray<"capability-map" | "assessment"> = (() => {
-    const arr: Array<"capability-map" | "assessment"> = [];
+  const completedModules: ReadonlyArray<"capability-map" | "impact-levers"> = (() => {
+    const arr: Array<"capability-map" | "impact-levers"> = [];
     if (rows.length > 0) arr.push("capability-map");
-    if (isComplete) arr.push("assessment");
+    if (isComplete) arr.push("impact-levers");
     return arr;
   })();
 
@@ -244,7 +244,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
         <Breadcrumbs
           items={[
             { label: "Program home", href: "/" },
-            { label: "Assessment", href: "/assessment" },
+            { label: "Impact Levers", href: "/impact-levers" },
             { label: towerName },
           ]}
         />
@@ -253,14 +253,14 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
           className="mt-3"
           towerId={towerId}
           towerName={towerName}
-          current="assessment"
+          current="impact-levers"
           completed={completedModules}
         />
 
         <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl font-semibold text-forge-ink">
-              &gt; {towerName} · Assessment
+              &gt; {towerName} · Configure Impact Levers
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-forge-body">
               Dial <Term termKey="offshore dial">offshore</Term> and{" "}
@@ -361,8 +361,8 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-forge-hint">
               <span>
                 Adjust global blended $ on the{" "}
-                <Link href="/assessment/summary" className="text-forge-body underline">
-                  scenario summary
+                <Link href="/impact-levers/summary" className="text-forge-body underline">
+                  impact estimate
                 </Link>{" "}
                 to change pool math across all towers.
               </span>

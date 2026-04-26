@@ -79,9 +79,9 @@ export function AssumptionsClient() {
               &gt; The numbers behind the modeled $
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
-              Workshop-level inputs that drive every modeled dollar on the Assessment hub and
-              Summary. Editable, illustrative — the system of record stays with Versant&apos;s
-              reported financials.
+              Workshop-level inputs that drive every modeled dollar on the Impact Levers hub
+              and Impact Estimate. Editable, illustrative — the system of record stays with
+              Versant&apos;s reported financials.
             </p>
           </div>
           <button
@@ -294,16 +294,16 @@ export function AssumptionsClient() {
           </ol>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
             <Link
-              href="/assessment/summary"
+              href="/impact-levers/summary"
               className="inline-flex items-center gap-1 text-accent-purple-dark underline-offset-2 hover:underline"
             >
-              See it on the Summary <ArrowRight className="h-3 w-3" />
+              See it on the Impact Estimate <ArrowRight className="h-3 w-3" />
             </Link>
             <Link
-              href="/assessment"
+              href="/impact-levers"
               className="inline-flex items-center gap-1 text-forge-body underline-offset-2 hover:underline"
             >
-              Open Assessment <ArrowRight className="h-3 w-3" />
+              Configure Impact Levers <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
         </section>

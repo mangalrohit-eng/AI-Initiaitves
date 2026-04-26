@@ -28,7 +28,7 @@ type Props =
     };
 
 /**
- * Top-of-page metrics strip for the Assessment module.
+ * Top-of-page metrics strip for the Configure Impact Levers module.
  *
  * Program variant — average offshore %, average AI %, towers scored, and the
  * live modeled $.

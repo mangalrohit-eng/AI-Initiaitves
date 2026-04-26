@@ -28,7 +28,7 @@ type Props = {
 };
 
 /**
- * Cinematic per-L4 lever row for the Assessment module.
+ * Cinematic per-L4 lever row for the Configure Impact Levers module.
  *
  * Replaces the row-of-number-inputs layout with:
  *   - the L4 label and pool $ on the left,

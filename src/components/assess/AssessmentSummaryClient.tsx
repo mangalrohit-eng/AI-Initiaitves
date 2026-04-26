@@ -50,10 +50,10 @@ import { getPortalAudience, isInternalSurfaceAllowed } from "@/lib/portalAudienc
 import { cn } from "@/lib/utils";
 
 /**
- * Step-3 summary — animated impact hero, scenario presets, per-tower lever
- * cards, and a "Snapshot" button that exports a print-ready PNG of the hero +
- * scoreboard for slide decks. Present mode hides the chrome so the same page
- * works in a live workshop projection.
+ * Step-3 — Impact Estimate. Animated impact hero, scenario presets, per-tower
+ * lever cards, and a "Snapshot" button that exports a print-ready PNG of the
+ * hero + scoreboard for slide decks. Present mode hides the chrome so the same
+ * page works in a live workshop projection.
  */
 export function AssessmentSummaryClient() {
   const toast = useToast();
@@ -140,8 +140,8 @@ export function AssessmentSummaryClient() {
           <Breadcrumbs
             items={[
               { label: "Program home", href: "/" },
-              { label: "Assessment", href: "/assessment" },
-              { label: "Summary" },
+              { label: "Impact Levers", href: "/impact-levers" },
+              { label: "Impact Estimate" },
             ]}
           />
         ) : null}
@@ -150,7 +150,7 @@ export function AssessmentSummaryClient() {
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">
               <span className="font-mono">&gt;</span>
-              Scenario summary
+              Step 3 — Impact Estimate
             </div>
             <h1 className="mt-2 font-display text-2xl font-semibold text-forge-ink">
               &gt; Where the modeled value lands
@@ -362,7 +362,7 @@ function TowerCard({
                   : "Awaiting tower lead review — figures shown are illustrative defaults."
               }
             >
-              {isComplete ? "Reviewed by Tower Lead" : "To be reviewed by Tower Lead"}
+              {isComplete ? "Reviewed by Tower Lead" : "Pending Tower Lead review"}
             </span>
           </div>
           <p className="mt-1 text-xs text-forge-subtle">
@@ -439,7 +439,7 @@ function TowerCard({
         </button>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <Link
-            href={`/assessment/tower/${towerId}`}
+            href={`/impact-levers/tower/${towerId}`}
             className="text-accent-purple-dark underline"
           >
             Open dials

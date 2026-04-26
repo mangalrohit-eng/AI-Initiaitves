@@ -42,8 +42,9 @@ function rowStatus(program: AssessProgramV2, towerId: TowerId): RowStatus {
 }
 
 function statusCopy(s: RowStatus): { label: string; className: string } {
-  if (s === "complete") return { label: "Complete", className: "text-accent-green" };
-  if (s === "in-progress") return { label: "In progress", className: "text-accent-amber" };
+  if (s === "complete") return { label: "Reviewed by Tower Lead", className: "text-accent-green" };
+  if (s === "in-progress")
+    return { label: "To be reviewed by Tower Lead", className: "text-accent-amber" };
   return { label: "Not started", className: "text-forge-subtle" };
 }
 
@@ -103,16 +104,6 @@ export function CapabilityMapHubClient() {
   const completed = statuses.filter((s) => s.status === "complete").length;
   const inProgress = statuses.filter((s) => s.status === "in-progress").length;
 
-  const nextRecommended = React.useMemo(() => {
-    const myList = statuses.filter((s) => s.isMine);
-    return (
-      myList.find((s) => s.status === "in-progress")?.tower
-      ?? myList.find((s) => s.status === "not-started")?.tower
-      ?? statuses.find((s) => s.status === "in-progress")?.tower
-      ?? statuses.find((s) => s.status === "not-started")?.tower
-      ?? null
-    );
-  }, [statuses]);
   const hasAnyData = completed + inProgress > 0;
   const autoOpenPicker = params?.get("picker") === "open";
 
@@ -231,36 +222,6 @@ export function CapabilityMapHubClient() {
               </div>
             </div>
           </div>
-        ) : nextRecommended ? (
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-forge-border bg-forge-surface/70 p-4">
-            <div>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-forge-subtle">
-                Next recommended
-              </div>
-              <div className="mt-0.5 text-sm font-medium text-forge-ink">
-                {nextRecommended.name}
-                {minePicked && mine.includes(nextRecommended.id as TowerId) ? (
-                  <span className="ml-2 rounded-full bg-accent-purple/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">
-                    Mine
-                  </span>
-                ) : null}
-              </div>
-              <div className="text-xs text-forge-subtle">
-                {rowStatus(program, nextRecommended.id as TowerId) === "in-progress"
-                  ? "Resume confirming the capability map."
-                  : "Start confirming the capability map."}
-              </div>
-            </div>
-            <Link
-              href={getTowerHref(nextRecommended.id as TowerId, "capability-map")}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-accent-purple px-4 py-2 text-sm font-medium text-white hover:bg-accent-purple-dark"
-            >
-              {rowStatus(program, nextRecommended.id as TowerId) === "in-progress"
-                ? "Continue"
-                : "Start"}
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
         ) : null}
 
         {/* Tower list */}
@@ -273,17 +234,14 @@ export function CapabilityMapHubClient() {
         <ul className="mt-3 space-y-2">
           {statuses.map(({ tower: tw, status, isMine }) => {
             const s = statusCopy(status);
-            const isRecommended = nextRecommended?.id === tw.id && hasAnyData;
             return (
               <li
                 key={tw.id}
                 className={
                   "flex flex-col gap-2 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between " +
-                  (isRecommended
-                    ? "border-accent-purple/40 bg-accent-purple/5"
-                    : isMine
-                      ? "border-accent-purple/20 bg-forge-surface"
-                      : "border-forge-border bg-forge-surface")
+                  (isMine
+                    ? "border-accent-purple/20 bg-forge-surface"
+                    : "border-forge-border bg-forge-surface")
                 }
               >
                 <div>
@@ -292,11 +250,6 @@ export function CapabilityMapHubClient() {
                     {isMine ? (
                       <span className="rounded-full bg-accent-purple/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">
                         Mine
-                      </span>
-                    ) : null}
-                    {isRecommended ? (
-                      <span className="rounded-full bg-accent-purple/20 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">
-                        Next
                       </span>
                     ) : null}
                   </div>

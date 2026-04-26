@@ -4,7 +4,6 @@ import { getProductIcon, getStaticLinkIcon } from "@/config/productIcons";
 import { getPortalAudience, isInternalSurfaceAllowed } from "@/lib/portalAudience";
 import { SignOutButton } from "./SignOutButton";
 import { NavActions } from "./NavActions";
-import { ChangelogNavItem } from "./ChangelogNavItem";
 import { HelpMenu } from "./HelpMenu";
 
 function renderNavItem(item: NavItem) {
@@ -22,9 +21,6 @@ function renderNavItem(item: NavItem) {
     );
   }
   const s = item.link;
-  if (s.id === "changelog") {
-    return <ChangelogNavItem key={s.id} />;
-  }
   const I = s.iconId ? getStaticLinkIcon(s.iconId) : null;
   return (
     <Link

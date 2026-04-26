@@ -349,11 +349,21 @@ function TowerCard({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium text-forge-ink">{towerName}</span>
-            {isComplete ? (
-              <span className="rounded-full bg-accent-green/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-green">
-                Complete
-              </span>
-            ) : null}
+            <span
+              className={
+                "rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider " +
+                (isComplete
+                  ? "bg-accent-green/15 text-accent-green"
+                  : "bg-accent-amber/15 text-accent-amber")
+              }
+              title={
+                isComplete
+                  ? "Tower lead has reviewed and locked the baseline."
+                  : "Awaiting tower lead review — figures shown are illustrative defaults."
+              }
+            >
+              {isComplete ? "Reviewed by Tower Lead" : "To be reviewed by Tower Lead"}
+            </span>
           </div>
           <p className="mt-1 text-xs text-forge-subtle">
             Pool{" "}

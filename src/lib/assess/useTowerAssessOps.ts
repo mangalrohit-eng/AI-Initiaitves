@@ -37,11 +37,22 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
 
   React.useEffect(() => subscribe("assessProgram", () => setProgram(getAssessProgram())), []);
 
+  // Flush any pending debounced save when the user actually navigates away
+  // from the tower page. We hold sync in a ref so the cleanup observes the
+  // latest functions without re-running on every provider re-render — that
+  // mistake caused an infinite save loop because every `saveState` transition
+  // re-rendered the provider, changed the context reference, fired this
+  // cleanup, and queued another PUT.
+  const syncRef = React.useRef(sync);
+  React.useEffect(() => {
+    syncRef.current = sync;
+  }, [sync]);
   React.useEffect(() => {
     return () => {
-      if (sync?.canSync) void sync.flushSave();
+      const s = syncRef.current;
+      if (s?.canSync) void s.flushSave();
     };
-  }, [sync]);
+  }, []);
 
   const tState = program.towers[towerId] ?? { ...defaultTowerState() };
   const rows = tState.l4Rows;

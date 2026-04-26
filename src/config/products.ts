@@ -39,7 +39,7 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     iconId: "map",
     order: 10,
     audience: "both",
-    showInTopNav: true,
+    showInTopNav: false,
     status: "active",
   },
   {
@@ -53,7 +53,7 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     iconId: "sliders",
     order: 15,
     audience: "both",
-    showInTopNav: true,
+    showInTopNav: false,
     status: "active",
   },
   {
@@ -67,7 +67,7 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     iconId: "sparkles",
     order: 20,
     audience: "both",
-    showInTopNav: true,
+    showInTopNav: false,
     status: "active",
   },
   {
@@ -191,15 +191,14 @@ export type StaticNavLink = {
   showLabel: boolean;
 };
 
+/**
+ * Static links shown in the top nav.
+ * Trimmed to the bare minimum — the home logo handles the home link, and
+ * the three workshop steps live as primary cards on the landing page.
+ * Reference / utility links (Glossary, What's new, Executive summary)
+ * live in the footer instead.
+ */
 const STATIC_LINKS: StaticNavLink[] = [
-  {
-    id: "exec-summary",
-    name: "Executive summary",
-    path: "/summary",
-    order: 5,
-    audience: "both",
-    showLabel: true,
-  },
   {
     id: "assumptions",
     name: "Assumptions",
@@ -209,28 +208,54 @@ const STATIC_LINKS: StaticNavLink[] = [
     audience: "both",
     showLabel: true,
   },
+];
+
+export function getStaticNavLinks(audience: PortalAudience = getPortalAudience()): StaticNavLink[] {
+  return STATIC_LINKS.filter((l) => isAudienceMatch(l.audience, audience)).sort(
+    (a, b) => a.order - b.order,
+  );
+}
+
+/**
+ * Footer link descriptor — same shape as `StaticNavLink` minus the icon
+ * field, since footer links are pure text.
+ */
+export type FooterNavLink = {
+  id: string;
+  name: string;
+  path: string;
+  order: number;
+  audience: ProductAudience;
+};
+
+const FOOTER_LINKS: FooterNavLink[] = [
+  {
+    id: "exec-summary",
+    name: "Executive summary",
+    path: "/summary",
+    order: 10,
+    audience: "both",
+  },
   {
     id: "glossary",
     name: "Glossary",
     path: "/glossary",
-    order: 40,
-    iconId: "book-open" as const,
+    order: 20,
     audience: "both",
-    showLabel: true,
   },
   {
     id: "changelog",
     name: "What’s new",
     path: "/changelog",
-    order: 50,
-    iconId: "bell",
+    order: 30,
     audience: "internal",
-    showLabel: true,
   },
 ];
 
-export function getStaticNavLinks(audience: PortalAudience = getPortalAudience()): StaticNavLink[] {
-  return STATIC_LINKS.filter((l) => isAudienceMatch(l.audience, audience)).sort(
+export function getFooterNavLinks(
+  audience: PortalAudience = getPortalAudience(),
+): FooterNavLink[] {
+  return FOOTER_LINKS.filter((l) => isAudienceMatch(l.audience, audience)).sort(
     (a, b) => a.order - b.order,
   );
 }

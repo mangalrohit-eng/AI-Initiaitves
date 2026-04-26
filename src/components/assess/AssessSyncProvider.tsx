@@ -115,10 +115,16 @@ export function AssessSyncProvider({ children }: { children: React.ReactNode }) 
 
   const flushSave = React.useCallback(async () => {
     if (!canSync) return;
+    // Only flush if there's an actual pending change. Without this guard,
+    // any caller that runs `flushSave` defensively (e.g. on unmount) would
+    // queue a redundant PUT every time, which combined with the saveState
+    // re-render cycle produced an infinite save loop.
+    const hadPending = debounceRef.current !== null;
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
+    if (!hadPending) return;
     await runPut(getAssessProgram());
   }, [canSync, runPut]);
 
@@ -166,15 +172,18 @@ export function AssessSyncProvider({ children }: { children: React.ReactNode }) 
     });
   }, [loadError, refetch, toast]);
 
-  const value: Ctx = {
-    ready,
-    canSync,
-    loadError,
-    saveState,
-    lastSaveError,
-    refetch,
-    flushSave,
-  };
+  const value = React.useMemo<Ctx>(
+    () => ({
+      ready,
+      canSync,
+      loadError,
+      saveState,
+      lastSaveError,
+      refetch,
+      flushSave,
+    }),
+    [ready, canSync, loadError, saveState, lastSaveError, refetch, flushSave],
+  );
 
   return (
     <AssessSyncContext.Provider value={value}>

@@ -137,6 +137,10 @@ export function removePin(kind: PinKind, id: string): PinRef[] {
   return next;
 }
 
+export function clearPins(): void {
+  safeSet(KEYS.pins, []);
+}
+
 // ----- notes -----------------------------------------------------------
 
 type NotesBook = Record<string, Note[]>;

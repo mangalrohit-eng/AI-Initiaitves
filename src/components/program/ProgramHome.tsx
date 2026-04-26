@@ -18,7 +18,6 @@ import type { ForgeProduct } from "@/config/products";
 import type { PortalAudience } from "@/lib/portalAudience";
 import {
   getAssessProgram,
-  getMyTowers,
   getPersona,
   setPersona as persistPersona,
   subscribe,
@@ -44,7 +43,6 @@ const PERSONA_OPTIONS: ReadonlyArray<{
   { id: "executive", label: "Executive sponsor", showInClientMode: true },
 ];
 
-/** Per-product tagline for the larger initiative cards. */
 const INITIATIVE_BULLET: Record<string, string> = {
   "tower-explorer":
     "13 tower roadmaps · agent architectures · 4-lens detail per process.",
@@ -63,19 +61,15 @@ export function ProgramHome({ products, portalMode }: Props) {
   const otherSurfaces = comingSoon.filter((p) => p.id !== "offshore-plan");
 
   const [persona, setPersonaState] = React.useState<Persona | null>(null);
-  const [myTowers, setMyTowersState] = React.useState<string[]>([]);
   const [program, setProgram] = React.useState<AssessProgramV2 | null>(null);
 
   React.useEffect(() => {
     setPersonaState(getPersona());
-    setMyTowersState(getMyTowers());
     setProgram(getAssessProgram());
     const unsubP = subscribe("persona", () => setPersonaState(getPersona()));
-    const unsubM = subscribe("myTowers", () => setMyTowersState(getMyTowers()));
     const unsubA = subscribe("assessProgram", () => setProgram(getAssessProgram()));
     return () => {
       unsubP();
-      unsubM();
       unsubA();
     };
   }, []);
@@ -89,16 +83,6 @@ export function ProgramHome({ products, portalMode }: Props) {
     setPersonaState(id);
   };
 
-  const primaryCta: { label: string; href: string } = (() => {
-    if (persona === "executive") return { label: "Open executive summary", href: "/summary" };
-    if (myTowers.length > 0)
-      return {
-        label: `Open my ${myTowers.length} tower${myTowers.length === 1 ? "" : "s"}`,
-        href: "/capability-map",
-      };
-    return { label: "Pick my towers", href: "/capability-map?picker=open" };
-  })();
-
   const counts = React.useMemo(
     () => (program ? programCapabilityCounts(program) : null),
     [program],
@@ -110,135 +94,102 @@ export function ProgramHome({ products, portalMode }: Props) {
 
   return (
     <PageShell>
-      <div className="mx-auto max-w-6xl px-4 pb-6 pt-6 sm:px-6 sm:pt-8 lg:px-8">
-        {/* ========== HERO (compact) ========== */}
-        <section className="relative overflow-hidden rounded-2xl border border-forge-border bg-gradient-to-br from-accent-purple/10 via-forge-surface to-forge-surface px-5 py-5 sm:px-7 sm:py-6">
+      <div className="mx-auto max-w-6xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+        {/* ========== COMPACT HEADER ========== */}
+        <header className="flex flex-wrap items-center justify-between gap-3 pb-1">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-accent-purple-dark">
+            <Sparkles className="h-3 w-3" aria-hidden />
+            Forge Program · Accenture × Versant
+          </span>
           <div
-            aria-hidden
-            className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-accent-purple/10 blur-3xl"
-          />
-          <div className="relative flex flex-wrap items-end justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <div className="inline-flex items-center gap-2 rounded-full border border-forge-border bg-forge-surface px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-forge-subtle">
-                <Sparkles className="h-3 w-3 text-accent-purple" aria-hidden />
-                Forge Program · Accenture × Versant
-              </div>
-              <h1 className="mt-2 font-display text-2xl font-semibold leading-tight tracking-tight text-forge-ink sm:text-3xl">
-                &gt; Map the work. Dial the levers. See the dollars.
-              </h1>
-              <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-forge-body sm:text-sm">
-                Tower-by-tower against $2.43B adj. EBITDA, BB- credit, and the NBCU TSA expiration.
-              </p>
-            </div>
-            <div className="flex flex-col items-stretch gap-2 sm:items-end">
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  href={primaryCta.href}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-accent-purple px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-accent-purple-dark"
+            className="flex flex-wrap items-center gap-1"
+            role="group"
+            aria-label="Pick your persona"
+          >
+            <span className="mr-1 text-[10px] uppercase tracking-wider text-forge-hint">
+              I&apos;m a:
+            </span>
+            {visiblePersonas.map((p) => {
+              const selected = persona === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => onChoosePersona(p.id)}
+                  className={
+                    "rounded-full border px-2 py-0.5 text-[11px] font-medium transition " +
+                    (selected
+                      ? "border-accent-purple bg-accent-purple text-white"
+                      : "border-forge-border bg-forge-surface text-forge-body hover:border-accent-purple/40")
+                  }
                 >
-                  {primaryCta.label}
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-                <Link
-                  href="/summary"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-forge-border bg-forge-surface px-3 py-2 text-xs font-medium text-forge-body transition hover:border-accent-purple/40"
-                >
-                  Executive summary
-                </Link>
-              </div>
-              <div
-                className="flex flex-wrap items-center gap-1.5"
-                role="group"
-                aria-label="Pick your persona"
-              >
-                <span className="text-[10px] uppercase tracking-wider text-forge-hint">I&apos;m a:</span>
-                {visiblePersonas.map((p) => {
-                  const selected = persona === p.id;
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => onChoosePersona(p.id)}
-                      className={
-                        "rounded-full border px-2 py-0.5 text-[11px] font-medium transition " +
-                        (selected
-                          ? "border-accent-purple bg-accent-purple text-white"
-                          : "border-forge-border bg-forge-surface text-forge-body hover:border-accent-purple/40")
-                      }
-                    >
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+                  {p.label}
+                </button>
+              );
+            })}
           </div>
-        </section>
+        </header>
 
-        {/* ========== THREE-STEP STORY: thin, single-row navigation ========== */}
-        <ol className="mt-3 grid gap-2 sm:grid-cols-3">
-          <StoryStrip
+        {/* ========== TIER 1 — BIGGEST: numbered workshop cards ========== */}
+        <ol className="mt-4 grid gap-4 lg:grid-cols-3">
+          <PrimaryCard
             step={1}
-            title="Confirm capabilities"
+            title="Capability Map"
+            subtitle="Confirm L1-L4 work and footprint"
             href="/capability-map"
-            icon={<MapIcon className="h-3.5 w-3.5" />}
-            metricLabel="L4"
-            metricValue={counts ? String(counts.l4) : "—"}
-            footer={
-              counts
-                ? `${counts.contributingTowers}/${towers.length} towers`
-                : "Capability Map"
+            icon={<MapIcon className="h-7 w-7" />}
+            metric={
+              counts && counts.l4 > 0
+                ? { value: String(counts.l4), label: "L4 confirmed" }
+                : { value: "—", label: "Start here" }
+            }
+            meta={
+              counts && counts.contributingTowers > 0
+                ? `${counts.contributingTowers} of ${towers.length} towers · ${counts.l2} L2 · ${counts.l3} L3`
+                : "Pick towers and confirm capabilities"
             }
           />
-          <StoryStrip
+          <PrimaryCard
             step={2}
-            title="Dial the levers"
+            title="Impact Levers"
+            subtitle="Dial offshore + AI per L4"
             href="/assessment"
-            icon={<Sparkles className="h-3.5 w-3.5" />}
-            metricLabel="Off / AI"
-            metricValue={
+            icon={<Sparkles className="h-7 w-7" />}
+            dualMetric={
               summary
-                ? `${summary.weightedScenarioOffshorePct.toFixed(0)}% / ${summary.weightedScenarioAiPct.toFixed(0)}%`
-                : "— / —"
+                ? {
+                    off: summary.weightedScenarioOffshorePct,
+                    ai: summary.weightedScenarioAiPct,
+                  }
+                : undefined
             }
-            footer={
+            meta={
               summary && summary.totalPool > 0
-                ? `Pool ${formatMoney(summary.totalPool, { decimals: 1 })}`
-                : "Assessment"
+                ? `Pool ${formatMoney(summary.totalPool, { decimals: 1 })} · cost-weighted`
+                : "Move dials per tower to see modeled $"
             }
-            secondaryIcons={[
-              { Icon: Globe2, accent: "purple" },
-              { Icon: Cpu, accent: "teal" },
-            ]}
           />
-          <StoryStrip
+          <PrimaryCard
             step={3}
-            title="See the impact"
+            title="Impact"
+            subtitle="See the modeled scenario $"
             href="/assessment/summary"
-            icon={<TrendingUp className="h-3.5 w-3.5" />}
-            accent
+            icon={<TrendingUp className="h-7 w-7" />}
             money={summary?.scenarioCombined ?? 0}
-            footer={
+            meta={
               summary && summary.scenarioCombined > 0
                 ? `Off ${formatMoney(summary.scenarioOffshore, { decimals: 1 })} · AI ${formatMoney(summary.scenarioAi, { decimals: 1 })}`
                 : "Lights up as dials move"
             }
+            accent
           />
         </ol>
 
-        {/* ========== INITIATIVE DETAIL (AI Initiatives + Offshore Plan) ========== */}
+        {/* ========== TIER 2 — MEDIUM: AI / Offshore initiatives ========== */}
         {initiativeBoxes.length > 0 ? (
-          <section className="mt-6">
-            <div className="flex items-baseline justify-between">
-              <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-forge-subtle">
-                &gt; Initiative detail
-              </h2>
-              <span className="text-[11px] text-forge-hint">
-                What sits behind the dials
-              </span>
-            </div>
-            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <section className="mt-5">
+            <div className="grid gap-3 sm:grid-cols-2">
               {initiativeBoxes.map((p) => (
                 <InitiativeCard
                   key={p.id}
@@ -250,13 +201,10 @@ export function ProgramHome({ products, portalMode }: Props) {
           </section>
         ) : null}
 
-        {/* ========== REST OF THE PROGRAM (single chip strip) ========== */}
+        {/* ========== TIER 3 — SMALLEST: chip strip ========== */}
         {otherSurfaces.length > 0 ? (
-          <section className="mt-4">
+          <section className="mt-3">
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-forge-border bg-forge-surface/60 px-3 py-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-forge-hint">
-                &gt; Shipping next
-              </span>
               {otherSurfaces.map((p) => (
                 <ProductChip key={p.id} product={p} />
               ))}
@@ -268,113 +216,167 @@ export function ProgramHome({ products, portalMode }: Props) {
   );
 }
 
-/* ============== THIN STEP-STRIP CARD ============== */
+/* ============== TIER 1 PRIMARY CARD ============== */
 
-type AccentHue = "purple" | "teal";
-
-function StoryStrip({
-  step,
-  title,
-  href,
-  icon,
-  metricLabel,
-  metricValue,
-  money,
-  footer,
-  accent,
-  secondaryIcons,
-}: {
+type PrimaryCardProps = {
   step: number;
   title: string;
+  subtitle: string;
   href: string;
   icon: React.ReactNode;
-  metricLabel?: string;
-  metricValue?: string;
+  /** Single-value metric: e.g. L4 count. */
+  metric?: { value: string; label: string };
+  /** Dual percentage display for the levers card. */
+  dualMetric?: { off: number; ai: number };
+  /** Animated $ counter for the impact card. */
   money?: number;
-  footer?: string;
+  /** Footer line under the metric. */
+  meta?: string;
+  /** Hero treatment for step 3 (purple gradient + glow). */
   accent?: boolean;
-  secondaryIcons?: { Icon: React.ComponentType<{ className?: string }>; accent: AccentHue }[];
-}) {
+};
+
+function PrimaryCard({
+  step,
+  title,
+  subtitle,
+  href,
+  icon,
+  metric,
+  dualMetric,
+  money,
+  meta,
+  accent,
+}: PrimaryCardProps) {
   return (
     <li className="list-none">
       <Link
         href={href}
         className={
-          "group flex h-full items-center gap-3 rounded-xl border px-3 py-2.5 transition " +
+          "group flex h-full min-h-[220px] flex-col gap-4 rounded-2xl border p-5 shadow-sm transition sm:p-6 " +
           (accent
-            ? "border-accent-purple/40 bg-gradient-to-br from-accent-purple/12 via-forge-surface to-forge-surface hover:border-accent-purple/60"
-            : "border-forge-border bg-forge-surface hover:border-accent-purple/40")
+            ? "border-accent-purple/40 bg-gradient-to-br from-accent-purple/15 via-forge-surface to-forge-surface hover:border-accent-purple/60 hover:shadow-[0_0_0_1px_rgba(161,0,255,0.3)]"
+            : "border-forge-border bg-forge-surface hover:border-accent-purple/40 hover:shadow-[0_0_0_1px_rgba(161,0,255,0.18)]")
         }
       >
-        <span
-          className={
-            "flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-semibold " +
-            (accent
-              ? "bg-accent-purple text-white"
-              : "border border-forge-border-strong bg-forge-well text-forge-body")
-          }
-          aria-hidden
-        >
-          {step}
-        </span>
-        <span
-          className={
-            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md " +
-            (accent
-              ? "bg-accent-purple/20 text-accent-purple-dark"
-              : "bg-forge-well/70 text-accent-purple-dark")
-          }
-          aria-hidden
-        >
-          {icon}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-1.5">
-            <h3 className="font-display text-sm font-semibold leading-tight text-forge-ink">
-              {title}
-            </h3>
+        {/* Top: numbered badge + icon + arrow */}
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <span
+              className={
+                "flex h-8 w-8 items-center justify-center rounded-full font-mono text-xs font-bold " +
+                (accent
+                  ? "bg-accent-purple text-white shadow-[0_0_0_3px_rgba(161,0,255,0.18)]"
+                  : "border border-forge-border-strong bg-forge-well text-forge-body")
+              }
+              aria-hidden
+            >
+              {step}
+            </span>
+            <div
+              className={
+                "flex h-12 w-12 items-center justify-center rounded-xl border " +
+                (accent
+                  ? "border-accent-purple/40 bg-accent-purple/10 text-accent-purple-dark"
+                  : "border-forge-border bg-forge-well/80 text-accent-purple-dark")
+              }
+              aria-hidden
+            >
+              {icon}
+            </div>
           </div>
+          <ArrowRight className="h-5 w-5 text-forge-subtle transition group-hover:translate-x-1 group-hover:text-accent-purple-dark" />
+        </div>
+
+        {/* Title + subtitle */}
+        <div>
+          <h3
+            className={
+              "font-display text-xl font-semibold leading-tight tracking-tight sm:text-2xl " +
+              (accent
+                ? "text-forge-ink"
+                : "text-forge-ink group-hover:text-accent-purple-dark")
+            }
+          >
+            {title}
+          </h3>
+          <p className="mt-1 text-xs leading-relaxed text-forge-subtle sm:text-sm">
+            {subtitle}
+          </p>
+        </div>
+
+        {/* Metric */}
+        <div className="mt-auto">
           {money !== undefined ? (
-            <div className="mt-0.5 font-display text-lg font-semibold leading-tight tracking-tight text-forge-ink">
-              {money > 0 ? (
-                <MoneyCounter value={money} decimals={1} />
-              ) : (
-                <span className="text-forge-subtle">$—</span>
-              )}
-            </div>
-          ) : metricValue ? (
-            <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[12px] leading-tight">
-              {secondaryIcons
-                ? secondaryIcons.map(({ Icon, accent: hue }, i) => (
-                    <Icon
-                      key={i}
-                      className={
-                        "h-3 w-3 " +
-                        (hue === "purple"
-                          ? "text-accent-purple-dark"
-                          : "text-accent-teal")
-                      }
-                      aria-hidden
-                    />
-                  ))
-                : null}
-              <span className="text-forge-hint">{metricLabel}</span>
-              <span className="font-semibold text-forge-ink">{metricValue}</span>
-            </div>
+            <>
+              <div className="font-display text-3xl font-semibold tabular-nums tracking-tight text-forge-ink sm:text-4xl">
+                {money > 0 ? (
+                  <MoneyCounter value={money} decimals={1} />
+                ) : (
+                  <span className="text-forge-subtle">$—</span>
+                )}
+              </div>
+              <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-forge-hint">
+                Modeled scenario
+              </div>
+            </>
+          ) : dualMetric ? (
+            <>
+              <div className="flex items-baseline gap-2 font-display text-2xl font-semibold tabular-nums tracking-tight sm:text-3xl">
+                <span className="inline-flex items-baseline gap-1">
+                  <Globe2
+                    className="h-4 w-4 self-center text-accent-purple-dark"
+                    aria-hidden
+                  />
+                  <span className="text-accent-purple-dark">
+                    {dualMetric.off.toFixed(0)}%
+                  </span>
+                </span>
+                <span className="text-forge-hint">/</span>
+                <span className="inline-flex items-baseline gap-1">
+                  <Cpu
+                    className="h-4 w-4 self-center text-accent-teal"
+                    aria-hidden
+                  />
+                  <span className="text-accent-teal">
+                    {dualMetric.ai.toFixed(0)}%
+                  </span>
+                </span>
+              </div>
+              <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-forge-hint">
+                Cost-weighted dials
+              </div>
+            </>
+          ) : metric ? (
+            <>
+              <div className="font-display text-3xl font-semibold tabular-nums tracking-tight text-forge-ink sm:text-4xl">
+                {metric.value}
+              </div>
+              <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-forge-hint">
+                {metric.label}
+              </div>
+            </>
           ) : null}
-          {footer ? (
-            <div className="mt-0.5 truncate text-[11px] text-forge-subtle">{footer}</div>
+          {meta ? (
+            <div className="mt-2 truncate text-[11px] text-forge-subtle">
+              {meta}
+            </div>
           ) : null}
         </div>
-        <ArrowRight className="h-4 w-4 shrink-0 text-forge-subtle transition group-hover:text-accent-purple-dark" />
       </Link>
     </li>
   );
 }
 
-/* ============== LARGE INITIATIVE CARD ============== */
+/* ============== TIER 2 INITIATIVE CARD ============== */
 
-function InitiativeCard({ product, bullet }: { product: ForgeProduct; bullet?: string }) {
+function InitiativeCard({
+  product,
+  bullet,
+}: {
+  product: ForgeProduct;
+  bullet?: string;
+}) {
   const Icon = getProductIcon(product.iconId);
   const isActive = product.status === "active";
   const statusLabel = isActive ? "Active" : product.comingSoonLabel ?? "Coming next";
@@ -382,69 +384,62 @@ function InitiativeCard({ product, bullet }: { product: ForgeProduct; bullet?: s
     <Link
       href={product.path}
       className={
-        "group flex h-full flex-col gap-3 rounded-2xl border p-5 shadow-sm transition " +
+        "group flex h-full items-start gap-3 rounded-xl border p-4 transition " +
         (isActive
-          ? "border-forge-border bg-forge-surface hover:border-accent-purple/50 hover:shadow-[0_0_0_1px_rgba(161,0,255,0.2)]"
+          ? "border-forge-border bg-forge-surface hover:border-accent-purple/45 hover:shadow-[0_0_0_1px_rgba(161,0,255,0.15)]"
           : "border-forge-border bg-forge-surface/70 hover:border-forge-border-strong")
       }
     >
-      <div className="flex items-start gap-3">
-        <div
-          className={
-            "flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border " +
-            (isActive
-              ? "border-forge-border bg-forge-well/80 text-accent-purple-dark"
-              : "border-forge-border bg-forge-well/50 text-forge-subtle")
-          }
-        >
-          <Icon className="h-6 w-6" aria-hidden />
+      <div
+        className={
+          "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border " +
+          (isActive
+            ? "border-forge-border bg-forge-well/80 text-accent-purple-dark"
+            : "border-forge-border bg-forge-well/50 text-forge-subtle")
+        }
+        aria-hidden
+      >
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3
+            className={
+              "font-display text-sm font-semibold leading-snug " +
+              (isActive
+                ? "text-forge-ink group-hover:text-accent-purple-dark"
+                : "text-forge-body")
+            }
+          >
+            {product.name}
+          </h3>
+          <span
+            className={
+              "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider " +
+              (isActive
+                ? "border-accent-green/40 bg-accent-green/10 text-accent-green"
+                : "border-accent-amber/40 bg-accent-amber/10 text-accent-amber")
+            }
+          >
+            {!isActive ? <CalendarClock className="h-2.5 w-2.5" aria-hidden /> : null}
+            {statusLabel}
+          </span>
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3
-              className={
-                "font-display text-lg font-semibold leading-snug " +
-                (isActive
-                  ? "text-forge-ink group-hover:text-accent-purple-dark"
-                  : "text-forge-body")
-              }
-            >
-              {product.name}
-            </h3>
-            <span
-              className={
-                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider " +
-                (isActive
-                  ? "border-accent-green/40 bg-accent-green/10 text-accent-green"
-                  : "border-accent-amber/40 bg-accent-amber/10 text-accent-amber")
-              }
-            >
-              {!isActive ? <CalendarClock className="h-2.5 w-2.5" aria-hidden /> : null}
-              {statusLabel}
-            </span>
-          </div>
-          <p className="mt-1.5 text-xs leading-relaxed text-forge-body">
-            {product.tagline}
+        <p className="mt-1 text-[11px] leading-relaxed text-forge-body">
+          {product.tagline}
+        </p>
+        {bullet ? (
+          <p className="mt-1 font-mono text-[10px] leading-relaxed text-forge-subtle">
+            {bullet}
           </p>
-          {bullet ? (
-            <p className="mt-2 font-mono text-[11px] leading-relaxed text-forge-subtle">
-              {bullet}
-            </p>
-          ) : null}
-        </div>
+        ) : null}
       </div>
-      <div className="mt-auto flex items-center justify-between text-xs">
-        <span className="font-mono text-accent-purple">{product.path}</span>
-        <span className="inline-flex items-center gap-1 text-forge-subtle group-hover:text-accent-purple-dark">
-          {isActive ? "Open module" : "Read what's coming"}
-          <ArrowRight className="h-3.5 w-3.5" />
-        </span>
-      </div>
+      <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-forge-subtle transition group-hover:translate-x-0.5 group-hover:text-accent-purple-dark" />
     </Link>
   );
 }
 
-/* ============== PRODUCT CHIP ============== */
+/* ============== TIER 3 PRODUCT CHIP ============== */
 
 function ProductChip({ product }: { product: ForgeProduct }) {
   const Icon = getProductIcon(product.iconId);

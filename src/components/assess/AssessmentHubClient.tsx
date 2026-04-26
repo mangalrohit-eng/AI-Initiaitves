@@ -244,11 +244,6 @@ export function AssessmentHubClient() {
                           Mine
                         </span>
                       ) : null}
-                      {isComplete ? (
-                        <span className="rounded-full bg-accent-green/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-green">
-                          Complete
-                        </span>
-                      ) : null}
                     </div>
                     <div className={`mt-0.5 flex items-center gap-1.5 text-xs ${sc.className}`}>
                       {status === "dialed" ? (
@@ -258,6 +253,20 @@ export function AssessmentHubClient() {
                       )}
                       {sc.label}
                     </div>
+                    {status !== "no-footprint" ? (
+                      <div
+                        className={`mt-1 inline-flex items-center gap-1 text-[11px] ${
+                          isComplete ? "text-accent-green" : "text-accent-amber"
+                        }`}
+                      >
+                        {isComplete ? (
+                          <CheckCircle2 className="h-3 w-3" aria-hidden />
+                        ) : (
+                          <Circle className="h-3 w-3" aria-hidden />
+                        )}
+                        {isComplete ? "Reviewed by Tower Lead" : "To be reviewed by Tower Lead"}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 

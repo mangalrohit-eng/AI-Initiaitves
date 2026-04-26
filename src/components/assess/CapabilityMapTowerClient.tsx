@@ -82,17 +82,16 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
           completed={completedModules}
         />
 
-        <div className="mt-6">
+        <div className="mt-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h1 className="font-display text-2xl font-semibold text-forge-ink">
             &gt; {towerName} · Capability Map
           </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-forge-body">
-            Confirm the in-scope <Term termKey="capability map">L1 to L4 capability tree</Term> and the workforce
-            footprint that delivers it. The footprint feeds the{" "}
+          <p className="text-xs text-forge-subtle">
+            Step 1 — confirm the <Term termKey="capability map">L1–L4 tree</Term> and footprint, then open the{" "}
             <Link href={getTowerHref(towerId, "assessment")} className="text-accent-purple-dark underline">
-              Assessment dials
-            </Link>{" "}
-            on the sibling page — set them once you&apos;re happy with the map.
+              Assessment
+            </Link>
+            .
           </p>
         </div>
 
@@ -114,64 +113,86 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
         {view.l2.length === 0 && rows.length === 0 ? (
           <p className="mt-6 rounded-xl border border-dashed border-forge-border bg-forge-well/40 p-4 text-sm text-forge-subtle">
             No <Term termKey="capability map">capability map</Term> is defined for this tower and no footprint is loaded yet. Load
-            the sample workshop or upload a file to see L2 to L4 structure.
+            the sample or upload a file to see L2–L4 structure.
           </p>
         ) : null}
 
-        {/* Footprint loader */}
-        <section className="mt-6 rounded-2xl border border-dashed border-forge-border bg-forge-well/40 p-5">
-          <h2 className="font-display text-base font-semibold text-forge-ink">
-            Footprint file (optional refresh)
-          </h2>
-          <p className="mt-1 text-sm text-forge-subtle">
-            One row per <Term termKey="l4">L4</Term>. Required: offshore-capable and onshore{" "}
-            <Term termKey="fte">FTE</Term> / <Term termKey="contractor">contractor</Term> columns. Optional:
-            annual_spend_usd. Dial inputs (offshore / AI assessment) live on the Assessment page.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <a
-              href="/assess-tower-template.xlsx"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-forge-border bg-forge-surface px-2.5 py-1.5 text-xs text-forge-body"
-              download
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5 text-accent-purple" />
-              Empty template (Excel)
-            </a>
-            <a
-              href="/assess-tower-template.csv"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-forge-border bg-forge-surface px-2.5 py-1.5 text-xs text-forge-body"
-              download
-            >
-              Empty template (CSV)
-            </a>
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  downloadSingleTowerSampleCsv(towerId, towerName);
-                  toast.success({ title: `Sample CSV for ${towerName} downloaded` });
-                } catch (e) {
-                  toast.error({
-                    title: "Couldn't download sample",
-                    description: e instanceof Error ? e.message : undefined,
-                  });
-                }
-              }}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-forge-border bg-forge-surface px-2.5 py-1.5 text-xs text-forge-body"
-            >
-              <Download className="h-3.5 w-3.5 text-accent-teal" />
-              Download sample (CSV)
-            </button>
-            <button
-              type="button"
-              onClick={() => void sampleLoadOp.fire()}
-              disabled={sampleLoadOp.state === "loading"}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-accent-teal/40 bg-accent-teal/10 px-2.5 py-1.5 text-xs font-medium text-accent-teal disabled:opacity-60"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              {sampleLoadOp.state === "loading" ? "Loading..." : "Load sample workshop (this tower)"}
-            </button>
+        {/* Footprint loader — primary action up front, templates tucked into a details disclosure */}
+        <section className="mt-6 rounded-2xl border border-forge-border bg-forge-well/40 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="font-display text-sm font-semibold text-forge-ink">
+                Footprint
+              </h2>
+              <p className="mt-0.5 text-xs text-forge-subtle">
+                One row per <Term termKey="l4">L4</Term> with onshore / offshore{" "}
+                <Term termKey="fte">FTE</Term> &amp; <Term termKey="contractor">contractors</Term>.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => void sampleLoadOp.fire()}
+                disabled={sampleLoadOp.state === "loading"}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-accent-teal/40 bg-accent-teal/10 px-2.5 py-1.5 text-xs font-medium text-accent-teal hover:border-accent-teal/60 disabled:opacity-60"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {sampleLoadOp.state === "loading" ? "Loading..." : rows.length > 0 ? "Reload sample" : "Load sample"}
+              </button>
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={importOp.state === "loading"}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-forge-border bg-forge-surface px-2.5 py-1.5 text-xs text-forge-body hover:border-accent-purple/30 disabled:opacity-60"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                {importOp.state === "loading" ? "Importing..." : "Upload file"}
+              </button>
+            </div>
           </div>
+          <details className="group mt-2">
+            <summary className="cursor-pointer list-none text-[11px] text-forge-hint hover:text-forge-subtle">
+              <span className="inline-flex items-center gap-1">
+                <span className="transition-transform group-open:rotate-90">›</span>
+                Templates &amp; samples
+              </span>
+            </summary>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <a
+                href="/assess-tower-template.xlsx"
+                className="inline-flex items-center gap-1.5 rounded-md border border-forge-border bg-forge-surface px-2 py-1 text-[11px] text-forge-body hover:border-accent-purple/30"
+                download
+              >
+                <FileSpreadsheet className="h-3 w-3 text-accent-purple" />
+                Empty template (Excel)
+              </a>
+              <a
+                href="/assess-tower-template.csv"
+                className="inline-flex items-center gap-1.5 rounded-md border border-forge-border bg-forge-surface px-2 py-1 text-[11px] text-forge-body hover:border-accent-purple/30"
+                download
+              >
+                Empty template (CSV)
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    downloadSingleTowerSampleCsv(towerId, towerName);
+                    toast.success({ title: `Sample CSV for ${towerName} downloaded` });
+                  } catch (e) {
+                    toast.error({
+                      title: "Couldn't download sample",
+                      description: e instanceof Error ? e.message : undefined,
+                    });
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md border border-forge-border bg-forge-surface px-2 py-1 text-[11px] text-forge-body hover:border-accent-purple/30"
+              >
+                <Download className="h-3 w-3 text-accent-teal" />
+                Sample (CSV)
+              </button>
+            </div>
+          </details>
           <input
             ref={fileRef}
             type="file"
@@ -179,15 +200,6 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
             className="hidden"
             onChange={onFile}
           />
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={importOp.state === "loading"}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-forge-border bg-forge-surface px-4 py-2 text-sm text-forge-ink disabled:opacity-60"
-          >
-            <Upload className="h-4 w-4" />
-            {importOp.state === "loading" ? "Importing..." : "Choose file"}
-          </button>
           {importOp.data && importOp.data.warnings.length > 0 ? (
             <ul className="mt-3 max-h-32 list-inside list-disc overflow-y-auto text-xs text-accent-amber">
               {importOp.data.warnings.slice(0, 12).map((x) => (
@@ -199,7 +211,20 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
         </section>
 
         {rows.length > 0 ? (
-          <FootprintTable rows={rows} onPatch={patchRow} />
+          <details className="group mt-4 rounded-2xl border border-forge-border bg-forge-surface/40 open:bg-forge-surface/60">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2.5 text-sm font-medium text-forge-body">
+              <span>
+                Edit footprint values
+                <span className="ml-2 font-mono text-[11px] text-forge-hint">
+                  {rows.length} row{rows.length === 1 ? "" : "s"}
+                </span>
+              </span>
+              <span className="text-forge-subtle transition-transform group-open:rotate-90" aria-hidden>
+                ›
+              </span>
+            </summary>
+            <FootprintTable rows={rows} onPatch={patchRow} />
+          </details>
         ) : null}
 
         {rows.length > 0 ? (
@@ -234,7 +259,7 @@ function FootprintTable({
   onPatch: (id: string, patch: Partial<L4WorkforceRow>) => void;
 }) {
   return (
-    <div className="mt-6 overflow-x-auto rounded-2xl border border-forge-border">
+    <div className="overflow-x-auto border-t border-forge-border">
       <table className="w-full min-w-[820px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-forge-border bg-forge-well/50 text-xs text-forge-subtle">

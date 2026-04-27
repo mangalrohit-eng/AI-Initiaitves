@@ -4,7 +4,6 @@ import * as React from "react";
 import { Search, X } from "lucide-react";
 import type { Tower } from "@/data/types";
 import { TowerGrid } from "./TowerGrid";
-import { OnboardingHero } from "@/components/onboarding/OnboardingHero";
 
 function matches(tower: Tower, q: string) {
   if (!q) return true;
@@ -20,21 +19,11 @@ function matches(tower: Tower, q: string) {
 
 export function TowerGridFilterable({ towers }: { towers: Tower[] }) {
   const [q, setQ] = React.useState("");
-  const inputRef = React.useRef<HTMLInputElement>(null);
 
   const filtered = React.useMemo(() => towers.filter((t) => matches(t, q)), [towers, q]);
 
-  function focusSearch() {
-    const el = inputRef.current;
-    if (!el) return;
-    el.focus();
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
-
   return (
-    <div className="space-y-8">
-      <OnboardingHero onFocusSearch={focusSearch} />
-
+    <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-display text-lg font-semibold text-forge-ink">Tower overview</h2>
@@ -49,7 +38,6 @@ export function TowerGridFilterable({ towers }: { towers: Tower[] }) {
             aria-hidden
           />
           <input
-            ref={inputRef}
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}

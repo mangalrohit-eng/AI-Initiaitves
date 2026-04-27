@@ -24,18 +24,19 @@ export function OperatingModelSection({
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="font-display text-xl font-semibold text-forge-ink">Operating model</h2>
+            <h2 className="font-display text-xl font-semibold text-forge-ink">
+              L2 — Work categories
+            </h2>
             <p className="mt-1 text-sm text-forge-subtle">
               <span className="font-medium text-forge-ink">{totals.categoryCount}</span> work categories ·{" "}
-              <span className="font-medium text-forge-ink">{totals.processCount}</span> processes ·{" "}
+              <span className="font-medium text-forge-ink">{totals.processCount}</span> activities ·{" "}
               <span className="font-medium text-accent-purple-dark">{totals.aiEligibleCount}</span> AI-eligible ·{" "}
               <span className="text-forge-body">{totals.notEligibleCount} human-led</span>
             </p>
           </div>
           <p className="max-w-xl text-xs text-forge-subtle">
-            Every process the tower owns — AI-eligible and human-led — is mapped here. Select a
-            category to see its full landscape, then follow the priority overlay into the initiative
-            detail.
+            Every L2 sub-function the tower owns. Select one to drop into its L3 activities and
+            follow the priority overlay into the initiative detail.
           </p>
         </div>
 
@@ -56,11 +57,13 @@ export function OperatingModelSection({
         <section className="space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h3 className="font-display text-lg font-semibold text-forge-ink">Process landscape</h3>
+              <h3 className="font-display text-lg font-semibold text-forge-ink">
+                L3 — Activities
+              </h3>
               <p className="mt-1 text-sm text-forge-subtle">
-                All processes in <span className="font-medium text-forge-ink">{active.name}</span>, with
-                frequency, criticality, maturity, and AI priority. Non-AI processes show the analytical
-                rationale.
+                All L3 activities under <span className="font-medium text-forge-ink">{active.name}</span>,
+                with frequency, criticality, maturity, and AI priority. Non-AI activities show the
+                analytical rationale.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-forge-subtle">

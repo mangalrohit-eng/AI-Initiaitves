@@ -53,7 +53,7 @@ const KEYS = {
   lastChangelogVisit: "forge.lastChangelogVisit.v1",
   assessProgram: "forge.assessProgram.v2", // key is shared across v2 / v3 / v4 — see migrateAssessProgram
   myTowers: "forge.myTowers.v1", // TowerId[]
-  persona: "forge.persona", // legacy unversioned key from OnboardingHero
+  persona: "forge.persona", // legacy unversioned key (raw string, not JSON-encoded)
 } as const;
 
 const RECENT_CAP = 12;
@@ -727,8 +727,8 @@ export function toggleMyTower(id: TowerId): TowerId[] {
 export type Persona = "versant" | "accenture" | "executive";
 
 export function getPersona(): Persona | null {
-  // Stored as a raw string by OnboardingHero historically; safeGet wraps in
-  // JSON.parse, so we read with a manual fallback for the legacy raw value.
+  // Stored historically as a raw string; safeGet wraps in JSON.parse, so we
+  // read with a manual fallback for the legacy raw value.
   if (!canUse()) return null;
   try {
     const raw = window.localStorage.getItem(KEYS.persona);
@@ -747,7 +747,7 @@ export function setPersona(p: Persona | null): void {
     if (p === null) {
       window.localStorage.removeItem(KEYS.persona);
     } else {
-      // Match the OnboardingHero legacy format (raw string, not JSON-encoded).
+      // Match the legacy storage format (raw string, not JSON-encoded).
       window.localStorage.setItem(KEYS.persona, p);
     }
     emit(KEYS.persona);

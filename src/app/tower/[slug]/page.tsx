@@ -8,7 +8,6 @@ import { PageShell } from "@/components/PageShell";
 import { OperatingModelSection } from "@/components/operatingModel/OperatingModelSection";
 import { AiRoadmap } from "@/components/operatingModel/AiRoadmap";
 import { TowerHeader } from "@/components/towers/TowerHeader";
-import { TowerOpportunities } from "@/components/towers/TowerOpportunities";
 import { ShareBar } from "@/components/ui/ShareBar";
 import { ViewTracker } from "@/components/collab/ViewTracker";
 import { towers } from "@/data/towers";
@@ -81,10 +80,6 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
 
         <div className="mt-6">
           <TowerHeader tower={tower} />
-        </div>
-
-        <div className="mt-12">
-          <TowerOpportunities tower={tower} />
         </div>
 
         <section className="mt-14 space-y-3">

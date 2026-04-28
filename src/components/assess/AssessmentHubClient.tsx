@@ -14,6 +14,8 @@ import { ImpactHero } from "@/components/assess/ImpactHero";
 import { ProgramToolsDrawer } from "@/components/assess/ProgramToolsDrawer";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PageShell } from "@/components/PageShell";
+import { ScreenGuidanceBar } from "@/components/guidance/ScreenGuidanceBar";
+import { useGuidanceImpactHub } from "@/lib/guidance/useJourneyGuidance";
 import { Term } from "@/components/help/Term";
 import { towers } from "@/data/towers";
 import {
@@ -57,6 +59,7 @@ function dialStatusCopy(s: DialStatus): { label: string; className: string } {
 export function AssessmentHubClient() {
   const [program, setProgram] = React.useState<AssessProgramV2>(getAssessProgram);
   const [mine, setMine] = React.useState<TowerId[]>([]);
+  const impactHubGuidance = useGuidanceImpactHub();
 
   React.useEffect(() => {
     setProgram(getAssessProgram());
@@ -101,6 +104,7 @@ export function AssessmentHubClient() {
             { label: "Impact Levers" },
           ]}
         />
+        <ScreenGuidanceBar guidance={impactHubGuidance} className="mt-3" />
         <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">

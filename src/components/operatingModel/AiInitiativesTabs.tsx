@@ -54,7 +54,7 @@ export function AiInitiativesTabs({ tower }: { tower: Tower }) {
 
   return (
     <div className="space-y-5">
-      <StaleCurationBanner towerId={tower.id as TowerId} />
+      <StaleCurationBanner towerId={tower.id as TowerId} hideTitle />
 
       <div
         role="tablist"

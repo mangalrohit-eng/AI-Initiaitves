@@ -11,6 +11,8 @@ import { AnnotationOverlay } from "@/components/collab/AnnotationOverlay";
 import { ChangedSinceBadge } from "@/components/collab/ChangedSinceBadge";
 import { towers } from "@/data/towers";
 import { getEvidenceForProcess, getProcessBySlugs, slugify } from "@/lib/utils";
+import { processDetailStaticLine } from "@/lib/guidance/resolveTowerJourneyGuidance";
+import { ScreenGuidanceBar } from "@/components/guidance/ScreenGuidanceBar";
 
 export function generateStaticParams() {
   return towers.flatMap((t) => t.processes.map((p) => ({ slug: t.id, processSlug: slugify(p.name) })));
@@ -19,6 +21,8 @@ export function generateStaticParams() {
 export default function ProcessPage({ params }: { params: { slug: string; processSlug: string } }) {
   const hit = getProcessBySlugs(params.slug, params.processSlug);
   if (!hit) notFound();
+
+  const processGuidance = processDetailStaticLine(hit.process.name, hit.tower.name);
 
   return (
     <PageShell>
@@ -50,6 +54,8 @@ export default function ProcessPage({ params }: { params: { slug: string; proces
           subtitle={hit.tower.name}
         />
         <AnnotationOverlay />
+
+        <ScreenGuidanceBar guidance={processGuidance} className="mt-3" />
 
         <div className="mt-6 space-y-4">
           <div className="flex flex-wrap items-center gap-3">

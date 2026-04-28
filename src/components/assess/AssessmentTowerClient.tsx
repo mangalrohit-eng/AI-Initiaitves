@@ -10,6 +10,8 @@ import { Term } from "@/components/help/Term";
 import { L3LeverRow } from "@/components/assess/L3LeverRow";
 import { AssessmentScoreboard } from "@/components/assess/AssessmentScoreboard";
 import { StaleDialsBanner } from "@/components/assess/StaleDialsBanner";
+import { ScreenGuidanceBar } from "@/components/guidance/ScreenGuidanceBar";
+import { useGuidanceImpactLevers } from "@/lib/guidance/useJourneyGuidance";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { useTowerAssessOps } from "@/lib/assess/useTowerAssessOps";
 import { useToast } from "@/components/feedback/ToastProvider";
@@ -272,6 +274,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
   // and are therefore NOT flagged as stale, so the banner doesn't fire on
   // the seeded program.
   const staleState = getTowerStaleState(tState);
+  const impactGuidance = useGuidanceImpactLevers(towerId, towerName);
 
   return (
     <PageShell>
@@ -291,6 +294,8 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
           current="impact-levers"
           completed={completedModules}
         />
+
+        <ScreenGuidanceBar guidance={impactGuidance} className="mt-3" />
 
         <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -336,6 +341,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
                   totalRows={rows.length}
                   rescoring={overwriteAllOp.state === "loading"}
                   onRescore={() => setReseedDialogOpen(true)}
+                  hideTitle
                 />
               </div>
             ) : null}

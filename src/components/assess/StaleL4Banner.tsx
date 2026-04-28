@@ -24,11 +24,14 @@ export function StaleL4Banner({
   totalL3s,
   generating,
   onGenerate,
+  hideTitle = false,
 }: {
   blankL4Count: number;
   totalL3s: number;
   generating: boolean;
   onGenerate: () => void;
+  /** When the screen guidance bar already states the primary headline. */
+  hideTitle?: boolean;
 }) {
   if (blankL4Count === 0) return null;
 
@@ -47,7 +50,12 @@ export function StaleL4Banner({
               )}
               aria-hidden
             />
-            <h3 className="font-display text-base font-semibold text-forge-ink">
+            <h3
+              className={cn(
+                "font-display text-base font-semibold text-forge-ink",
+                hideTitle && "sr-only",
+              )}
+            >
               Capability map needs L4 activities.{" "}
               <span className="font-mono text-accent-amber">{blankL4Count}</span>{" "}
               of <span className="font-mono text-forge-body">{totalL3s}</span>{" "}

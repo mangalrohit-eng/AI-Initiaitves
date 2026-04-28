@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { TowerGridFilterable } from "@/components/towers/TowerGridFilterable";
+import { TowersJourneyGuidance } from "@/components/towers/TowersJourneyGuidance";
 import { PageShell } from "@/components/PageShell";
 import { towers } from "@/data/towers";
 
@@ -40,6 +41,8 @@ export default function TowersPage() {
             this view.
           </p>
         </div>
+
+        <TowersJourneyGuidance />
 
         <div className="mt-8">
           <TowerGridFilterable towers={towers} />

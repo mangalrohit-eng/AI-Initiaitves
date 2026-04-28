@@ -22,6 +22,8 @@ import { ImpactHero } from "@/components/assess/ImpactHero";
 import { MoneyCounter, formatMoney } from "@/components/ui/MoneyCounter";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PageShell } from "@/components/PageShell";
+import { ScreenGuidanceBar } from "@/components/guidance/ScreenGuidanceBar";
+import { useGuidanceImpactEstimateSummary } from "@/lib/guidance/useJourneyGuidance";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { towers } from "@/data/towers";
 import type { AssessProgramV2, TowerId } from "@/data/assess/types";
@@ -120,6 +122,7 @@ export function AssessmentSummaryClient() {
     }
   };
 
+  const impactEstGuidance = useGuidanceImpactEstimateSummary();
   return (
     <PageShell>
       <div
@@ -136,6 +139,10 @@ export function AssessmentSummaryClient() {
               { label: "Impact Estimate" },
             ]}
           />
+        ) : null}
+
+        {!presentMode ? (
+          <ScreenGuidanceBar guidance={impactEstGuidance} className="mt-3" />
         ) : null}
 
         <div className="mt-3 flex flex-wrap items-start justify-between gap-3">

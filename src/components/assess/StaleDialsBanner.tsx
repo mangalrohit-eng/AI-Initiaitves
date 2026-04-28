@@ -24,15 +24,18 @@ export function StaleDialsBanner({
   totalRows,
   rescoring,
   onRescore,
+  hideTitle = false,
 }: {
   totalRows: number;
   rescoring: boolean;
   onRescore: () => void;
+  hideTitle?: boolean;
 }) {
   if (totalRows === 0) return null;
 
   return (
     <section
+      id="stale-dials-panel"
       className="rounded-2xl border border-accent-amber/45 bg-gradient-to-br from-accent-amber/12 via-accent-amber/5 to-transparent p-4 sm:p-5"
       aria-label="Dials need a fresh AI score"
     >
@@ -46,7 +49,12 @@ export function StaleDialsBanner({
               )}
               aria-hidden
             />
-            <h3 className="font-display text-base font-semibold text-forge-ink">
+            <h3
+              className={cn(
+                "font-display text-base font-semibold text-forge-ink",
+                hideTitle && "sr-only",
+              )}
+            >
               Capability map updated. Score the offshore + AI dials with AI.
             </h3>
           </div>

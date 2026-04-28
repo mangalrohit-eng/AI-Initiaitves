@@ -24,7 +24,6 @@ import type {
 import { cn } from "@/lib/utils";
 
 /**
-/**
  * Banner that surfaces above the AI Initiatives view (Step 4) whenever an
  * L3's content hash has changed since the last successful pipeline run. The
  * user clicks Refresh AI guidance and the curationPipeline orchestrator
@@ -42,7 +41,13 @@ import { cn } from "@/lib/utils";
  * to Step 1's "Generate L4 activities" CTA instead of firing a request
  * that's guaranteed to fail.
  */
-export function StaleCurationBanner({ towerId }: { towerId: TowerId }) {
+export function StaleCurationBanner({
+  towerId,
+  hideTitle = false,
+}: {
+  towerId: TowerId;
+  hideTitle?: boolean;
+}) {
   const toast = useToast();
   const [program, setProgram] = React.useState<AssessProgramV2>(() =>
     buildSeededAssessProgramV2(),
@@ -130,6 +135,7 @@ export function StaleCurationBanner({ towerId }: { towerId: TowerId }) {
 
   return (
     <section
+      id="stale-curation-panel"
       className="rounded-2xl border border-accent-amber/45 bg-gradient-to-br from-accent-amber/12 via-accent-amber/5 to-transparent p-4 sm:p-5"
       aria-label="Capability map updated"
     >
@@ -143,7 +149,12 @@ export function StaleCurationBanner({ towerId }: { towerId: TowerId }) {
               )}
               aria-hidden
             />
-            <h3 className="font-display text-base font-semibold text-forge-ink">
+            <h3
+              className={cn(
+                "font-display text-base font-semibold text-forge-ink",
+                hideTitle && "sr-only",
+              )}
+            >
               Capability map updated.{" "}
               <span className="font-mono text-accent-amber">
                 {queuedCount}

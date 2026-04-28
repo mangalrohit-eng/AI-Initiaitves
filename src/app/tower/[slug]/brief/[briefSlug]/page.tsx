@@ -6,6 +6,8 @@ import { ShareBar } from "@/components/ui/ShareBar";
 import { ViewTracker } from "@/components/collab/ViewTracker";
 import { processBriefs } from "@/data/processBriefs";
 import { findProcessBrief, getEvidenceForBrief, getTowerBySlug } from "@/lib/utils";
+import { briefDetailStaticLine } from "@/lib/guidance/resolveTowerJourneyGuidance";
+import { ScreenGuidanceBar } from "@/components/guidance/ScreenGuidanceBar";
 
 export function generateStaticParams() {
   return processBriefs.map((b) => ({ slug: b.towerSlug, briefSlug: b.id }));
@@ -21,6 +23,8 @@ export default function ProcessBriefPage({
   if (!tower || !brief || brief.towerSlug !== tower.id) notFound();
 
   const parentInitiative = tower.processes.find((p) => p.id === brief.parentProcessId);
+
+  const briefGuidance = briefDetailStaticLine(brief.name, tower.name);
 
   return (
     <PageShell>
@@ -51,6 +55,7 @@ export default function ProcessBriefPage({
           title={brief.name}
           subtitle={tower.name}
         />
+        <ScreenGuidanceBar guidance={briefGuidance} className="mt-3" />
         <div className="mt-6">
           <ProcessBriefCard
             brief={brief}

@@ -12,6 +12,7 @@ import {
   Sparkles,
   TrendingUp,
 } from "lucide-react";
+import { ProgramJourneyGuidance } from "@/components/program/ProgramJourneyGuidance";
 import { PageShell } from "@/components/PageShell";
 
 type StepStatus = "active" | "coming-soon";
@@ -96,6 +97,8 @@ export function ProgramHome() {
             Forge Program · Accenture × Versant
           </span>
         </header>
+
+        <ProgramJourneyGuidance />
 
         {/* ========== INTRO ========== */}
         <section className="mt-4">

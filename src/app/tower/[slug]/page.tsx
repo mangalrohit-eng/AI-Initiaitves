@@ -8,6 +8,7 @@ import { PageShell } from "@/components/PageShell";
 import { AiInitiativesTabs } from "@/components/operatingModel/AiInitiativesTabs";
 import { InitiativeReviewChip } from "@/components/operatingModel/InitiativeReviewChip";
 import { TowerHeader } from "@/components/towers/TowerHeader";
+import { TowerAiJourneyGuidance } from "@/components/towers/TowerAiJourneyGuidance";
 import { ShareBar } from "@/components/ui/ShareBar";
 import { ViewTracker } from "@/components/collab/ViewTracker";
 import { towers } from "@/data/towers";
@@ -59,6 +60,8 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
           towerName={tower.name}
           current="ai-initiatives"
         />
+
+        <TowerAiJourneyGuidance tower={tower} />
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs">
           <Link

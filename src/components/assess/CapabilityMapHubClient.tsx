@@ -16,6 +16,8 @@ import { CapabilityScoreboard } from "@/components/assess/CapabilityScoreboard";
 import { ProgramToolsDrawer } from "@/components/assess/ProgramToolsDrawer";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PageShell } from "@/components/PageShell";
+import { ScreenGuidanceBar } from "@/components/guidance/ScreenGuidanceBar";
+import { useGuidanceCapabilityMapHub } from "@/lib/guidance/useJourneyGuidance";
 import { Term } from "@/components/help/Term";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
@@ -58,6 +60,7 @@ function statusCopy(s: RowStatus): { label: string; className: string } {
 export function CapabilityMapHubClient() {
   const sync = useAssessSync();
   const toast = useToast();
+  const capGuidance = useGuidanceCapabilityMapHub();
   const [program, setProgram] = React.useState<AssessProgramV2>(getAssessProgram);
   const [mine, setMine] = React.useState<TowerId[]>([]);
 
@@ -112,6 +115,7 @@ export function CapabilityMapHubClient() {
             { label: "Capability Map" },
           ]}
         />
+        <ScreenGuidanceBar guidance={capGuidance} className="mt-3" />
         <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">

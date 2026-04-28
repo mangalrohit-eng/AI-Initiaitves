@@ -15,6 +15,8 @@ import {
 import { PageShell } from "@/components/PageShell";
 import { CapabilityMapPanel } from "@/components/assess/CapabilityMapPanel";
 import { StaleL4Banner } from "@/components/assess/StaleL4Banner";
+import { ScreenGuidanceBar } from "@/components/guidance/ScreenGuidanceBar";
+import { useGuidanceCapabilityMap } from "@/lib/guidance/useJourneyGuidance";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { TowerJourneyStepper } from "@/components/layout/TowerJourneyStepper";
 import { Term } from "@/components/help/Term";
@@ -264,6 +266,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
     }
   }, [toast, towerId, towerName]);
 
+  const journeyGuidance = useGuidanceCapabilityMap(towerId);
   return (
     <PageShell>
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
@@ -283,6 +286,8 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
           completed={completedModules}
         />
 
+        <ScreenGuidanceBar guidance={journeyGuidance} className="mt-3" />
+
         <div className="mt-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h1 className="font-display text-2xl font-semibold text-forge-ink">
             &gt; {towerName} · Capability Map
@@ -295,6 +300,18 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
             .
           </p>
         </div>
+
+        {blankL4Count > 0 ? (
+          <div className="mt-4">
+            <StaleL4Banner
+              blankL4Count={blankL4Count}
+              totalL3s={rows.length}
+              generating={generateBlanksOp.state === "loading"}
+              onGenerate={() => void generateBlanksOp.fire()}
+              hideTitle
+            />
+          </div>
+        ) : null}
 
         {/* Above-the-fold CTA: upload capability map + headcount in one file. */}
         <CapabilityMapCta
@@ -342,14 +359,6 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
               authoredAt={tState.capabilityMapConfirmedAt}
               rowsCount={rows.length}
             />
-            {rows.length > 0 ? (
-              <StaleL4Banner
-                blankL4Count={blankL4Count}
-                totalL3s={rows.length}
-                generating={generateBlanksOp.state === "loading"}
-                onGenerate={() => void generateBlanksOp.fire()}
-              />
-            ) : null}
             {rows.length > 0 ? (
               <div id="generate-l4-toolbar">
                 <GenerateL4Toolbar

@@ -91,9 +91,9 @@ function RoadmapCard({
         {l4.isPlaceholder ? (
           <span
             className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5"
-            title="L3 dial is set above 0 on Step 2 but no curated activity has been authored yet."
+            title="AI couldn't identify L4 activities that are candidates for AI here. Regenerate the L4 list on Step 1, or reduce the AI dial for this L3 to zero on Step 2."
           >
-            Pending discovery
+            No AI candidates
           </span>
         ) : null}
       </div>

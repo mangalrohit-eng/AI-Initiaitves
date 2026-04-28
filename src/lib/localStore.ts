@@ -7,6 +7,10 @@ import type {
 } from "@/data/assess/types";
 import { buildSeededAssessProgramV2 } from "@/data/assess/seedAssessProgram";
 import { defaultTowerState, type TowerAssessState } from "@/data/assess/types";
+import {
+  bootstrapHashOnRead,
+  markRowsStaleByHash,
+} from "@/lib/initiatives/curationHash";
 //
 // Conventions:
 //   - Every key is prefixed `forge.` to avoid collisions with other apps.
@@ -604,6 +608,31 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
               .map((n) => n.trim());
             if (names.length > 0) out.l4Activities = names;
           }
+          // Pipeline cache + staleness fields. Preserved verbatim — the
+          // pipeline writes them as a single atomic block, and read-time
+          // migration must NOT strip them or every refresh would be lost on
+          // the next page reload.
+          if (Array.isArray(x.l4Items)) out.l4Items = x.l4Items as L3WorkforceRow["l4Items"];
+          if (typeof x.curationContentHash === "string") {
+            out.curationContentHash = x.curationContentHash;
+          }
+          if (
+            x.curationStage === "idle" ||
+            x.curationStage === "queued" ||
+            x.curationStage === "running-l4" ||
+            x.curationStage === "running-verdict" ||
+            x.curationStage === "running-curate" ||
+            x.curationStage === "done" ||
+            x.curationStage === "failed"
+          ) {
+            out.curationStage = x.curationStage;
+          }
+          if (typeof x.curationGeneratedAt === "string") {
+            out.curationGeneratedAt = x.curationGeneratedAt;
+          }
+          if (typeof x.curationError === "string") {
+            out.curationError = x.curationError;
+          }
           return out;
         })
         .filter((r): r is L3WorkforceRow => r != null);
@@ -639,9 +668,36 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
   return { version: 4, towers, global };
 }
 
+/**
+ * Read-time migration: stamp `curationContentHash` + `curationStage: "idle"`
+ * on rows that have never been seen by the pipeline. Without this, the
+ * staleness predicate would mark every seeded / legacy row as `queued` and
+ * blast the StaleCurationBanner on first load.
+ *
+ * Idempotent (rows that already have a hash are untouched). Side-effect free
+ * at read time — actual writes still flow through user actions.
+ */
+function migrateBootstrapCurationHash(program: AssessProgramV2): AssessProgramV2 {
+  let touched = false;
+  const towers: AssessProgramV2["towers"] = {};
+  for (const [k, t] of Object.entries(program.towers)) {
+    if (!t) continue;
+    const stamped = bootstrapHashOnRead(t.l3Rows);
+    if (stamped !== t.l3Rows) {
+      towers[k as TowerId] = { ...t, l3Rows: stamped };
+      touched = true;
+    } else {
+      towers[k as TowerId] = t;
+    }
+  }
+  return touched ? { ...program, towers } : program;
+}
+
 export function getAssessProgram(): AssessProgramV2 {
   const raw = safeGet<unknown>(KEYS.assessProgram, buildSeededAssessProgramV2());
-  return migrateBuggySeedComplete(migrateAssessProgram(raw));
+  return migrateBootstrapCurationHash(
+    migrateBuggySeedComplete(migrateAssessProgram(raw)),
+  );
 }
 
 /**
@@ -672,6 +728,14 @@ export function updateAssessProgram(
 export function setTowerAssess(towerId: TowerId, patch: Partial<TowerAssessState>): void {
   updateAssessProgram((p) => {
     const cur = p.towers[towerId] ?? { ...defaultTowerState() };
+    // Any write that touches `l3Rows` runs through markRowsStaleByHash so a
+    // changed L3 name or L4 list lights up the StaleCurationBanner.
+    // Idempotent: rows whose names didn't change keep their existing stage.
+    // Rows that haven't been bootstrapped yet (no curationContentHash) are
+    // intentionally left alone — bootstrapHashOnRead handles those at read.
+    const nextRows = patch.l3Rows
+      ? markRowsStaleByHash(patch.l3Rows)
+      : cur.l3Rows;
     return {
       ...p,
       towers: {
@@ -679,7 +743,7 @@ export function setTowerAssess(towerId: TowerId, patch: Partial<TowerAssessState
         [towerId]: {
           ...cur,
           ...patch,
-          l3Rows: patch.l3Rows ?? cur.l3Rows,
+          l3Rows: nextRows,
           baseline: patch.baseline ? { ...cur.baseline, ...patch.baseline } : cur.baseline,
           status: patch.status ?? cur.status,
           lastUpdated: new Date().toISOString(),

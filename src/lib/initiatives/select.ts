@@ -36,7 +36,12 @@ import type {
   CapabilityL4,
 } from "@/data/capabilityMap/types";
 import { getCapabilityMapForTower } from "@/data/capabilityMap/maps";
-import type { AssessProgramV2, L3WorkforceRow, TowerId } from "@/data/assess/types";
+import type {
+  AssessProgramV2,
+  L3WorkforceRow,
+  L4Item,
+  TowerId,
+} from "@/data/assess/types";
 import { defaultTowerBaseline, defaultGlobalAssessAssumptions } from "@/data/assess/types";
 import {
   modeledSavingsForTower,
@@ -47,6 +52,7 @@ import { briefByRowId } from "@/data/briefMap";
 import { findAiInitiative } from "@/lib/utils";
 import { buildProcessByL4Map, fuzzyMatchL4 } from "./processL4Map";
 import { composeL4Verdict, type ComposedVerdict } from "./composeVerdict";
+import { isCacheValidForRow } from "./curationHash";
 
 // ===========================================================================
 //   View-model types
@@ -132,6 +138,8 @@ export type SelectInitiativesResult = {
       overlay: number;
       rubric: number;
       legacyTowerProcess: number;
+      /** L4 surfaced from row.l4Items pipeline cache (Path 0). */
+      l4Items: number;
     };
   };
 };
@@ -180,6 +188,7 @@ export function selectInitiativesForTower(
     overlay: 0,
     rubric: 0,
     legacyTowerProcess: 0,
+    l4Items: 0,
   };
 
   // Build L3 lookup tables off the canonical map. We index by both id and a
@@ -241,7 +250,22 @@ export function selectInitiativesForTower(
     const l4Views: InitiativeL4[] = [];
     let curatedHere = 0;
     let placeholdersHere = 0;
-    if (mapHit) {
+
+    // Path 0 — pipeline cache short-circuit. When `row.l4Items` is populated
+    // and `row.curationContentHash` matches the row's current name footprint,
+    // the cache IS the source of truth and we skip the canonical-map walk
+    // entirely. This is the post-refresh state — the curationPipeline
+    // orchestrator wrote l4Items + l4Activities + hash atomically, so
+    // re-deriving the hash from l4Activities here is guaranteed to match.
+    if (isCacheValidForRow(row) && row.l4Items) {
+      for (const item of row.l4Items) {
+        if (!item.aiEligible) continue;
+        l4Views.push(buildL4FromCachedItem(item));
+        l4Curated += 1;
+        curatedHere += 1;
+        sourceMix.l4Items += 1;
+      }
+    } else if (mapHit) {
       for (const l4 of mapHit.l3.l4) {
         if (l4.relatedTowerIds && !l4.relatedTowerIds.includes(towerId)) continue;
 
@@ -397,7 +421,8 @@ export function selectInitiativesForTower(
       sourceMix.canonical +
       sourceMix.overlay +
       sourceMix.rubric +
-      sourceMix.legacyTowerProcess;
+      sourceMix.legacyTowerProcess +
+      sourceMix.l4Items;
     if (total > 0) {
       // eslint-disable-next-line no-console
       console.debug(
@@ -406,6 +431,7 @@ export function selectInitiativesForTower(
         `overlay=${sourceMix.overlay}`,
         `rubric=${sourceMix.rubric}`,
         `legacy=${sourceMix.legacyTowerProcess}`,
+        `l4Items=${sourceMix.l4Items}`,
       );
     }
   }
@@ -488,6 +514,28 @@ function buildL4FromComposedVerdict(
 }
 
 /**
+ * Build an InitiativeL4 from the pipeline cache (Path 0). Only invoked when
+ * `isCacheValidForRow(row)` returned true — i.e. the curationPipeline
+ * orchestrator has stamped this row's l4Items and the row's name footprint
+ * has not changed since.
+ */
+function buildL4FromCachedItem(item: L4Item): InitiativeL4 {
+  return {
+    id: item.id,
+    name: item.name,
+    source: "curated",
+    isPlaceholder: false,
+    aiPriority: item.aiPriority,
+    aiRationale: item.aiRationale,
+    frequency: item.frequency,
+    criticality: item.criticality,
+    currentMaturity: item.currentMaturity,
+    initiativeId: item.initiativeId,
+    briefSlug: item.briefSlug,
+  };
+}
+
+/**
  * Synthesize a placeholder L4 for ghost-L3 prevention. Returned only when
  * an L3's dial is > 0 but no curated L4 surfaced through the overlay or
  * fuzzy match. Priority is derived from the dial level so the placeholder
@@ -502,12 +550,12 @@ function buildPlaceholderL4Fallback(rowId: string, aiPct: number): InitiativeL4 
         : "P3 — Medium-term (12-24mo)";
   return {
     id: `${rowId}-placeholder`,
-    name: "Discovery activity — to be sequenced",
+    name: "No AI candidates found",
     source: "placeholder",
     isPlaceholder: true,
     aiPriority,
     aiRationale:
-      "Pending discovery — tower-lead workshop will identify the specific Versant activities under this capability and the agent that delivers them. The L3 is in scope because the dial set on Step 2 is greater than zero.",
+      "AI couldn't identify L4 activities that are candidates for AI here. Regenerate the L4 list on Step 1, or reduce the AI dial for this L3 to zero on Step 2.",
   };
 }
 

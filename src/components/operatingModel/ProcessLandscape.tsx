@@ -43,10 +43,12 @@ function L4Row({
   l4,
   tower,
   index,
+  rowId,
 }: {
   l4: InitiativeL4;
   tower: Tower;
   index: number;
+  rowId: string;
 }) {
   const tier = priorityTier(l4.aiPriority);
   const initiative = l4.initiativeId
@@ -109,10 +111,10 @@ function L4Row({
               {l4.isPlaceholder ? (
                 <span
                   className="inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-well px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider text-forge-hint"
-                  title="L3 dial is set above 0 on Step 2 but no curated activity has been authored yet. Editorial sweep underway."
+                  title="AI couldn't identify L4 activities that are candidates for AI here. Regenerate the L4 list on Step 1, or reduce the AI dial for this L3 to zero on Step 2."
                 >
-                  <Icons.CalendarClock className="h-2.5 w-2.5" />
-                  pending discovery
+                  <Icons.CircleAlert className="h-2.5 w-2.5" />
+                  no AI candidates
                 </span>
               ) : null}
             </div>
@@ -120,6 +122,28 @@ function L4Row({
               <p className="mt-1 text-xs leading-relaxed text-forge-subtle">
                 {l4.aiRationale}
               </p>
+            ) : null}
+            {l4.isPlaceholder ? (
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
+                <Link
+                  href={`${getTowerHref(tower.id as Parameters<typeof getTowerHref>[0], "capability-map")}#generate-l4-toolbar`}
+                  className="inline-flex items-center gap-1 rounded-md border border-forge-border bg-forge-surface px-2 py-0.5 text-forge-body transition hover:border-accent-purple/40 hover:text-accent-purple-dark"
+                  title="Open Step 1 and re-run Generate L4 activities for this tower (LLM-first, canonical-map fallback)."
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Icons.RefreshCw className="h-3 w-3" />
+                  Regenerate L4 list
+                </Link>
+                <Link
+                  href={`${getTowerHref(tower.id as Parameters<typeof getTowerHref>[0], "impact-levers")}#l3-${rowId}`}
+                  className="inline-flex items-center gap-1 rounded-md border border-forge-border bg-forge-surface px-2 py-0.5 text-forge-body transition hover:border-accent-purple/40 hover:text-accent-purple-dark"
+                  title="Open Step 2 and reduce the AI dial for this L3 to zero."
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Icons.SlidersHorizontal className="h-3 w-3" />
+                  Set dial to 0
+                </Link>
+              </div>
             ) : null}
           </div>
         </div>
@@ -316,7 +340,13 @@ function L3RowCard({
 
             <div>
               {l3.l4s.map((l4, i) => (
-                <L4Row key={l4.id} l4={l4} tower={tower} index={i} />
+                <L4Row
+                  key={l4.id}
+                  l4={l4}
+                  tower={tower}
+                  index={i}
+                  rowId={l3.rowId}
+                />
               ))}
             </div>
 

@@ -269,14 +269,16 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
               rowsCount={rows.length}
             />
             {rows.length > 0 ? (
-              <GenerateL4Toolbar
-                blankL4Count={blankL4Count}
-                totalL3s={rows.length}
-                generatingBlanks={generateBlanksOp.state === "loading"}
-                regeneratingAll={regenerateAllOp.state === "loading"}
-                onGenerateBlanks={() => void generateBlanksOp.fire()}
-                onRegenerateAll={() => void regenerateAllOp.fire()}
-              />
+              <div id="generate-l4-toolbar">
+                <GenerateL4Toolbar
+                  blankL4Count={blankL4Count}
+                  totalL3s={rows.length}
+                  generatingBlanks={generateBlanksOp.state === "loading"}
+                  regeneratingAll={regenerateAllOp.state === "loading"}
+                  onGenerateBlanks={() => void generateBlanksOp.fire()}
+                  onRegenerateAll={() => void regenerateAllOp.fire()}
+                />
+              </div>
             ) : null}
             <CapabilityMapPanel
               view={view}

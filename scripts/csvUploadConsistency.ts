@@ -40,6 +40,11 @@ import {
 } from "../src/lib/assess/scenarioModel";
 import { selectInitiativesForTower } from "../src/lib/initiatives/select";
 import {
+  bootstrapHashOnRead,
+  hasQueuedRows,
+  markRowsStaleByHash,
+} from "../src/lib/initiatives/curationHash";
+import {
   defaultGlobalAssessAssumptions,
   defaultTowerBaseline,
   type AssessProgramV2,
@@ -394,6 +399,68 @@ function main() {
     );
   } else {
     console.log("Drift                          : ok");
+  }
+
+  // ---- Stale-detection audit ----
+  console.log(
+    "\n================ STALE-DETECTION ON UPLOAD (Phase 1) ================",
+  );
+  console.log(
+    "Simulates the read → mutate → write loop:",
+  );
+  console.log(
+    "  1. bootstrapHashOnRead   stamps the seeded rows to idle.",
+  );
+  console.log(
+    "  2. (upload) builds a fresh L3WorkforceRow[] (no curationContentHash).",
+  );
+  console.log(
+    "  3. markRowsStaleByHash should flip renamed rows to 'queued'.\n",
+  );
+  console.log(
+    [
+      "tower".padEnd(22),
+      "seedRows",
+      "stamped",
+      "uploaded",
+      "queued",
+      "anyStale",
+    ].join(" "),
+  );
+  let queuedAcrossProgram = 0;
+  for (const t of towers) {
+    const id = t.id as TowerId;
+    const seeded = baseProgram.towers[id];
+    if (!seeded) continue;
+    const stamped = bootstrapHashOnRead(seeded.l3Rows);
+    const stampedCount = stamped.filter(
+      (r) => r.curationContentHash != null,
+    ).length;
+    // Simulate: keep stamped rows but rename one to trigger detection.
+    const renamed = stamped.map((r, i) =>
+      i === 0 ? { ...r, l3: `${r.l3} (rename for test)` } : r,
+    );
+    const afterStale = markRowsStaleByHash(renamed);
+    const queued = afterStale.filter(
+      (r) => r.curationStage === "queued",
+    ).length;
+    queuedAcrossProgram += queued;
+    console.log(
+      [
+        id.padEnd(22),
+        String(seeded.l3Rows.length).padStart(8),
+        String(stampedCount).padStart(7),
+        String(renamed.length).padStart(8),
+        String(queued).padStart(6),
+        hasQueuedRows(afterStale) ? "yes" : "no",
+      ].join(" "),
+    );
+  }
+  if (queuedAcrossProgram === 0) {
+    fail(
+      "(program)",
+      "stale detection produced zero queued rows across the entire program — markRowsStaleByHash is not firing on rename",
+    );
   }
 
   // ---- LLM regen audit ----

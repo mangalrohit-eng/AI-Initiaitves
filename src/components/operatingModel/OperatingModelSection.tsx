@@ -7,10 +7,12 @@ import type { LucideIcon } from "lucide-react";
 import type { Tower } from "@/data/types";
 import { ProcessLandscape } from "./ProcessLandscape";
 import { AiRoadmap } from "./AiRoadmap";
+import { StaleCurationBanner } from "./StaleCurationBanner";
 import { useTowerInitiatives } from "@/lib/initiatives/useTowerInitiatives";
 import type { InitiativeL2 } from "@/lib/initiatives/select";
 import { formatUsdCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { TowerId } from "@/data/assess/types";
 
 function resolveIcon(name?: string): LucideIcon {
   if (!name) return Icons.Layers;
@@ -159,6 +161,7 @@ export function OperatingModelSection({
 
   return (
     <div className="space-y-10">
+      <StaleCurationBanner towerId={tower.id as TowerId} />
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -182,8 +185,11 @@ export function OperatingModelSection({
                 <>
                   {" "}
                   ·{" "}
-                  <span className="text-forge-body">
-                    {totalPending} pending discovery
+                  <span
+                    className="text-forge-body"
+                    title="Capabilities where AI couldn't identify candidate L4 activities. Open the L2 to see remediation links."
+                  >
+                    {totalPending} need manual review
                   </span>
                 </>
               ) : null}
@@ -254,7 +260,7 @@ export function OperatingModelSection({
                   className="h-4 w-[3px] rounded-sm border-l-2 border-dashed border-forge-border"
                   aria-hidden
                 />
-                Pending discovery
+                Needs manual review
               </span>
             </div>
           </div>

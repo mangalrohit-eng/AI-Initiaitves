@@ -19,7 +19,13 @@ const program = buildSeededAssessProgramV2();
 let totalAi = 0;
 let totalCurated = 0;
 let totalPlaceholders = 0;
-let totalSourceMix = { canonical: 0, overlay: 0, rubric: 0, legacyTowerProcess: 0 };
+let totalSourceMix = {
+  canonical: 0,
+  overlay: 0,
+  rubric: 0,
+  legacyTowerProcess: 0,
+  l4Items: 0,
+};
 
 for (const tower of towers) {
   const towerId = tower.id as TowerId;
@@ -27,7 +33,13 @@ for (const tower of towers) {
   totalAi += result.towerAiUsd;
   totalCurated += result.diagnostics.l4Curated;
   totalPlaceholders += result.diagnostics.l4Placeholders;
-  for (const k of ["canonical", "overlay", "rubric", "legacyTowerProcess"] as const) {
+  for (const k of [
+    "canonical",
+    "overlay",
+    "rubric",
+    "legacyTowerProcess",
+    "l4Items",
+  ] as const) {
     totalSourceMix[k] += result.diagnostics.sourceMix[k];
   }
   console.log(
@@ -39,7 +51,8 @@ for (const tower of towers) {
       `mix(canon=${result.diagnostics.sourceMix.canonical} ` +
       `overlay=${result.diagnostics.sourceMix.overlay} ` +
       `rubric=${result.diagnostics.sourceMix.rubric} ` +
-      `legacy=${result.diagnostics.sourceMix.legacyTowerProcess})`,
+      `legacy=${result.diagnostics.sourceMix.legacyTowerProcess} ` +
+      `cache=${result.diagnostics.sourceMix.l4Items})`,
   );
 }
 

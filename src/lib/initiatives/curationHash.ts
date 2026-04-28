@@ -1,0 +1,151 @@
+/**
+ * Capability-map content hash + staleness machinery.
+ *
+ * The hybrid refresh strategy (Step 4 AI Initiatives) treats an L3 row as
+ * "stale" when its name footprint (L2 + L3 + sorted L4 names) has changed
+ * since the last successful pipeline run. Dial values, headcount, and
+ * annualSpendUsd are intentionally excluded from the hash — those don't
+ * change which L4 activities exist, only their dollar impact, so dial sweeps
+ * during a workshop never light up the refresh banner.
+ *
+ * Three pure helpers, all idempotent:
+ *
+ *   1. computeCurationContentHash(l2, l3, l4Names) — the one-line key.
+ *   2. markRowsStaleByHash(rows)      — write path: mark queued when names
+ *                                       changed (called from the upload /
+ *                                       L4-regen helpers in `useTowerAssessOps`).
+ *   3. bootstrapHashOnRead(rows)      — read path: stamp seed / legacy rows
+ *                                       to `idle` with a current hash so the
+ *                                       banner never blasts on first load.
+ *
+ * The selector's cache short-circuit (`select.ts` Path 0) re-derives the
+ * current hash on render and compares with `row.curationContentHash` to
+ * decide whether `row.l4Items` is still valid.
+ */
+
+import type { L3WorkforceRow } from "@/data/assess/types";
+
+/**
+ * djb2 — a small, dependency-free, deterministic 32-bit hash. Cryptographic
+ * strength is not required; the only goal is "two name-equivalent rows
+ * produce the same key, two different rows produce different keys."
+ */
+function djb2(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 33) ^ s.charCodeAt(i);
+  }
+  return h >>> 0;
+}
+
+function norm(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Stable content hash for a single L3 row's name footprint. Shape:
+ *   "<l2-norm>::<l3-norm>::<sorted, normalized L4 names joined by '|'>"
+ * djb2-encoded as base-36.
+ *
+ * Pure function. Same inputs always yield the same output across the entire
+ * codebase — selector, write-path, and bootstrap migration must agree.
+ */
+export function computeCurationContentHash(
+  l2Name: string,
+  l3Name: string,
+  l4Names: ReadonlyArray<string>,
+): string {
+  const sortedL4 = (l4Names ?? [])
+    .map(norm)
+    .filter((s) => s.length > 0)
+    .sort()
+    .join("|");
+  const payload = `${norm(l2Name)}::${norm(l3Name)}::${sortedL4}`;
+  return djb2(payload).toString(36);
+}
+
+/**
+ * Compute the current content hash for a row from its own fields. Re-used by
+ * the selector cache check and by the pipeline orchestrator.
+ */
+export function rowCurrentHash(row: L3WorkforceRow): string {
+  return computeCurationContentHash(row.l2, row.l3, row.l4Activities ?? []);
+}
+
+/**
+ * Write-path helper: walk the rows and mark any whose current hash differs
+ * from the stored `curationContentHash` as `curationStage: "queued"`.
+ * Rows without a stored hash are intentionally left alone — those should
+ * have already passed through `bootstrapHashOnRead` first.
+ *
+ * The hash itself is NOT stamped here. Stamping happens only after a
+ * successful pipeline run (in `curationPipeline.ts`), so a failed run
+ * preserves the old hash and the banner stays visible.
+ */
+export function markRowsStaleByHash(rows: L3WorkforceRow[]): L3WorkforceRow[] {
+  return rows.map((r) => {
+    if (r.curationContentHash == null) return r;
+    const next = rowCurrentHash(r);
+    if (r.curationContentHash === next) return r;
+    if (r.curationStage === "queued") return r; // already queued — no-op
+    return { ...r, curationStage: "queued" };
+  });
+}
+
+/**
+ * Read-path helper: rows that have NEVER been seen by the pipeline (no
+ * `curationContentHash`) get one stamped on first read with stage `idle`.
+ *
+ * This protects the seeded program (and any localStorage payload predating
+ * this migration) from blasting the StaleCurationBanner on first load.
+ * The selector still uses the deterministic composer for these rows on
+ * render — the bootstrap is purely about the staleness predicate.
+ *
+ * Idempotent: calling on already-stamped rows is a no-op.
+ */
+export function bootstrapHashOnRead(rows: L3WorkforceRow[]): L3WorkforceRow[] {
+  let touched = false;
+  const next = rows.map((r) => {
+    if (r.curationContentHash != null) return r;
+    touched = true;
+    return {
+      ...r,
+      curationContentHash: rowCurrentHash(r),
+      curationStage: r.curationStage ?? ("idle" as const),
+    };
+  });
+  return touched ? next : rows;
+}
+
+/**
+ * Predicate for the StaleCurationBanner. Returns true when at least one row
+ * has stage `queued`. Pipeline-running rows (`running-*`) are intentionally
+ * NOT shown as stale — they're being worked on right now.
+ */
+export function hasQueuedRows(rows: ReadonlyArray<L3WorkforceRow>): boolean {
+  return rows.some((r) => r.curationStage === "queued");
+}
+
+/**
+ * Predicate for "is a pipeline currently in flight on this tower?" Used by
+ * the banner CTA disabled-state and the per-tower in-flight lock.
+ */
+export function hasInFlightRows(rows: ReadonlyArray<L3WorkforceRow>): boolean {
+  return rows.some(
+    (r) =>
+      r.curationStage === "running-l4" ||
+      r.curationStage === "running-verdict" ||
+      r.curationStage === "running-curate",
+  );
+}
+
+/**
+ * Selector cache validity: row.l4Items is the source of truth for L4 view-
+ * models when (a) the row has a populated cache, and (b) the stored hash
+ * matches the row's current name footprint.
+ */
+export function isCacheValidForRow(row: L3WorkforceRow): boolean {
+  if (!row.l4Items || row.l4Items.length === 0) return false;
+  if (row.curationContentHash == null) return false;
+  return row.curationContentHash === rowCurrentHash(row);
+}

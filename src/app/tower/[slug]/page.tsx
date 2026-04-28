@@ -5,8 +5,7 @@ import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { TowerJourneyStepper } from "@/components/layout/TowerJourneyStepper";
 import { HoursSavedBar } from "@/components/charts/HoursSavedBar";
 import { PageShell } from "@/components/PageShell";
-import { OperatingModelSection } from "@/components/operatingModel/OperatingModelSection";
-import { AiRoadmap } from "@/components/operatingModel/AiRoadmap";
+import { AiInitiativesTabs } from "@/components/operatingModel/AiInitiativesTabs";
 import { InitiativeReviewChip } from "@/components/operatingModel/InitiativeReviewChip";
 import { TowerHeader } from "@/components/towers/TowerHeader";
 import { ShareBar } from "@/components/ui/ShareBar";
@@ -83,25 +82,22 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
           <TowerHeader tower={tower} />
         </div>
 
-        <section className="mt-14 space-y-3">
+        <section className="mt-14 space-y-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="font-display text-xl font-semibold text-forge-ink">
-                AI transformation roadmap
+                AI initiatives
               </h2>
               <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
-                AI-eligible initiatives sequenced by readiness and impact — now (0–6mo), next
-                (6–12mo), later (12–24mo). Click any card for the full four-lens design.
+                Explore this tower&apos;s AI program by capability (L2 → L4) or as
+                a sequenced priority roadmap. Use the tabs to switch views — your
+                selections are preserved.
               </p>
             </div>
             <InitiativeReviewChip tower={tower} />
           </div>
-          <AiRoadmap tower={tower} />
+          <AiInitiativesTabs tower={tower} />
         </section>
-
-        <div className="mt-14">
-          <OperatingModelSection tower={tower} showRoadmap={false} />
-        </div>
 
         <section className="mt-14 space-y-3">
           <h2 className="font-display text-lg font-semibold text-forge-ink">

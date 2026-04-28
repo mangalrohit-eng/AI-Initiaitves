@@ -7,12 +7,10 @@ import type { LucideIcon } from "lucide-react";
 import type { Tower } from "@/data/types";
 import { ProcessLandscape } from "./ProcessLandscape";
 import { AiRoadmap } from "./AiRoadmap";
-import { StaleCurationBanner } from "./StaleCurationBanner";
 import { useInitiativeReviews } from "@/lib/initiatives/useInitiativeReviews";
 import type { InitiativeL2 } from "@/lib/initiatives/select";
 import { formatUsdCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { TowerId } from "@/data/assess/types";
 
 function resolveIcon(name?: string): LucideIcon {
   if (!name) return Icons.Layers;
@@ -161,7 +159,6 @@ export function OperatingModelSection({
 
   return (
     <div className="space-y-10">
-      <StaleCurationBanner towerId={tower.id as TowerId} />
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>

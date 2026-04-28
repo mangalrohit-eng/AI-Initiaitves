@@ -29,13 +29,21 @@ import {
   buildL4VerdictLookupForTower,
   summarizeCurationForTower,
 } from "@/lib/initiatives/curationLookup";
-import { downloadSingleTowerSampleCsv } from "@/lib/assess/downloadAssessSamples";
+import {
+  downloadBlob,
+  downloadSingleTowerSampleCsv,
+} from "@/lib/assess/downloadAssessSamples";
+import { serializeAssessProgramForDownload } from "@/lib/assess/assessProgramIO";
 import { clientGenerateL4Activities } from "@/lib/assess/assessClientApi";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import { getAssessProgram, setTowerAssess } from "@/lib/localStore";
 import { getTowerHref } from "@/lib/towerHref";
 import { cn } from "@/lib/utils";
+import {
+  ReplaceUploadConfirmDialog,
+  type ReplaceUploadBusyState,
+} from "@/components/feedback/ReplaceUploadConfirmDialog";
 
 type Props = { towerId: TowerId; towerName: string };
 
@@ -181,12 +189,67 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   const completedModules: ReadonlyArray<"capability-map"> =
     isCapabilityMapAuthored || ops.isComplete ? ["capability-map"] : [];
 
+  // Safety dialog state for the upload path. Only shown when the tower
+  // already has data — first-time uploads (rows.length === 0) skip the
+  // dialog entirely, since there's nothing to lose.
+  const [pendingFile, setPendingFile] = React.useState<File | null>(null);
+  const [replaceBusy, setReplaceBusy] =
+    React.useState<ReplaceUploadBusyState>(null);
+
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
-    void importOp.fire(f);
+    if (rows.length === 0) {
+      // First-time upload — no dials, no L4 lists, no cache to lose.
+      void importOp.fire(f);
+      return;
+    }
+    setPendingFile(f);
   };
+
+  const closeReplaceDialog = React.useCallback(() => {
+    setPendingFile(null);
+    setReplaceBusy(null);
+  }, []);
+
+  const onReplaceWithoutBackup = React.useCallback(() => {
+    const f = pendingFile;
+    closeReplaceDialog();
+    if (f) void importOp.fire(f);
+  }, [pendingFile, importOp, closeReplaceDialog]);
+
+  const onExportThenReplace = React.useCallback(async () => {
+    const f = pendingFile;
+    if (!f) {
+      closeReplaceDialog();
+      return;
+    }
+    setReplaceBusy("exporting");
+    try {
+      // Same export pipeline that Program tools > Export backup uses, so the
+      // file round-trips cleanly via Program tools > Import backup.
+      const program = getAssessProgram();
+      const body = serializeAssessProgramForDownload(program);
+      const name = `forge-assess-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      downloadBlob(name, body, "application/json;charset=utf-8");
+      toast.success({
+        title: "Backup downloaded",
+        description:
+          "Save the JSON somewhere safe (SharePoint / Teams). Restore via Program tools > Import backup.",
+        durationMs: 6000,
+      });
+    } catch (err) {
+      toast.error({
+        title: "Couldn't export backup",
+        description: err instanceof Error ? err.message : undefined,
+      });
+      setReplaceBusy(null);
+      return;
+    }
+    closeReplaceDialog();
+    void importOp.fire(f);
+  }, [pendingFile, importOp, toast, closeReplaceDialog]);
 
   const onTemplateDownload = React.useCallback(() => {
     try {
@@ -250,6 +313,16 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
           accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           className="hidden"
           onChange={onFile}
+        />
+
+        <ReplaceUploadConfirmDialog
+          open={pendingFile != null}
+          fileName={pendingFile?.name ?? ""}
+          towerName={towerName}
+          busy={replaceBusy}
+          onCancel={closeReplaceDialog}
+          onReplace={onReplaceWithoutBackup}
+          onExportThenReplace={() => void onExportThenReplace()}
         />
 
         {importOp.data && importOp.data.warnings.length > 0 ? (

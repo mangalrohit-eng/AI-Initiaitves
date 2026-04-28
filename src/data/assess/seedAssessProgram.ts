@@ -5,6 +5,7 @@ import { weightedTowerLevers } from "@/lib/assess/scenarioModel";
 import type { AssessProgramV2, L3WorkforceRow, TowerAssessState, TowerId } from "./types";
 import { defaultGlobalAssessAssumptions, defaultTowerBaseline } from "./types";
 import { inferL3Defaults } from "./seedAssessmentDefaults";
+import { rowStarterRationale } from "./rowRationale";
 
 /**
  * Seeded headcount — modeled allocation of Versant's reported 3,748 employees
@@ -270,14 +271,29 @@ function applyHeadcountToRows(
  * Apply Versant-aware starter offshore% / AI% to every L3 row. Rounded to the
  * nearest 5 so seeded sliders sit on tidy positions. Tower leads can adjust
  * each L3 dial individually on the Configure Impact Levers page.
+ *
+ * Each seeded row also gets the deterministic `rowStarterRationale` text
+ * baked onto `offshoreRationale` / `aiImpactRationale`, with
+ * `dialsRationaleSource: "starter"` so the Configure Impact Levers chip
+ * reads "starter" (not "AI-scored") and `getTowerStaleState.dialsStale`
+ * doesn't flag sample-loaded data as needing refresh.
  */
 function withL3Defaults(rows: L3WorkforceRow[], towerId: TowerId): L3WorkforceRow[] {
+  const generatedAt = ASSESS_SEED_REFERENCE_AT;
   return rows.map((r) => {
     const d = inferL3Defaults(towerId, r.l2, r.l3);
-    return {
+    const seeded = {
       ...r,
       offshoreAssessmentPct: Math.round(d.offshorePct / 5) * 5,
       aiImpactAssessmentPct: Math.round(d.aiPct / 5) * 5,
+    };
+    const rationale = rowStarterRationale(towerId, seeded);
+    return {
+      ...seeded,
+      offshoreRationale: rationale.offshore,
+      aiImpactRationale: rationale.ai,
+      dialsRationaleSource: "starter",
+      dialsRationaleAt: generatedAt,
     };
   });
 }

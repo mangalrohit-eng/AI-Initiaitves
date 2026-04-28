@@ -52,10 +52,23 @@ export function L3LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
   const offshoreOverridden = row.offshoreAssessmentPct != null;
   const aiOverridden = row.aiImpactAssessmentPct != null;
 
-  const rationale = React.useMemo(
+  // Per-row rationales are sourced in priority order:
+  //   1. LLM/heuristic-stamped strings on the row itself (`offshoreRationale`
+  //      / `aiImpactRationale`) — written by `applyDefaults` after a Step 2
+  //      "Re-score" run, or by the seed loader for sample-loaded rows.
+  //   2. Deterministic `rowStarterRationale` text — used when the row hasn't
+  //      been scored yet (post-upload, before "Re-score every L3").
+  // The provenance chip surfaces which path produced the rationale so tower
+  // leads see "AI-scored" vs "heuristic" vs "starter" at a glance.
+  const starter = React.useMemo(
     () => rowStarterRationale(towerId, row),
     [towerId, row],
   );
+  const rationale = {
+    offshore: row.offshoreRationale ?? starter.offshore,
+    ai: row.aiImpactRationale ?? starter.ai,
+  };
+  const rationaleSource = row.dialsRationaleSource;
 
   const activities = row.l4Activities ?? [];
   const visibleActivities = activities.slice(0, 4);
@@ -115,8 +128,9 @@ export function L3LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
           value={displayedOffshore}
           defaultValue={baseline.baselineOffshorePct}
           isDefault={!offshoreOverridden}
-          rationaleTitle={`Why ${baseline.baselineOffshorePct}% offshore?`}
+          rationaleTitle={`Why ${displayedOffshore}% offshore?`}
           rationaleBody={rationale.offshore}
+          rationaleSource={rationaleSource}
           onChange={(v) => onPatch({ offshoreAssessmentPct: v })}
           onClearOverride={() => onPatch({ offshoreAssessmentPct: undefined })}
         />
@@ -128,8 +142,9 @@ export function L3LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
           value={displayedAi}
           defaultValue={baseline.baselineAIPct}
           isDefault={!aiOverridden}
-          rationaleTitle={`Why ${baseline.baselineAIPct}% AI?`}
+          rationaleTitle={`Why ${displayedAi}% AI?`}
           rationaleBody={rationale.ai}
+          rationaleSource={rationaleSource}
           onChange={(v) => onPatch({ aiImpactAssessmentPct: v })}
           onClearOverride={() => onPatch({ aiImpactAssessmentPct: undefined })}
         />
@@ -158,6 +173,8 @@ export function L3LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
   );
 }
 
+type RationaleSource = "llm" | "heuristic" | "starter" | undefined;
+
 function LeverColumn({
   icon,
   label,
@@ -167,6 +184,7 @@ function LeverColumn({
   isDefault,
   rationaleTitle,
   rationaleBody,
+  rationaleSource,
   onChange,
   onClearOverride,
 }: {
@@ -178,6 +196,7 @@ function LeverColumn({
   isDefault: boolean;
   rationaleTitle: string;
   rationaleBody: string;
+  rationaleSource: RationaleSource;
   onChange: (v: number) => void;
   onClearOverride: () => void;
 }) {
@@ -187,6 +206,7 @@ function LeverColumn({
         {icon}
         <span className="font-medium text-forge-body">{label}</span>
         <RationalePopover hue={hue} title={rationaleTitle} body={rationaleBody} />
+        <ProvenanceChip source={rationaleSource} />
         {isDefault ? (
           <span
             className="ml-auto rounded-full border border-forge-border px-1.5 py-0 font-mono text-[9px] uppercase tracking-wider text-forge-hint"
@@ -216,5 +236,46 @@ function LeverColumn({
         />
       </div>
     </div>
+  );
+}
+
+/**
+ * Provenance chip rendered next to the rationale popover. Communicates
+ * which path produced the dial value:
+ *   - "AI-scored"  → LLM-backed (purple, premium tone).
+ *   - "heuristic"  → deterministic fallback (when the LLM was unavailable).
+ *   - "starter"    → seeded sample data, never explicitly scored.
+ *   - undefined    → no chip; the StaleDialsBanner above is already telling
+ *                    the user the dials need a refresh.
+ */
+function ProvenanceChip({ source }: { source: RationaleSource }) {
+  if (!source) return null;
+  if (source === "llm") {
+    return (
+      <span
+        className="rounded-full border border-accent-purple/40 bg-accent-purple/10 px-1.5 py-0 font-mono text-[9px] uppercase tracking-wider text-accent-purple"
+        title="Scored with the Versant-grounded LLM. Click the chevron for the full rationale."
+      >
+        &gt; AI-scored
+      </span>
+    );
+  }
+  if (source === "heuristic") {
+    return (
+      <span
+        className="rounded-full border border-forge-border px-1.5 py-0 font-mono text-[9px] uppercase tracking-wider text-forge-subtle"
+        title="LLM was unavailable; rationale falls back to the deterministic Versant heuristic."
+      >
+        &gt; heuristic
+      </span>
+    );
+  }
+  return (
+    <span
+      className="rounded-full border border-forge-border/60 px-1.5 py-0 font-mono text-[9px] uppercase tracking-wider text-forge-hint"
+      title="Sample-loaded starter value — re-score with AI to refresh."
+    >
+      &gt; starter
+    </span>
   );
 }

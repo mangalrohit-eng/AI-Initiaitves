@@ -28,6 +28,31 @@ export type NotEligibleReason =
 export type L4ItemSource = "canonical" | "llm" | "fallback" | "manual";
 
 /**
+ * Lazily-generated AIProcessBrief content for L4s without a hand-curated
+ * overlay match. Populated on first click into the LLM-brief route and
+ * cached on the parent `L4Item`. Invalidated implicitly when the row is
+ * re-curated (the pipeline rewrites the entire `l4Items` array atomically).
+ *
+ * Mirror of the hand-curated `AIProcessBrief` shape from `data/types.ts`,
+ * trimmed to the five lightweight fields that the brief card renders. Full
+ * 4-lens deep dives stay 100% hand-curated — never auto-generated.
+ */
+export type GeneratedBrief = {
+  /** Versant-grounded narrative of the current ("today") workflow + pain. */
+  preState: string;
+  /** Versant-grounded narrative of the target ("with AI") workflow. */
+  postState: string;
+  /** Named agents with their role under the post-state workflow. */
+  agentsInvolved: { name: string; role: string }[];
+  /** Real vendor names (BlackLine / Amagi / Eightfold / etc.) or "TBD — subject to discovery". */
+  toolsRequired: string[];
+  /** Single success measure, e.g. "Close days reduced from 12-18 to 5-7". */
+  keyMetric: string;
+  generatedAt: string;
+  source: "llm" | "fallback";
+};
+
+/**
  * Rich L4 record on `L3WorkforceRow`. Source of truth for AI Initiatives view —
  * each item carries its verdict (Stage 2 output) and, when eligible, its
  * curation (Stage 3 output). Phase 1 (this PR) ships the shape; the LLM
@@ -60,6 +85,14 @@ export type L4Item = {
   // ----- Optional click-through targets (when an asset exists) -----
   initiativeId?: string;
   briefSlug?: string;
+  /**
+   * Lazily-generated AIProcessBrief cache for L4s without a hand-curated
+   * `briefSlug` overlay match. Populated on the user's first click into the
+   * LLM-brief route at `/tower/[slug]/brief/llm/[rowId]/[l4Id]`. Subsequent
+   * clicks render from this cache. Cleared implicitly whenever the parent
+   * row's `l4Items` array is rewritten by the curation pipeline.
+   */
+  generatedBrief?: GeneratedBrief;
 };
 
 /**
@@ -138,6 +171,33 @@ export type L3WorkforceRow = {
   curationGeneratedAt?: string;
   /** Failure detail when `curationStage === "failed"`. */
   curationError?: string;
+  /**
+   * LLM-produced rationale for the offshore dial (≤15 words, Versant-grounded).
+   * Populated by `clientInferTowerDefaults` runs. Falls back to the
+   * deterministic `rowStarterRationale` text on heuristic runs. Read by
+   * `L3LeverRow`'s offshore popover.
+   */
+  offshoreRationale?: string;
+  /**
+   * LLM-produced rationale for the AI-impact dial (≤15 words, Versant-grounded).
+   * Sibling to `offshoreRationale` — separate string because the two dials
+   * are independent levers and each deserves its own one-liner.
+   */
+  aiImpactRationale?: string;
+  /**
+   * Provenance for the dial rationale pair. Drives the chip rendered next
+   * to each slider:
+   *   - "llm"       → "> AI-scored" purple chip.
+   *   - "heuristic" → "> heuristic" subtle chip (LLM unavailable, deterministic
+   *                   `applyTowerStarterDefaults` filled in).
+   *   - "starter"   → "> starter" low-emphasis chip (sample-loaded seed
+   *                   values, never explicitly scored).
+   *   - undefined   → no chip; the StaleDialsBanner above tells the user
+   *                   the dials are awaiting refresh.
+   */
+  dialsRationaleSource?: "llm" | "heuristic" | "starter";
+  /** ISO timestamp the dial rationale pair was last written. */
+  dialsRationaleAt?: string;
 };
 
 /** Tower-lead anchor dialed once and held steady before stress-test on the summary page. */

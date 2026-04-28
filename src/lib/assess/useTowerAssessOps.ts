@@ -4,7 +4,7 @@ import * as React from "react";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import type { L3WorkforceRow, TowerId } from "@/data/assess/types";
-import { defaultTowerState } from "@/data/assess/types";
+import { defaultTowerBaseline, defaultTowerState } from "@/data/assess/types";
 import { getTowerSeedState } from "@/data/assess/seedAssessProgram";
 import {
   applyTowerStarterDefaults,
@@ -13,6 +13,7 @@ import {
 import { parseAssessFile } from "@/lib/assess/parseAssessFile";
 import { weightedTowerLevers } from "@/lib/assess/scenarioModel";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
+import { markRowsQueuedOnUpload } from "@/lib/initiatives/curationHash";
 import {
   getAssessProgram,
   setTowerAssess,
@@ -84,13 +85,27 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       // A tower-lead upload is the canonical source of truth — record the
       // confirmation timestamp so the journey stepper marks Capability Map
       // complete and downstream consumers know the map is authored, not seeded.
+      //
+      // Blank-and-queue: every uploaded row is marked `queued` with a fresh
+      // content hash so the StaleL4Banner (Step 1), StaleDialsBanner (Step 2),
+      // and StaleCurationBanner (Step 4) all light up immediately. Tower
+      // baseline soft-resets to the platform default (20%/15%) — the actual
+      // staleness signal is `dialsRationaleSource: undefined`, NOT the dial
+      // values themselves, so the soft-default sliders don't mislead users.
+      // Sign-off timestamps are cleared so the "Reviewed by Tower Lead" pill
+      // returns to "Pending" without needing extra disable logic on Step 2.
+      const queuedRows = markRowsQueuedOnUpload(res.rows);
       setTowerAssess(towerId, {
-        l3Rows: res.rows,
+        l3Rows: queuedRows,
+        baseline: { ...defaultTowerBaseline },
         status: "data",
         capabilityMapConfirmedAt: new Date().toISOString(),
+        headcountConfirmedAt: undefined,
+        offshoreConfirmedAt: undefined,
+        aiConfirmedAt: undefined,
       });
       if (sync?.canSync) await sync.flushSave();
-      return { rows: res.rows, warnings: res.errors };
+      return { rows: queuedRows, warnings: res.errors };
     },
     messages: {
       loadingTitle: `Importing ${towerName} capability map & headcount`,

@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import * as Icons from "lucide-react";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { getAssessProgram, subscribe } from "@/lib/localStore";
 import {
+  getTowerStaleState,
   hasInFlightRows,
-  hasQueuedRows,
 } from "@/lib/initiatives/curationHash";
 import {
   queuedRowIdsForTower,
@@ -14,6 +15,7 @@ import {
   type RunSummary,
 } from "@/lib/assess/curationPipeline";
 import { buildSeededAssessProgramV2 } from "@/data/assess/seedAssessProgram";
+import { getTowerHref } from "@/lib/towerHref";
 import type {
   AssessProgramV2,
   L3WorkforceRow,
@@ -22,18 +24,23 @@ import type {
 import { cn } from "@/lib/utils";
 
 /**
+/**
  * Banner that surfaces above the AI Initiatives view (Step 4) whenever an
  * L3's content hash has changed since the last successful pipeline run. The
  * user clicks Refresh AI guidance and the curationPipeline orchestrator
- * re-runs the deterministic composer over the queued rows, writing
- * `l4Items` into each row.
- *
- * Phase 1: stub mode (composer + overlay only — instant, no LLM, no cost).
- * Phase 2: same UI; pipeline swaps in the LLM endpoints.
+ * fires ONE batched call to `/api/assess/curate-initiatives`. The route
+ * runs the Versant-grounded LLM (when `OPENAI_API_KEY` is configured) and
+ * falls back to the deterministic verdict composer + overlay rubric on any
+ * LLM failure so the program never loses Step 4.
  *
  * Visible only when at least one row in the tower has `curationStage:
  * "queued"`. While a run is in flight, the CTA is disabled with a
  * "Refresh in progress" tooltip — prevents double-fires + race conditions.
+ *
+ * Precondition guard: if any queued row has no L4 activities, the LLM has
+ * nothing to score, so the banner switches modes and routes the user back
+ * to Step 1's "Generate L4 activities" CTA instead of firing a request
+ * that's guaranteed to fail.
  */
 export function StaleCurationBanner({ towerId }: { towerId: TowerId }) {
   const toast = useToast();
@@ -55,7 +62,12 @@ export function StaleCurationBanner({ towerId }: { towerId: TowerId }) {
     [rows],
   );
   const inFlight = hasInFlightRows(rows);
-  const visible = hasQueuedRows(rows);
+  const stale = React.useMemo(
+    () => getTowerStaleState(program.towers[towerId]),
+    [program, towerId],
+  );
+  const visible = stale.initiativesStale;
+  const missingL4ForRefresh = stale.missingL4ForRefresh;
 
   const [showDiff, setShowDiff] = React.useState(false);
   const [running, setRunning] = React.useState(false);
@@ -79,21 +91,33 @@ export function StaleCurationBanner({ towerId }: { towerId: TowerId }) {
     }
     setRunning(false);
     if (!summary) return;
+    const sourceLabel =
+      summary.source === "llm"
+        ? "Versant-grounded LLM"
+        : summary.source === "fallback"
+          ? "deterministic verdict composer"
+          : null;
     if (summary.failed > 0) {
       toast.error({
         title: `Refresh finished with ${summary.failed} error${summary.failed === 1 ? "" : "s"}`,
-        description: `${summary.succeeded} capability ${summary.succeeded === 1 ? "succeeded" : "succeeded"}; the failed rows kept their previous AI guidance and remain in the queue.`,
+        description:
+          (summary.warning ? `${summary.warning} ` : "") +
+          `${summary.succeeded} capability succeeded; the failed rows kept their previous AI guidance and remain in the queue.`,
       });
       return;
     }
     const eligibleNote = summary.eligibleRows === 1 ? "is" : "are";
     const reviewNote = summary.needReviewRows === 1 ? "still needs" : "still need";
+    const baseDescription =
+      summary.needReviewRows === 0
+        ? `All ${summary.succeeded} ${summary.eligibleRows === 1 ? "is" : "are"} now AI-eligible.`
+        : `${summary.eligibleRows} ${eligibleNote} now AI-eligible. ${summary.needReviewRows} ${reviewNote} manual review (no AI candidates surfaced — see the placeholder rows for next steps).`;
     toast.success({
-      title: `${summary.succeeded} capability ${summary.succeeded === 1 ? "refreshed" : "refreshed"}`,
+      title: `${summary.succeeded} capability refreshed`,
       description:
-        summary.needReviewRows === 0
-          ? `All ${summary.succeeded} ${summary.eligibleRows === 1 ? "is" : "are"} now AI-eligible.`
-          : `${summary.eligibleRows} ${eligibleNote} now AI-eligible. ${summary.needReviewRows} ${reviewNote} manual review (no AI candidates surfaced — see the placeholder rows for next steps).`,
+        (sourceLabel ? `Sourced via ${sourceLabel}. ` : "") +
+        baseDescription +
+        (summary.warning ? ` ${summary.warning}` : ""),
       durationMs: 8000,
     });
   }, [running, toast, towerId]);
@@ -102,6 +126,7 @@ export function StaleCurationBanner({ towerId }: { towerId: TowerId }) {
 
   const queuedCount = queued.length;
   const totalCount = rows.length;
+  const capabilityMapHref = getTowerHref(towerId, "capability-map");
 
   return (
     <section
@@ -130,39 +155,53 @@ export function StaleCurationBanner({ towerId }: { towerId: TowerId }) {
             </h3>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-forge-subtle">
-            Instant — running deterministic recompute against the rubric and
-            overlay. Versant-grounded LLM curation arrives in PR 2. Dollars and
-            headcount on Steps 2 and 3 are unaffected.
+            {missingL4ForRefresh
+              ? "Some queued capabilities have no L4 activities yet. Generate L4 activities on Step 1 first, then come back to refresh AI guidance."
+              : "Refresh runs the Versant-grounded LLM. If the LLM is unavailable, it falls back to the deterministic verdict composer + overlay rubric. Dollars and headcount on Steps 2 and 3 are unaffected."}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void onRefresh()}
-          disabled={running || inFlight || queuedCount === 0}
-          title={
-            running || inFlight
-              ? "Refresh in progress"
-              : "Re-evaluates AI eligibility for the L3s whose L4 list changed since the last refresh."
-          }
-          className={cn(
-            "inline-flex items-center gap-2 rounded-lg bg-accent-amber px-4 py-2 text-sm font-semibold text-near-black transition",
-            "hover:bg-accent-amber/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber/50",
-            "disabled:cursor-not-allowed disabled:opacity-60",
-          )}
-        >
-          {running || inFlight ? (
-            <>
-              <Icons.Loader2 className="h-4 w-4 animate-spin" />
-              Refreshing...
-            </>
-          ) : (
-            <>
-              <Icons.RefreshCw className="h-4 w-4" />
-              Refresh AI guidance for {queuedCount} capabilit
-              {queuedCount === 1 ? "y" : "ies"}
-            </>
-          )}
-        </button>
+        {missingL4ForRefresh ? (
+          <Link
+            href={capabilityMapHref}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg bg-accent-amber px-4 py-2 text-sm font-semibold text-near-black transition",
+              "hover:bg-accent-amber/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber/50",
+            )}
+            title="Open Step 1 to generate L4 activities for the queued capabilities first."
+          >
+            <Icons.ListPlus className="h-4 w-4" />
+            Generate L4 activities first
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void onRefresh()}
+            disabled={running || inFlight || queuedCount === 0}
+            title={
+              running || inFlight
+                ? "Refresh in progress"
+                : "Re-evaluates AI eligibility for the L3s whose L4 list changed since the last refresh."
+            }
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg bg-accent-amber px-4 py-2 text-sm font-semibold text-near-black transition",
+              "hover:bg-accent-amber/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber/50",
+              "disabled:cursor-not-allowed disabled:opacity-60",
+            )}
+          >
+            {running || inFlight ? (
+              <>
+                <Icons.Loader2 className="h-4 w-4 animate-spin" />
+                Refreshing...
+              </>
+            ) : (
+              <>
+                <Icons.Sparkles className="h-4 w-4" />
+                Refresh AI guidance for {queuedCount} capabilit
+                {queuedCount === 1 ? "y" : "ies"}
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {queuedCount > 0 ? (

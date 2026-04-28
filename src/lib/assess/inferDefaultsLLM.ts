@@ -33,7 +33,10 @@ export type LLMRowInput = {
 export type LLMRowResult = {
   offshorePct: number;
   aiPct: number;
-  rationale?: string;
+  /** ≤15-word Versant-grounded explanation for the offshore dial. */
+  offshoreRationale?: string;
+  /** ≤15-word Versant-grounded explanation for the AI-impact dial. */
+  aiRationale?: string;
 };
 
 export type InferLLMOptions = {
@@ -101,8 +104,10 @@ function buildSystemPrompt(towerId: TowerId): string {
     "",
     `Tower currently being scored: ${towerId} — ${towerContext}`,
     "",
-    "Return STRICT JSON ONLY in this exact shape, with one item per input row, in INPUT ORDER:",
-    '{"items": [{"offshorePct": <int>, "aiPct": <int>, "rationale": "<≤15 words why>"}, ...]}',
+    "Return STRICT JSON ONLY in this exact shape, with one item per input row, in INPUT ORDER. Each item carries TWO short rationales — offshore and AI are independent levers and each deserves its own one-liner:",
+    '{"items": [{"offshorePct": <int>, "aiPct": <int>, "offshoreRationale": "<≤15 words why this offshorePct>", "aiRationale": "<≤15 words why this aiPct>"}, ...]}',
+    "",
+    "Rationale guidance — be Versant-specific, declarative, and concrete. Name brands (MS NOW / CNBC / Golf Channel / GolfNow / GolfPass / USA Network / E! / Syfy / Fandango / Rotten Tomatoes / SportsEngine), the TSA carve-out, BB- credit, multi-entity JV, or named vendors (BlackLine / Eightfold / Amagi / LiveRamp / Piano / Deepgram) where they fit. Never use hedge language ('potentially', 'could possibly', 'may help to', 'leverage AI'). Never write rationales that could apply to any media company.",
     "",
     "Do not return any prose outside the JSON. Do not skip rows. Do not add extra rows. Always return integers (not floats) and round to the nearest 5.",
   ].join("\n");
@@ -219,13 +224,26 @@ export async function inferTowerDefaultsWithLLM(
 
   return items.map((raw) => {
     const item = (raw ?? {}) as Record<string, unknown>;
+    // Graceful read of the legacy single-string `rationale` shape (older
+    // model responses or future stub paths). When present, it splits across
+    // both lever rationales so callers always have something to show.
+    const legacyRationale =
+      typeof item.rationale === "string" && item.rationale.trim()
+        ? item.rationale.trim()
+        : undefined;
+    const offshoreRationale =
+      typeof item.offshoreRationale === "string" && item.offshoreRationale.trim()
+        ? item.offshoreRationale.trim()
+        : legacyRationale;
+    const aiRationale =
+      typeof item.aiRationale === "string" && item.aiRationale.trim()
+        ? item.aiRationale.trim()
+        : legacyRationale;
     return {
       offshorePct: clampRound5(item.offshorePct, OFFSHORE_MIN, OFFSHORE_MAX),
       aiPct: clampRound5(item.aiPct, AI_MIN, AI_MAX),
-      rationale:
-        typeof item.rationale === "string" && item.rationale.trim()
-          ? item.rationale.trim()
-          : undefined,
+      offshoreRationale,
+      aiRationale,
     };
   });
 }

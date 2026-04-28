@@ -38,7 +38,10 @@ function RoadmapCard({
   const initiativeHref = initiative
     ? `/tower/${tower.id}/process/${slugify(initiative.name)}`
     : undefined;
-  const briefHref = l4.briefSlug ? `/tower/${tower.id}/brief/${l4.briefSlug}` : undefined;
+  const briefHref = l4.briefSlug
+    ? `/tower/${tower.id}/brief/${l4.briefSlug}`
+    : l4.llmBriefHref;
+  const briefIsLLM = !l4.briefSlug && Boolean(l4.llmBriefHref);
   const isLink = Boolean(initiativeHref || briefHref);
 
   const body = (
@@ -124,7 +127,15 @@ function RoadmapCard({
   }
   if (briefHref) {
     return (
-      <Link href={briefHref} className="block">
+      <Link
+        href={briefHref}
+        className="block"
+        title={
+          briefIsLLM
+            ? "Generate a Versant-grounded LLM brief for this capability"
+            : "Open the lightweight pre/post brief"
+        }
+      >
         {body}
       </Link>
     );
@@ -146,11 +157,45 @@ export function AiRoadmap({ tower }: { tower: Tower }) {
   }
   const totalAi = grouped.P1.length + grouped.P2.length + grouped.P3.length;
   if (totalAi === 0) {
+    const { queuedRowCount, totalRowCount } = result.diagnostics;
+    const allQueued = totalRowCount > 0 && queuedRowCount === totalRowCount;
+    const noRows = totalRowCount === 0;
+    if (allQueued) {
+      return (
+        <div className="rounded-2xl border border-accent-amber/40 bg-accent-amber/5 px-5 py-8 text-center">
+          <p className="font-display text-sm font-semibold text-forge-ink">
+            Roadmap is queued for refresh.
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-forge-subtle">
+            Click{" "}
+            <span className="font-semibold text-accent-amber">
+              Refresh AI guidance
+            </span>{" "}
+            in the banner above. Roadmap will populate as soon as the LLM
+            sequences each L4 into a P1 / P2 / P3 window.
+          </p>
+        </div>
+      );
+    }
+    if (noRows) {
+      return (
+        <div className="rounded-2xl border border-dashed border-forge-border bg-forge-well/40 px-5 py-8 text-center text-sm text-forge-subtle">
+          No capability map uploaded yet. Open{" "}
+          <span className="font-semibold text-forge-body">
+            Step 1 (Capability Map)
+          </span>{" "}
+          and upload the tower&rsquo;s L1–L3 tree + headcount file to begin.
+        </div>
+      );
+    }
     return (
       <div className="rounded-2xl border border-dashed border-forge-border bg-forge-well/40 px-5 py-8 text-center text-sm text-forge-subtle">
-        No AI-eligible activities are currently sequenced for this tower. Open
-        Step 2 (Configure Impact Levers) and raise the AI dial on the
-        capabilities you want to bring into the roadmap.
+        No L4 activities have been priority-tagged yet. Open{" "}
+        <span className="font-semibold text-forge-body">
+          Step 2 (Configure Impact Levers)
+        </span>{" "}
+        and raise the AI dial on the capabilities you want sequenced into the
+        roadmap.
       </div>
     );
   }
@@ -193,7 +238,7 @@ export function AiRoadmap({ tower }: { tower: Tower }) {
             <div className="mt-4 space-y-3">
               {items.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-forge-border bg-forge-surface/60 p-4 text-center text-xs text-forge-hint">
-                  No activities queued in this window.
+                  No activities sequenced into this window.
                 </div>
               ) : (
                 items.map((item, i) => (

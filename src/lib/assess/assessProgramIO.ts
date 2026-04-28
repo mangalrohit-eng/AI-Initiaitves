@@ -85,6 +85,51 @@ function asL3Row(x: unknown): L3WorkforceRow | null {
       .map((n) => n.trim());
     if (names.length > 0) out.l4Activities = names;
   }
+
+  // ----- API / export round-trip (must mirror `migrateAssessProgram` in
+  // `localStore.ts`) — Postgres GET → `importAssessProgramFromJsonText` must
+  // preserve pipeline + staleness fields or Step 4 loses `queued` on every
+  // reload and the StaleCurationBanner never fires after upload.
+  if (Array.isArray(x.l4Items)) {
+    out.l4Items = x.l4Items as L3WorkforceRow["l4Items"];
+  }
+  if (typeof x.curationContentHash === "string") {
+    out.curationContentHash = x.curationContentHash;
+  }
+  if (
+    x.curationStage === "idle" ||
+    x.curationStage === "queued" ||
+    x.curationStage === "running-l4" ||
+    x.curationStage === "running-verdict" ||
+    x.curationStage === "running-curate" ||
+    x.curationStage === "done" ||
+    x.curationStage === "failed"
+  ) {
+    out.curationStage = x.curationStage;
+  }
+  if (typeof x.curationGeneratedAt === "string") {
+    out.curationGeneratedAt = x.curationGeneratedAt;
+  }
+  if (typeof x.curationError === "string") {
+    out.curationError = x.curationError;
+  }
+  if (typeof x.offshoreRationale === "string" && x.offshoreRationale.trim()) {
+    out.offshoreRationale = x.offshoreRationale.trim();
+  }
+  if (typeof x.aiImpactRationale === "string" && x.aiImpactRationale.trim()) {
+    out.aiImpactRationale = x.aiImpactRationale.trim();
+  }
+  if (
+    x.dialsRationaleSource === "llm" ||
+    x.dialsRationaleSource === "heuristic" ||
+    x.dialsRationaleSource === "starter"
+  ) {
+    out.dialsRationaleSource = x.dialsRationaleSource;
+  }
+  if (typeof x.dialsRationaleAt === "string") {
+    out.dialsRationaleAt = x.dialsRationaleAt;
+  }
+
   return out;
 }
 

@@ -200,11 +200,10 @@ export function OperatingModelSection({
         </div>
 
         {result.l2s.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-forge-border bg-forge-well/40 px-5 py-8 text-center text-sm text-forge-subtle">
-            No L2 sub-functions are currently in scope for AI on this tower.
-            Open Step 2 (Configure Impact Levers) and raise the AI dial on the
-            capabilities you want to bring into the AI Initiatives view.
-          </div>
+          <EmptyL2State
+            queuedRowCount={result.diagnostics.queuedRowCount}
+            totalRowCount={result.diagnostics.totalRowCount}
+          />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {result.l2s.map((view, i) => (
@@ -287,6 +286,75 @@ export function OperatingModelSection({
           <AiRoadmap tower={tower} />
         </section>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Empty-state pane shown when no L2 sub-function has any AI-eligible L4 to
+ * render. Differentiates the three legitimate "empty" scenarios so the
+ * user always knows what to do next:
+ *
+ *  - `pre-upload`     — no rows at all. Direct to Step 1 to upload the map.
+ *  - `awaiting-llm`   — every row is `queued` post-upload. The
+ *                       StaleCurationBanner above already exposes the
+ *                       Refresh CTA; this pane just confirms why the panel
+ *                       is empty so the user doesn't misread the state as
+ *                       "no AI opportunity."
+ *  - `dials-at-zero`  — rows exist and were curated, but no L3 has its AI
+ *                       dial > 0. Direct to Step 2 to raise dials.
+ */
+function EmptyL2State({
+  queuedRowCount,
+  totalRowCount,
+}: {
+  queuedRowCount: number;
+  totalRowCount: number;
+}) {
+  const allQueued =
+    totalRowCount > 0 && queuedRowCount === totalRowCount;
+  const noRows = totalRowCount === 0;
+
+  if (allQueued) {
+    return (
+      <div className="rounded-2xl border border-accent-amber/40 bg-accent-amber/5 px-5 py-8 text-center">
+        <Icons.Sparkles
+          className="mx-auto h-5 w-5 text-accent-amber"
+          aria-hidden
+        />
+        <p className="mt-3 font-display text-sm font-semibold text-forge-ink">
+          AI initiatives are queued for refresh.
+        </p>
+        <p className="mt-2 text-xs leading-relaxed text-forge-subtle">
+          The capability map was just uploaded — every L3 is waiting for a
+          fresh AI eligibility scoring. Click{" "}
+          <span className="font-semibold text-accent-amber">
+            Refresh AI guidance
+          </span>{" "}
+          in the banner above to populate this view.
+        </p>
+      </div>
+    );
+  }
+  if (noRows) {
+    return (
+      <div className="rounded-2xl border border-dashed border-forge-border bg-forge-well/40 px-5 py-8 text-center text-sm text-forge-subtle">
+        No capability map uploaded yet for this tower. Open{" "}
+        <span className="font-semibold text-forge-body">
+          Step 1 (Capability Map)
+        </span>{" "}
+        and upload the tower&rsquo;s L1–L3 tree + headcount file to start.
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-2xl border border-dashed border-forge-border bg-forge-well/40 px-5 py-8 text-center text-sm text-forge-subtle">
+      No L3 capability has an AI dial above zero on this tower. Open{" "}
+      <span className="font-semibold text-forge-body">
+        Step 2 (Configure Impact Levers)
+      </span>{" "}
+      and raise the AI dial on the capabilities you want to bring into the
+      AI Initiatives view.
     </div>
   );
 }

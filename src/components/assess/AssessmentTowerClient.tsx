@@ -9,6 +9,7 @@ import { TowerJourneyStepper } from "@/components/layout/TowerJourneyStepper";
 import { Term } from "@/components/help/Term";
 import { L3LeverRow } from "@/components/assess/L3LeverRow";
 import { AssessmentScoreboard } from "@/components/assess/AssessmentScoreboard";
+import { StaleDialsBanner } from "@/components/assess/StaleDialsBanner";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { useTowerAssessOps } from "@/lib/assess/useTowerAssessOps";
 import { useToast } from "@/components/feedback/ToastProvider";
@@ -17,11 +18,13 @@ import {
   type InferDefaultsSource,
 } from "@/lib/assess/assessClientApi";
 import { applyTowerStarterDefaults } from "@/data/assess/seedAssessmentDefaults";
+import { rowStarterRationale } from "@/data/assess/rowRationale";
 import {
   rowAnnualCost,
   weightedTowerLevers,
 } from "@/lib/assess/scenarioModel";
 import { getAssessProgram, setTowerAssess } from "@/lib/localStore";
+import { getTowerStaleState } from "@/lib/initiatives/curationHash";
 import type { L3WorkforceRow, TowerId } from "@/data/assess/types";
 import { getTowerHref } from "@/lib/towerHref";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
@@ -89,9 +92,19 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
       const apiInputs = rows.map((r) => ({ l2: r.l2, l3: r.l3 }));
       const apiRes = await clientInferTowerDefaults(towerId, apiInputs);
 
+      // `inferred` carries one tuple per row: the new dial values plus the
+      // optional Versant-grounded rationales (LLM only). Heuristic and "wrong
+      // length" fallbacks substitute the deterministic `rowStarterRationale`
+      // text and tag the row with `dialsRationaleSource: "heuristic"` so the
+      // L3LeverRow chip reads "heuristic" — never "AI-scored".
       let source: InferDefaultsSource;
       let warning: string | undefined;
-      let inferred: { offshorePct: number; aiPct: number }[];
+      let inferred: {
+        offshorePct: number;
+        aiPct: number;
+        offshoreRationale?: string;
+        aiRationale?: string;
+      }[];
       if (apiRes.ok && apiRes.result.defaults.length === rows.length) {
         source = apiRes.result.source;
         warning = apiRes.result.warning;
@@ -107,6 +120,10 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
           aiPct: r.aiImpactAssessmentPct ?? 0,
         }));
       }
+
+      const nowIso = new Date().toISOString();
+      const provenanceTag: "llm" | "heuristic" =
+        source === "llm" ? "llm" : "heuristic";
 
       let changedCells = 0;
       let changedRows = 0;
@@ -129,10 +146,36 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
             touched = true;
           }
         }
+
+        // Resolve rationale text. Prefer the LLM strings; fall back to the
+        // deterministic `rowStarterRationale` when they're missing (heuristic
+        // path or LLM omission). A row's rationale pair is rewritten when
+        // either dial is touched OR when the source is upgraded from
+        // `undefined` / `"starter"` → `"llm"`/`"heuristic"`.
+        const starter = rowStarterRationale(towerId, r);
+        const offshoreRationale =
+          d.offshoreRationale && d.offshoreRationale.trim()
+            ? d.offshoreRationale.trim()
+            : starter.offshore;
+        const aiRationale =
+          d.aiRationale && d.aiRationale.trim()
+            ? d.aiRationale.trim()
+            : starter.ai;
+        const rationaleSourceChanged = r.dialsRationaleSource !== provenanceTag;
+
         if (touched) changedRows += 1;
-        return touched
-          ? { ...r, offshoreAssessmentPct: nextOff, aiImpactAssessmentPct: nextAi }
-          : r;
+        if (touched || rationaleSourceChanged) {
+          return {
+            ...r,
+            offshoreAssessmentPct: nextOff,
+            aiImpactAssessmentPct: nextAi,
+            offshoreRationale,
+            aiImpactRationale: aiRationale,
+            dialsRationaleSource: provenanceTag,
+            dialsRationaleAt: nowIso,
+          };
+        }
+        return r;
       });
 
       if (mode === "fillBlanks" && changedCells === 0) {
@@ -223,6 +266,12 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
 
   const noFootprint = rows.length === 0;
   const totalPool = rows.reduce((s, r) => s + rowAnnualCost(r, global), 0);
+  // Single source of truth for the staleness banners. After a tower-lead
+  // upload, every row arrives with `dialsRationaleSource: undefined` and
+  // `dialsStale` returns true. Sample-loaded rows carry "starter" provenance
+  // and are therefore NOT flagged as stale, so the banner doesn't fire on
+  // the seeded program.
+  const staleState = getTowerStaleState(tState);
 
   return (
     <PageShell>
@@ -281,6 +330,15 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
           </div>
         ) : (
           <>
+            {staleState.dialsStale ? (
+              <div className="mt-5">
+                <StaleDialsBanner
+                  totalRows={rows.length}
+                  rescoring={overwriteAllOp.state === "loading"}
+                  onRescore={() => setReseedDialogOpen(true)}
+                />
+              </div>
+            ) : null}
             <div className="mt-5">
               <AssessmentScoreboard
                 variant="tower"

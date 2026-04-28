@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { CapabilityMapPanel } from "@/components/assess/CapabilityMapPanel";
+import { StaleL4Banner } from "@/components/assess/StaleL4Banner";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { TowerJourneyStepper } from "@/components/layout/TowerJourneyStepper";
 import { Term } from "@/components/help/Term";
@@ -341,6 +342,14 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
               authoredAt={tState.capabilityMapConfirmedAt}
               rowsCount={rows.length}
             />
+            {rows.length > 0 ? (
+              <StaleL4Banner
+                blankL4Count={blankL4Count}
+                totalL3s={rows.length}
+                generating={generateBlanksOp.state === "loading"}
+                onGenerate={() => void generateBlanksOp.fire()}
+              />
+            ) : null}
             {rows.length > 0 ? (
               <div id="generate-l4-toolbar">
                 <GenerateL4Toolbar

@@ -1,11 +1,19 @@
-import type { AssessProgramV2, TowerId } from "@/data/assess/types";
+import type {
+  AssessProgramV2,
+  GeneratedBrief,
+  L4Item,
+  TowerId,
+} from "@/data/assess/types";
 
 export type InferDefaultsRow = { l2: string; l3: string };
 
 export type InferredDefault = {
   offshorePct: number;
   aiPct: number;
-  rationale?: string;
+  /** ≤15-word LLM rationale for the offshore dial. Only present on `source: "llm"`. */
+  offshoreRationale?: string;
+  /** ≤15-word LLM rationale for the AI-impact dial. Only present on `source: "llm"`. */
+  aiRationale?: string;
 };
 
 export type InferDefaultsSource = "llm" | "heuristic";
@@ -180,6 +188,180 @@ export async function clientGenerateL4Activities(
     result: {
       source: data.source,
       groups: data.groups,
+      warning: data.warning,
+    },
+  };
+}
+
+// ----- L4 initiative curation (verdict + summary) ----------------------
+
+export type CurateInitiativesRowInput = {
+  /** L3 row id — round-tripped so the client can match results back without name fuzzing. */
+  rowId: string;
+  l2: string;
+  l3: string;
+  /** L4 activity names. The LLM scores one verdict + one summary per name. */
+  l4Activities: string[];
+};
+
+/**
+ * Server-shaped per-L4 curation. Mirrors the rich `L4Item` fields the LLM
+ * is allowed to fill — `id` / `source` / `name` are stamped client-side
+ * after the response lands so the server can stay stateless. `briefSlug`
+ * and `initiativeId` are NEVER set by the LLM (overlay-only).
+ */
+export type CuratedL4 = Pick<
+  L4Item,
+  | "name"
+  | "aiCurationStatus"
+  | "aiEligible"
+  | "aiPriority"
+  | "aiRationale"
+  | "notEligibleReason"
+  | "frequency"
+  | "criticality"
+  | "currentMaturity"
+  | "primaryVendor"
+  | "agentOneLine"
+>;
+
+export type CuratedRow = {
+  rowId: string;
+  l4Items: CuratedL4[];
+};
+
+export type CurateInitiativesSource = "llm" | "fallback";
+
+export type CurateInitiativesResult = {
+  source: CurateInitiativesSource;
+  rows: CuratedRow[];
+  warning?: string;
+};
+
+/**
+ * Asks the server to score every L4 on every queued row in a single batched
+ * call — verdict + Versant-grounded summary content. Returns one
+ * `CuratedRow` per input row, one `CuratedL4` per L4 name. The client owns
+ * stamping `L4Item.id` (deterministic hash), `source` (`"llm"` /
+ * `"fallback"`), and the click-through `briefSlug` / `initiativeId`
+ * overlay match. Falls back to deterministic verdict composition on any
+ * LLM failure — mirrors the contract of `/api/assess/infer-defaults`.
+ */
+export async function clientCurateInitiatives(
+  towerId: TowerId,
+  rows: CurateInitiativesRowInput[],
+): Promise<
+  | { ok: true; result: CurateInitiativesResult }
+  | { ok: false; error: string; status: number }
+> {
+  const res = await fetch("/api/assess/curate-initiatives", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ towerId, rows }),
+  });
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    return { ok: false, error: "Invalid response", status: res.status };
+  }
+  if (!res.ok) {
+    const err = (body as { error?: string })?.error ?? res.statusText;
+    return { ok: false, error: err, status: res.status };
+  }
+  const data = body as {
+    ok?: boolean;
+    source?: CurateInitiativesSource;
+    rows?: CuratedRow[];
+    warning?: string;
+  };
+  if (!data.ok || !Array.isArray(data.rows) || !data.source) {
+    return { ok: false, error: "Malformed curation response", status: res.status };
+  }
+  return {
+    ok: true,
+    result: {
+      source: data.source,
+      rows: data.rows,
+      warning: data.warning,
+    },
+  };
+}
+
+// ----- Lazy AIProcessBrief generation ----------------------------------
+
+export type CurateBriefInput = {
+  towerId: TowerId;
+  /** Parent row L2 (display only — keeps the prompt grounded). */
+  l2: string;
+  /** Parent row L3. */
+  l3: string;
+  /** L4 name verbatim — round-tripped so the server doesn't have to fuzzy-match. */
+  l4Name: string;
+  /** L4Item.aiRationale — keeps the brief consistent with the card. */
+  aiRationale: string;
+  agentOneLine?: string;
+  primaryVendor?: string;
+};
+
+export type CurateBriefSource = "llm" | "fallback";
+
+export type CurateBriefResult = {
+  source: CurateBriefSource;
+  brief: GeneratedBrief;
+  warning?: string;
+};
+
+/**
+ * Asks the server to generate a Versant-grounded `AIProcessBrief` shape for
+ * a single LLM-curated L4. Called lazily by the LLM-brief page on the user's
+ * first click; the result is cached on `L4Item.generatedBrief` and flows
+ * through the existing `localStore` + `assess_workshop` persistence channel.
+ *
+ * Server is stateless — the client round-trips the L4 + parent context so
+ * the route doesn't have to re-read the persisted assess program. Falls back
+ * to a deterministic placeholder brief on any LLM failure so the page
+ * always renders.
+ */
+export async function clientCurateBrief(
+  input: CurateBriefInput,
+): Promise<
+  | { ok: true; result: CurateBriefResult }
+  | { ok: false; error: string; status: number }
+> {
+  const res = await fetch("/api/assess/curate-brief", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    return { ok: false, error: "Invalid response", status: res.status };
+  }
+  if (!res.ok) {
+    const err = (body as { error?: string })?.error ?? res.statusText;
+    return { ok: false, error: err, status: res.status };
+  }
+  const data = body as {
+    ok?: boolean;
+    source?: CurateBriefSource;
+    brief?: GeneratedBrief;
+    warning?: string;
+  };
+  if (!data.ok || !data.brief || !data.source) {
+    return { ok: false, error: "Malformed brief response", status: res.status };
+  }
+  return {
+    ok: true,
+    result: {
+      source: data.source,
+      brief: data.brief,
       warning: data.warning,
     },
   };

@@ -11,7 +11,12 @@
  *   {
  *     ok: true,
  *     source: "llm" | "heuristic",
- *     defaults: [{ offshorePct: number, aiPct: number, rationale?: string }, ...],
+ *     defaults: [{
+ *       offshorePct: number,
+ *       aiPct: number,
+ *       offshoreRationale?: string,  // LLM-only — ≤15 words
+ *       aiRationale?: string,        // LLM-only — ≤15 words
+ *     }, ...],
  *     warning?: string  // present when we wanted LLM but had to fall back
  *   }
  *
@@ -50,7 +55,12 @@ type InferDefaultsBody = {
   rows?: unknown;
 };
 
-type RowDefault = L3Defaults & { rationale?: string };
+type RowDefault = L3Defaults & {
+  /** ≤15-word Versant rationale for the offshore dial. */
+  offshoreRationale?: string;
+  /** ≤15-word Versant rationale for the AI-impact dial. */
+  aiRationale?: string;
+};
 
 export async function POST(req: Request) {
   if (!(await isAuthed())) {
@@ -117,7 +127,8 @@ export async function POST(req: Request) {
     const defaults: RowDefault[] = llmDefaults.map((d) => ({
       offshorePct: d.offshorePct,
       aiPct: d.aiPct,
-      rationale: d.rationale,
+      offshoreRationale: d.offshoreRationale,
+      aiRationale: d.aiRationale,
     }));
     return NextResponse.json(
       { ok: true, source: "llm" as const, defaults },
@@ -127,6 +138,9 @@ export async function POST(req: Request) {
 
   // Heuristic fallback. Wrapped in try/catch only because it's the last line
   // of defence — if the heuristic itself throws, that IS a 500.
+  // No rationales on the heuristic path — the client substitutes the
+  // deterministic `rowStarterRationale` text and stamps `dialsRationaleSource:
+  // "heuristic"`.
   try {
     const defaults: RowDefault[] = rows.map((r) => inferL3Defaults(towerId, r.l2, r.l3));
     return NextResponse.json(

@@ -66,7 +66,10 @@ function L4Row({
   const initiativeHref = initiative
     ? `/tower/${tower.id}/process/${slugify(initiative.name)}`
     : undefined;
-  const briefHref = l4.briefSlug ? `/tower/${tower.id}/brief/${l4.briefSlug}` : undefined;
+  const briefHref = l4.briefSlug
+    ? `/tower/${tower.id}/brief/${l4.briefSlug}`
+    : l4.llmBriefHref;
+  const briefIsLLM = !l4.briefSlug && Boolean(l4.llmBriefHref);
   const isClickable = Boolean(initiativeHref || briefHref);
 
   const borderClass = l4.isPlaceholder
@@ -233,7 +236,11 @@ function L4Row({
       <Link
         href={briefHref}
         className="group block border-b border-forge-border last:border-b-0"
-        title="Open the lightweight pre/post brief"
+        title={
+          briefIsLLM
+            ? "Generate a Versant-grounded LLM brief for this capability"
+            : "Open the lightweight pre/post brief"
+        }
       >
         {content}
       </Link>

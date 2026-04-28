@@ -75,9 +75,17 @@ export type InitiativeL4 = {
   frequency?: TowerProcess["frequency"];
   criticality?: TowerProcess["criticality"];
   currentMaturity?: TowerProcess["currentMaturity"];
-  // ----- Click-through targets (one of: full 4-lens, brief, or none)
+  // ----- Click-through targets (one of: full 4-lens, brief, llm-brief, or none)
   initiativeId?: string;
   briefSlug?: string;
+  /**
+   * Lazy-LLM brief route. Emitted only for LLM-curated L4s (Path 0 cache
+   * hit) that don't carry a hand-curated `briefSlug` overlay match. The
+   * UI prefers `initiativeId` → `briefSlug` → `llmBriefHref`. Resolves to
+   * `/tower/[slug]/brief/llm/[rowId]/[l4Id]` and the page generates the
+   * brief on first visit, caching it on `L4Item.generatedBrief`.
+   */
+  llmBriefHref?: string;
 };
 
 export type InitiativeL3 = {
@@ -132,6 +140,15 @@ export type SelectInitiativesResult = {
     l4Placeholders: number;
     overlayHits: number;
     overlayFuzzyHits: number;
+    /**
+     * Rows in `curationStage: "queued"` — i.e. capability map was uploaded
+     * but the AI initiatives haven't been refreshed yet. Empty-state copy
+     * uses this to differentiate "your map is queued, click Refresh in the
+     * banner above" from "no L3 has its AI dial > 0, raise it on Step 2".
+     */
+    queuedRowCount: number;
+    /** Total row count for the tower (queued + non-queued). */
+    totalRowCount: number;
     /** Source-mix counts — verdict provenance across L4s in this tower. */
     sourceMix: {
       canonical: number;
@@ -181,6 +198,14 @@ export function selectInitiativesForTower(
   let l4Placeholders = 0;
   let overlayHits = 0;
   let overlayFuzzyHits = 0;
+  /**
+   * Sum of aiUsd for rows that the selector dropped from the rendered L3
+   * list (queued rows with no surfaced L4s). They still contribute to the
+   * Step 2 totals but NOT to the Step 4 view, so the dev-mode consistency
+   * assertion subtracts this amount from the expected total before
+   * comparing against the rendered sum.
+   */
+  let skippedAiUsd = 0;
   // Provenance counters for the source-mix diagnostic — useful for spotting
   // when an overlay rule isn't firing or the rubric is over-eager.
   const sourceMix = {
@@ -260,11 +285,21 @@ export function selectInitiativesForTower(
     if (isCacheValidForRow(row) && row.l4Items) {
       for (const item of row.l4Items) {
         if (!item.aiEligible) continue;
-        l4Views.push(buildL4FromCachedItem(item));
+        l4Views.push(buildL4FromCachedItem(item, towerId, row.id));
         l4Curated += 1;
         curatedHere += 1;
         sourceMix.l4Items += 1;
       }
+    } else if (row.curationStage === "queued") {
+      // Post-upload: the user's capability map is fresh and the LLM
+      // pipeline hasn't run yet. Suppress the canonical-map composer
+      // walk so we don't misleadingly surface the SEED tower's curated
+      // L4s as if they applied to the user's just-uploaded rows. The
+      // StaleCurationBanner above already messages the Refresh CTA;
+      // showing pre-curated stale content alongside it would contradict
+      // the "queued" signal and lower content quality below the
+      // Versant-grounded bar.
+      // (intentional no-op — l4Views stays empty for this row)
     } else if (mapHit) {
       for (const l4 of mapHit.l3.l4) {
         if (l4.relatedTowerIds && !l4.relatedTowerIds.includes(towerId)) continue;
@@ -322,11 +357,27 @@ export function selectInitiativesForTower(
     // Ghost-L3 prevention: dial > 0 but no curated L4 surfaced (either no map
     // hit at all, or the map L4s all fell through). Synthesize a placeholder
     // so the L3 stays visible and its $ is still attributed.
-    if (l4Views.length === 0) {
+    //
+    // Exception: when the row is `queued` (post-upload state — the LLM
+    // pipeline hasn't run yet), suppress the placeholder so Step 4 reads
+    // empty. The StaleCurationBanner above already tells the user what
+    // to do, and showing a wall of "No AI candidates found" placeholders
+    // for every row would be a worse UX than a clean empty state.
+    if (l4Views.length === 0 && row.curationStage !== "queued") {
       l4Views.push(buildPlaceholderL4Fallback(row.id, saving.aiPct));
       l4Placeholders += 1;
       placeholdersHere += 1;
       l3GhostPlaceholders += 1;
+    }
+
+    // When the row is queued and produced zero L4s, skip the L3 entirely —
+    // it has nothing to render and the banner above is already messaging
+    // the refresh action. Track the skip so the dev-mode consistency
+    // assertion below can subtract these rows' aiUsd from the expected
+    // total (they DO contribute to Step 2 totals but not to Step 4).
+    if (l4Views.length === 0) {
+      skippedAiUsd += saving.ai;
+      continue;
     }
 
     const primaryInitiativeId = l4Views.find((x) => x.initiativeId)?.initiativeId;
@@ -397,6 +448,14 @@ export function selectInitiativesForTower(
     ? modeledSavingsForTower(l3Rows, baseline, global)
     : { pool: 0, offshorePct: 0, aiPct: 0, offshore: 0, ai: 0, combined: 0 };
 
+  // Queued rows are excluded from the L3 list above (they render an empty
+  // Step 4 until the refresh runs), but their $ is still in the tower-level
+  // total. Track the excluded ai$ so the dev-mode consistency assertion
+  // can subtract it before comparing against the rendered sum.
+  const queuedRowCount = l3Rows.filter(
+    (r) => r.curationStage === "queued",
+  ).length;
+
   const result: SelectInitiativesResult = {
     towerId,
     towerAiUsd: towerSummary.ai,
@@ -410,6 +469,8 @@ export function selectInitiativesForTower(
       l4Placeholders,
       overlayHits,
       overlayFuzzyHits,
+      queuedRowCount,
+      totalRowCount: l3Rows.length,
       sourceMix,
     },
   };
@@ -437,10 +498,13 @@ export function selectInitiativesForTower(
   }
 
   // Run the dev assertion in development only — never in production builds.
-  // By construction the loop above only excludes rows where saving.aiPct === 0
-  // (which contribute $0 anyway), so the totals must match exactly.
+  // The loop above excludes (a) rows where saving.aiPct === 0 (contribute $0)
+  // and (b) rows where the selector produced no L4 views (queued rows whose
+  // canonical-map walk + composer fell through). The skipped rows DO
+  // contribute to Step 2 totals but NOT to Step 4 — subtract them before
+  // comparing so the remaining drift must be zero.
   if (process.env.NODE_ENV !== "production") {
-    assertImpactConsistency(result, towerSummary.ai);
+    assertImpactConsistency(result, towerSummary.ai - skippedAiUsd);
   }
 
   return result;
@@ -518,8 +582,23 @@ function buildL4FromComposedVerdict(
  * `isCacheValidForRow(row)` returned true — i.e. the curationPipeline
  * orchestrator has stamped this row's l4Items and the row's name footprint
  * has not changed since.
+ *
+ * Click-through preference (renderer reads top-down):
+ *   1. `initiativeId`  — full 4-lens hand-curated deep-dive.
+ *   2. `briefSlug`     — hand-curated AIProcessBrief from the overlay.
+ *   3. `llmBriefHref`  — lazy LLM brief route, populated here when the L4
+ *                        is LLM-curated and has no overlay match. The page
+ *                        generates and caches the brief on first visit.
  */
-function buildL4FromCachedItem(item: L4Item): InitiativeL4 {
+function buildL4FromCachedItem(
+  item: L4Item,
+  towerId: TowerId,
+  rowId: string,
+): InitiativeL4 {
+  const llmBriefHref =
+    !item.briefSlug && !item.initiativeId && item.aiEligible
+      ? `/tower/${towerId}/brief/llm/${encodeURIComponent(rowId)}/${encodeURIComponent(item.id)}`
+      : undefined;
   return {
     id: item.id,
     name: item.name,
@@ -532,6 +611,7 @@ function buildL4FromCachedItem(item: L4Item): InitiativeL4 {
     currentMaturity: item.currentMaturity,
     initiativeId: item.initiativeId,
     briefSlug: item.briefSlug,
+    llmBriefHref,
   };
 }
 

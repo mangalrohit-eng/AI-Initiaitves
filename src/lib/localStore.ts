@@ -689,6 +689,25 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
           if (typeof x.curationError === "string") {
             out.curationError = x.curationError;
           }
+          // LLM dial rationale pair + provenance. Preserved across reloads
+          // so the L3LeverRow popovers + provenance chips don't reset to
+          // "starter" every time the user navigates back to Step 2.
+          if (typeof x.offshoreRationale === "string" && x.offshoreRationale.trim()) {
+            out.offshoreRationale = x.offshoreRationale.trim();
+          }
+          if (typeof x.aiImpactRationale === "string" && x.aiImpactRationale.trim()) {
+            out.aiImpactRationale = x.aiImpactRationale.trim();
+          }
+          if (
+            x.dialsRationaleSource === "llm" ||
+            x.dialsRationaleSource === "heuristic" ||
+            x.dialsRationaleSource === "starter"
+          ) {
+            out.dialsRationaleSource = x.dialsRationaleSource;
+          }
+          if (typeof x.dialsRationaleAt === "string") {
+            out.dialsRationaleAt = x.dialsRationaleAt;
+          }
           return out;
         })
         .filter((r): r is L3WorkforceRow => r != null);

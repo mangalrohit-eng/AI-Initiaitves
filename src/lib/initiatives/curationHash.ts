@@ -23,7 +23,7 @@
  * decide whether `row.l4Items` is still valid.
  */
 
-import type { L3WorkforceRow } from "@/data/assess/types";
+import type { L3WorkforceRow, TowerAssessState } from "@/data/assess/types";
 
 /**
  * djb2 — a small, dependency-free, deterministic 32-bit hash. Cryptographic
@@ -148,4 +148,96 @@ export function isCacheValidForRow(row: L3WorkforceRow): boolean {
   if (!row.l4Items || row.l4Items.length === 0) return false;
   if (row.curationContentHash == null) return false;
   return row.curationContentHash === rowCurrentHash(row);
+}
+
+/**
+ * Upload-path helper: stamp every freshly-uploaded row with the current
+ * content hash AND queue it. Used by `importOp` (CSV upload) where the
+ * incoming rows have no `curationContentHash` and `markRowsStaleByHash`
+ * would no-op them. Idempotent — rows already queued or in-flight stay
+ * unchanged.
+ *
+ * Rows ride out of this function with `curationStage: "queued"` and a
+ * fresh hash so the staleness predicate fires immediately on every
+ * downstream step. Sample-loaded rows do NOT pass through this helper —
+ * they keep their pre-populated `l4Activities` / dials and bootstrap
+ * silently to `idle`.
+ */
+export function markRowsQueuedOnUpload(
+  rows: L3WorkforceRow[],
+): L3WorkforceRow[] {
+  return rows.map((r) => {
+    if (
+      r.curationStage === "running-l4" ||
+      r.curationStage === "running-verdict" ||
+      r.curationStage === "running-curate"
+    ) {
+      // Don't disturb in-flight rows — extremely unlikely on upload but safe.
+      return r;
+    }
+    return {
+      ...r,
+      curationContentHash: rowCurrentHash(r),
+      curationStage: "queued",
+    };
+  });
+}
+
+/**
+ * Tower-level stale derivation. Single source of truth for the three
+ * banner predicates so Steps 1, 2, and 4 don't fork the logic.
+ *
+ *   - `l4Stale`               — at least one row is missing L4 activities;
+ *                               drives the Step 1 StaleL4Banner.
+ *   - `dialsStale`            — every row has both dial overrides null AND
+ *                               `dialsRationaleSource == null` (the post-
+ *                               upload signature). Sample-loaded rows have
+ *                               `dialsRationaleSource: "starter"` so they
+ *                               are NOT flagged as stale. Drives the Step 2
+ *                               StaleDialsBanner.
+ *   - `initiativesStale`      — at least one row has `curationStage:
+ *                               "queued"` (existing `hasQueuedRows`
+ *                               predicate). Drives the Step 4
+ *                               StaleCurationBanner.
+ *   - `missingL4ForRefresh`   — at least one queued row has no L4
+ *                               activities. The Step 4 banner uses this
+ *                               to redirect users back to Step 1 instead
+ *                               of firing a refresh that's guaranteed to
+ *                               fail in `curationPipeline.ts`.
+ */
+export type TowerStaleState = {
+  l4Stale: boolean;
+  dialsStale: boolean;
+  initiativesStale: boolean;
+  missingL4ForRefresh: boolean;
+};
+
+export function getTowerStaleState(
+  towerState: Pick<TowerAssessState, "l3Rows"> | undefined,
+): TowerStaleState {
+  const rows = towerState?.l3Rows ?? [];
+  if (rows.length === 0) {
+    return {
+      l4Stale: false,
+      dialsStale: false,
+      initiativesStale: false,
+      missingL4ForRefresh: false,
+    };
+  }
+  const l4Stale = rows.some(
+    (r) => !r.l4Activities || r.l4Activities.length === 0,
+  );
+  const dialsStale = rows.every(
+    (r) =>
+      r.offshoreAssessmentPct == null &&
+      r.aiImpactAssessmentPct == null &&
+      r.dialsRationaleSource == null,
+  );
+  const initiativesStale = hasQueuedRows(rows);
+  const missingL4ForRefresh = rows.some(
+    (r) =>
+      r.curationStage === "queued" &&
+      (!r.l4Activities || r.l4Activities.length === 0),
+  );
+  return { l4Stale, dialsStale, initiativesStale, missingL4ForRefresh };
 }

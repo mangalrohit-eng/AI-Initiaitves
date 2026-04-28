@@ -1,6 +1,79 @@
-import type { Tower } from "@/data/types";
+import type {
+  AiPriority,
+  Tower,
+  TowerProcessCriticality,
+  TowerProcessFrequency,
+  TowerProcessMaturity,
+} from "@/data/types";
+import type { AiCurationStatus } from "@/data/capabilityMap/types";
 
 export type TowerId = Tower["id"];
+
+/**
+ * The five canonical "why not AI" reasons. Kept verbatim from
+ * `docs/context.md` §9 — every `reviewed-not-eligible` L4 must fall
+ * back to one of these strings (LLM paraphrase is rejected).
+ */
+export type NotEligibleReason =
+  | "Requires human editorial judgment"
+  | "Fundamentally relationship-driven"
+  | "Already automated via existing tools"
+  | "Low volume — ROI doesn't justify AI investment"
+  | "Strategic exercise requiring executive judgment";
+
+/**
+ * Provenance tag for a rich L4 record: where the verdict + curation came from.
+ * Drives diagnostics + future "regenerate stale" sweeps.
+ */
+export type L4ItemSource = "canonical" | "llm" | "fallback" | "manual";
+
+/**
+ * Rich L4 record on `L3WorkforceRow`. Source of truth for AI Initiatives view —
+ * each item carries its verdict (Stage 2 output) and, when eligible, its
+ * curation (Stage 3 output). Phase 1 (this PR) ships the shape; the LLM
+ * pipeline that populates it lands in PR 2. Until then, the selector falls
+ * through to `l4Activities` strings or canonical-map L4s.
+ */
+export type L4Item = {
+  /** Stable id — hash of `(towerId + l2 + l3 + name)`. */
+  id: string;
+  name: string;
+  source: L4ItemSource;
+  /** ISO timestamp; undefined for canonical seeds. */
+  generatedAt?: string;
+  // ----- Verdict (Stage 2 output) -----
+  aiCurationStatus: AiCurationStatus;
+  aiEligible: boolean;
+  aiPriority?: AiPriority;
+  /** One-liner Versant-grounded rationale. Required (verdict reasoning). */
+  aiRationale: string;
+  /** Required when `aiCurationStatus === "reviewed-not-eligible"`. */
+  notEligibleReason?: NotEligibleReason;
+  // ----- Curation (Stage 3 output, only when `aiEligible`) -----
+  frequency?: TowerProcessFrequency;
+  criticality?: TowerProcessCriticality;
+  currentMaturity?: TowerProcessMaturity;
+  /** Named vendor: "BlackLine" / "Amagi" / "Eightfold" / etc. */
+  primaryVendor?: string;
+  /** One-line agent description. */
+  agentOneLine?: string;
+  // ----- Optional click-through targets (when an asset exists) -----
+  initiativeId?: string;
+  briefSlug?: string;
+};
+
+/**
+ * Pipeline state stamped onto `L3WorkforceRow.curationStage`. Used by the
+ * Capability Map UI to show progress pills + retry affordances.
+ */
+export type CurationStage =
+  | "idle"
+  | "queued"
+  | "running-l4"
+  | "running-verdict"
+  | "running-curate"
+  | "done"
+  | "failed";
 
 /**
  * One L3 (sub-capability) row in the tower workforce footprint.
@@ -38,11 +111,33 @@ export type L3WorkforceRow = {
    */
   aiImpactAssessmentPct?: number;
   /**
-   * Reference list of L4 activity labels under this L3 (display only — not
-   * part of the math). Populated from the canonical map at seed time, or
-   * generated post-upload via the LLM "Generate L4 activities" action.
+   * Legacy reference list of L4 activity labels (display only — not part of
+   * the math). Populated from the canonical map at seed time, or generated
+   * post-upload via the LLM "Generate L4 activities" action. Kept for
+   * back-compat; once the curation pipeline (PR 2) lands, this field is
+   * derived from `l4Items.name` and the rich `l4Items` array becomes the
+   * source of truth for Step 4.
    */
   l4Activities?: string[];
+  /**
+   * Rich L4 records — each item carries its verdict + curation when the
+   * pipeline has run. Empty / undefined until the LLM pipeline (PR 2)
+   * populates it; selectors fall through to `l4Activities` and the
+   * canonical map until then.
+   */
+  l4Items?: L4Item[];
+  /**
+   * Stable hash of `(l2 + l3 + sorted-list-of-l4-names)`. The pipeline's
+   * idempotency key — re-runs skip rows whose hash matches the last
+   * successful run. Distinct from per-item `L4Item.id`.
+   */
+  curationContentHash?: string;
+  /** Whole-row pipeline status. */
+  curationStage?: CurationStage;
+  /** Last-success timestamp; UI uses it to show "X minutes ago". */
+  curationGeneratedAt?: string;
+  /** Failure detail when `curationStage === "failed"`. */
+  curationError?: string;
 };
 
 /** Tower-lead anchor dialed once and held steady before stress-test on the summary page. */

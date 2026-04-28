@@ -6,8 +6,14 @@ import type { L3WorkforceRow } from "@/data/assess/types";
 import type {
   CapabilityMapViewModel,
   MapViewL3,
+  MapViewL4,
 } from "@/lib/assess/capabilityMapTree";
 import { findRowForMapL3 } from "@/lib/assess/capabilityMapTree";
+import {
+  CurationPill,
+  CurationScoreboard,
+} from "@/components/capabilityMap/CurationPill";
+import type { ComposedVerdict } from "@/lib/initiatives/composeVerdict";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -19,6 +25,22 @@ type Props = {
    * those become meaningful only once the user loads a footprint.
    */
   isPreview?: boolean;
+  /**
+   * Optional verdict lookup — when present, every L4 chip renders a curation
+   * pill and the panel header shows the per-tower scoreboard. Built off the
+   * canonical capability map; safe to omit on the program-wide hub view.
+   */
+  verdictLookup?: {
+    byId: Map<string, ComposedVerdict>;
+    byNameKey: Map<string, ComposedVerdict>;
+  };
+  /** Aggregate counts shown in the scoreboard. Pair with `verdictLookup`. */
+  scoreboardSummary?: {
+    eligible: number;
+    notEligible: number;
+    pending: number;
+    totalL4: number;
+  };
 };
 
 /**
@@ -40,7 +62,13 @@ type Props = {
  * Source of truth: rows always when present; the predefined map only when
  * `isPreview === true` (no rows yet).
  */
-export function CapabilityMapPanel({ view, rows, isPreview = false }: Props) {
+export function CapabilityMapPanel({
+  view,
+  rows,
+  isPreview = false,
+  verdictLookup,
+  scoreboardSummary,
+}: Props) {
   const allL3Keys = React.useMemo(
     () => view.l2.flatMap((l2) => l2.l3.map((l3) => keyOf(l2.name, l3.name))),
     [view],
@@ -121,11 +149,16 @@ export function CapabilityMapPanel({ view, rows, isPreview = false }: Props) {
 
   return (
     <div className="space-y-3">
-      {/* Top line: total L4 count + master toggle. */}
+      {/* Top line: total L4 count, optional scoreboard, and master toggle. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-mono text-[11px] tabular-nums text-forge-hint">
-          {totalL4} L4 activities
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[11px] tabular-nums text-forge-hint">
+            {totalL4} L4 activities
+          </span>
+          {scoreboardSummary && scoreboardSummary.totalL4 > 0 ? (
+            <CurationScoreboard {...scoreboardSummary} />
+          ) : null}
+        </div>
         {totalL4 > 0 ? (
           <button
             type="button"
@@ -185,6 +218,7 @@ export function CapabilityMapPanel({ view, rows, isPreview = false }: Props) {
                   l2Name={l2.name}
                   l3Nodes={l2.l3}
                   active={active}
+                  verdictLookup={verdictLookup}
                 />
               ))}
             </div>
@@ -306,10 +340,15 @@ function L4BandColumn({
   l2Name,
   l3Nodes,
   active,
+  verdictLookup,
 }: {
   l2Name: string;
   l3Nodes: MapViewL3[];
   active: Set<string>;
+  verdictLookup?: {
+    byId: Map<string, ComposedVerdict>;
+    byNameKey: Map<string, ComposedVerdict>;
+  };
 }) {
   const activeL3sInThisL2 = l3Nodes.filter((l3) =>
     active.has(keyOf(l2Name, l3.name)),
@@ -338,21 +377,56 @@ function L4BandColumn({
               />
             ) : (
               l3.l4.map((l4) => (
-                <Box
-                  key={l4.id}
-                  tier="l4"
-                  name={l4.name}
-                  hc={null}
-                  title={l4.name}
-                  data-l4={l4.id}
-                  ariaLabel={`L4 ${l4.name}`}
-                />
+                <L4Box key={l4.id} l4={l4} verdictLookup={verdictLookup} />
               ))
             )}
           </React.Fragment>
         ))
       )}
     </div>
+  );
+}
+
+function L4Box({
+  l4,
+  verdictLookup,
+}: {
+  l4: MapViewL4;
+  verdictLookup?: {
+    byId: Map<string, ComposedVerdict>;
+    byNameKey: Map<string, ComposedVerdict>;
+  };
+}) {
+  const verdict = React.useMemo(() => {
+    if (!verdictLookup) return undefined;
+    const byId = verdictLookup.byId.get(l4.id);
+    if (byId) return byId;
+    return verdictLookup.byNameKey.get(l4.name.trim().toLowerCase().replace(/\s+/g, " "));
+  }, [verdictLookup, l4.id, l4.name]);
+
+  return (
+    <Box
+      tier="l4"
+      name={l4.name}
+      hc={null}
+      title={
+        verdict?.aiRationale
+          ? `${l4.name} — ${verdict.aiRationale}`
+          : l4.name
+      }
+      data-l4={l4.id}
+      ariaLabel={`L4 ${l4.name}`}
+      trailingPill={
+        verdict ? (
+          <CurationPill
+            status={verdict.status}
+            priority={verdict.aiPriority}
+            rationale={verdict.aiRationale}
+            variant="compact"
+          />
+        ) : null
+      }
+    />
   );
 }
 
@@ -414,6 +488,8 @@ type BoxBaseProps = {
   ariaLabel?: string;
   ariaPressed?: boolean;
   onClick?: () => void;
+  /** Optional trailing element (e.g., CurationPill on L4 chips). */
+  trailingPill?: React.ReactNode;
   /** Stable dataset markers for future selectors (crawler / tests). */
   "data-l3"?: string;
   "data-l4"?: string;
@@ -435,6 +511,7 @@ function Box(props: BoxBaseProps) {
     ariaLabel,
     ariaPressed,
     onClick,
+    trailingPill,
     ...rest
   } = props;
 
@@ -473,6 +550,7 @@ function Box(props: BoxBaseProps) {
     <>
       {badgeTier ? <TierBadge tier={badgeTier} /> : null}
       <span className={nameClass}>{name}</span>
+      {trailingPill ? <span className="ml-1 shrink-0">{trailingPill}</span> : null}
       {hc != null ? <span className={hcClass}>{hc} h/c</span> : null}
     </>
   );

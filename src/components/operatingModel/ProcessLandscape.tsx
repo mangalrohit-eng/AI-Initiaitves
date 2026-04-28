@@ -1,28 +1,22 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import * as Icons from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
-import type { Tower, TowerProcess, WorkCategory } from "@/data/types";
-import { cn, findAiInitiative, slugify } from "@/lib/utils";
+import type { Tower } from "@/data/types";
+import type { InitiativeL2, InitiativeL3, InitiativeL4 } from "@/lib/initiatives/select";
+import { cn, slugify } from "@/lib/utils";
 import { TIER_STYLES, priorityTier } from "@/lib/priority";
+import { formatUsdCompact } from "@/lib/format";
+import { getTowerHref } from "@/lib/towerHref";
 
-function resolveIcon(name: string): LucideIcon {
+function resolveIcon(name?: string): LucideIcon {
+  if (!name) return Icons.Layers;
   const lib = Icons as unknown as Record<string, LucideIcon>;
   return lib[name] ?? Icons.Layers;
 }
-
-const FREQ_ACCENT: Record<string, string> = {
-  Continuous: "bg-slate-900/5 text-slate-800 border-slate-300",
-  Daily: "bg-slate-900/5 text-slate-800 border-slate-300",
-  Weekly: "bg-slate-900/5 text-slate-800 border-slate-300",
-  Monthly: "bg-slate-900/5 text-slate-800 border-slate-300",
-  Quarterly: "bg-slate-900/5 text-slate-800 border-slate-300",
-  Annual: "bg-slate-900/5 text-slate-800 border-slate-300",
-  "Event-driven": "bg-slate-900/5 text-slate-800 border-slate-300",
-  Seasonal: "bg-slate-900/5 text-slate-800 border-slate-300",
-};
 
 const CRITICALITY_ACCENT: Record<string, string> = {
   "Mission-critical": "border-accent-red/40 bg-red-50 text-red-900",
@@ -38,31 +32,53 @@ const MATURITY_ACCENT: Record<string, string> = {
   Automated: "border-accent-teal/55 bg-accent-teal/15 text-emerald-900",
 };
 
-function ProcessRow({ tower, process }: { tower: Tower; process: TowerProcess }) {
-  const tier = priorityTier(process.aiPriority);
-  const initiative = findAiInitiative(tower, process);
-  const hasBrief = !initiative && Boolean(process.briefSlug);
-  const isClickable = Boolean(initiative || hasBrief);
-  // Solid purple border = full 4-lens initiative.
-  // Dashed purple border = lightweight process brief.
-  // Transparent = not AI-eligible.
-  const borderClass = !process.aiEligible
-    ? "border-l-[3px] border-l-transparent"
+/**
+ * One curated (or placeholder) L4 row inside an L3's expanded panel.
+ *
+ * Renders the Versant-specific rationale, P-tier, frequency, criticality,
+ * and maturity for an AI-eligible activity, then offers click-through to the
+ * brief or full 4-lens initiative when one is attached.
+ */
+function L4Row({
+  l4,
+  tower,
+  index,
+}: {
+  l4: InitiativeL4;
+  tower: Tower;
+  index: number;
+}) {
+  const tier = priorityTier(l4.aiPriority);
+  const initiative = l4.initiativeId
+    ? tower.processes.find((p) => p.id === l4.initiativeId)
+    : undefined;
+  const initiativeHref = initiative
+    ? `/tower/${tower.id}/process/${slugify(initiative.name)}`
+    : undefined;
+  const briefHref = l4.briefSlug ? `/tower/${tower.id}/brief/${l4.briefSlug}` : undefined;
+  const isClickable = Boolean(initiativeHref || briefHref);
+
+  const borderClass = l4.isPlaceholder
+    ? "border-l-[3px] border-l-dashed border-l-forge-border"
     : initiative
       ? "border-l-[3px] border-l-accent-purple"
-      : hasBrief
-        ? "border-l-[3px] border-l-accent-purple/70 border-dashed"
+      : briefHref
+        ? "border-l-[3px] border-dashed border-l-accent-purple/70"
         : "border-l-[3px] border-l-accent-purple/40";
+
   const content = (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.02, duration: 0.18 }}
       className={cn(
-        "grid grid-cols-12 items-center gap-3 px-4 py-3 text-sm transition",
+        "grid grid-cols-12 items-start gap-3 px-4 py-3 text-sm transition",
         borderClass,
         tier ? TIER_STYLES[tier].row : "bg-transparent",
         isClickable ? "hover:bg-accent-purple/5" : "",
       )}
     >
-      <div className="col-span-12 min-w-0 md:col-span-5">
+      <div className="col-span-12 min-w-0 md:col-span-6">
         <div className="flex items-start gap-2">
           {tier ? (
             <span
@@ -73,101 +89,111 @@ function ProcessRow({ tower, process }: { tower: Tower; process: TowerProcess })
             <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-forge-border" aria-hidden />
           )}
           <div className="min-w-0">
-            <div className="font-medium text-forge-ink">{process.name}</div>
-            {!process.aiEligible ? (
-              <p className="mt-1 text-xs leading-relaxed text-forge-subtle">
-                <span className="font-semibold uppercase tracking-wide text-forge-hint">
-                  Why not AI —{" "}
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={cn(
+                  "font-medium",
+                  l4.isPlaceholder ? "italic text-forge-subtle" : "text-forge-ink",
+                )}
+              >
+                {l4.name}
+              </span>
+              {l4.source === "fuzzy-match" ? (
+                <span
+                  className="rounded-full border border-forge-border bg-forge-well px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider text-forge-hint"
+                  title="Curated detail attached via name match. Will be confirmed in editorial sweep."
+                >
+                  inferred
                 </span>
-                {process.aiRationale}
+              ) : null}
+              {l4.isPlaceholder ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-well px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider text-forge-hint"
+                  title="L3 dial is set above 0 on Step 2 but no curated activity has been authored yet. Editorial sweep underway."
+                >
+                  <Icons.CalendarClock className="h-2.5 w-2.5" />
+                  pending discovery
+                </span>
+              ) : null}
+            </div>
+            {l4.aiRationale ? (
+              <p className="mt-1 text-xs leading-relaxed text-forge-subtle">
+                {l4.aiRationale}
               </p>
-            ) : (
-              <p className="mt-1 hidden text-xs leading-relaxed text-forge-subtle lg:block">
-                {process.aiRationale}
-              </p>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
 
       <div className="col-span-4 text-xs md:col-span-2">
-        <span
-          className={cn(
-            "inline-flex items-center rounded-full border px-2 py-0.5 font-medium",
-            FREQ_ACCENT[process.frequency] ?? "border-forge-border bg-forge-well text-forge-body",
-          )}
-        >
-          {process.frequency}
-        </span>
+        {l4.frequency ? (
+          <span className="inline-flex items-center rounded-full border border-forge-border bg-forge-well px-2 py-0.5 font-medium text-forge-body">
+            {l4.frequency}
+          </span>
+        ) : null}
       </div>
 
       <div className="col-span-4 text-xs md:col-span-2">
-        <span
-          className={cn(
-            "inline-flex items-center rounded-full border px-2 py-0.5 font-medium",
-            CRITICALITY_ACCENT[process.criticality] ?? "",
-          )}
-        >
-          {process.criticality}
-        </span>
+        {l4.criticality ? (
+          <span
+            className={cn(
+              "inline-flex items-center rounded-full border px-2 py-0.5 font-medium",
+              CRITICALITY_ACCENT[l4.criticality] ?? "border-forge-border bg-forge-well",
+            )}
+          >
+            {l4.criticality}
+          </span>
+        ) : null}
       </div>
 
-      <div className="col-span-4 text-xs md:col-span-2">
-        <span
-          className={cn(
-            "inline-flex items-center rounded-full border px-2 py-0.5 font-medium",
-            MATURITY_ACCENT[process.currentMaturity] ?? "",
-          )}
-        >
-          {process.currentMaturity}
-        </span>
+      <div className="col-span-4 text-xs md:col-span-1">
+        {l4.currentMaturity ? (
+          <span
+            className={cn(
+              "inline-flex items-center rounded-full border px-2 py-0.5 font-medium",
+              MATURITY_ACCENT[l4.currentMaturity] ?? "border-forge-border bg-forge-well",
+            )}
+          >
+            {l4.currentMaturity}
+          </span>
+        ) : null}
       </div>
 
       <div className="col-span-12 flex items-center justify-between gap-2 md:col-span-1 md:justify-end">
-        {process.aiEligible ? (
-          tier ? (
-            <span
-              className={cn(
-                "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold",
-                TIER_STYLES[tier].badge,
-              )}
-            >
-              {tier}
-            </span>
-          ) : (
-            <span className="inline-flex items-center rounded-full border border-accent-purple/30 bg-accent-purple/10 px-2 py-0.5 text-xs font-semibold text-accent-purple-dark">
-              AI
-            </span>
-          )
-        ) : (
-          <span className="inline-flex items-center rounded-full border border-forge-border bg-forge-well px-2 py-0.5 text-xs font-medium text-forge-hint">
-            Human-led
+        {tier ? (
+          <span
+            className={cn(
+              "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold",
+              TIER_STYLES[tier].badge,
+            )}
+          >
+            {tier}
           </span>
-        )}
+        ) : null}
         {isClickable ? (
-          <Icons.ChevronRight className="h-4 w-4 text-forge-hint transition group-hover:text-accent-purple" />
+          <Icons.ChevronRight className="h-4 w-4 text-forge-hint group-hover:text-accent-purple" />
         ) : null}
       </div>
-    </div>
+    </motion.div>
   );
 
-  if (initiative) {
+  if (initiativeHref) {
     return (
       <Link
-        href={`/tower/${tower.id}/process/${slugify(initiative.name)}`}
+        href={initiativeHref}
         className="group block border-b border-forge-border last:border-b-0"
-        title="Open full 4-lens initiative"
+        title="Open the full four-lens initiative design"
       >
         {content}
       </Link>
     );
   }
-  if (hasBrief && process.briefSlug) {
+  if (briefHref) {
     return (
       <Link
-        href={`/tower/${tower.id}/brief/${process.briefSlug}`}
+        href={briefHref}
         className="group block border-b border-forge-border last:border-b-0"
-        title="Open process brief"
+        title="Open the lightweight pre/post brief"
       >
         {content}
       </Link>
@@ -176,30 +202,166 @@ function ProcessRow({ tower, process }: { tower: Tower; process: TowerProcess })
   return (
     <div
       className="border-b border-forge-border last:border-b-0"
-      title={!process.aiEligible ? process.aiRationale : undefined}
+      title={l4.aiRationale ?? undefined}
     >
       {content}
     </div>
   );
 }
 
-export function ProcessLandscape({
+/**
+ * One L3 row with an expandable detail panel showing AI-eligible L4s.
+ *
+ * The header carries the modeled $ from `rowModeledSaving` (via the selector),
+ * the live AI dial %, and a deep-link to Step 2 so the user can adjust the
+ * dial without losing context.
+ */
+function L3RowCard({
+  l3,
   tower,
-  category,
+  expanded,
+  onToggle,
 }: {
+  l3: InitiativeL3;
   tower: Tower;
-  category: WorkCategory;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
-  const Icon = resolveIcon(category.icon);
-  const totals = {
-    total: category.processes.length,
-    eligible: category.processes.filter((p) => p.aiEligible).length,
-  };
+  const maxTier = React.useMemo(() => {
+    const tiers = l3.l4s.map((l) => priorityTier(l.aiPriority)).filter(Boolean);
+    if (tiers.includes("P1")) return "P1" as const;
+    if (tiers.includes("P2")) return "P2" as const;
+    if (tiers.includes("P3")) return "P3" as const;
+    return null;
+  }, [l3.l4s]);
+
+  const stepTwoHref = `${getTowerHref(tower.id as Parameters<typeof getTowerHref>[0], "impact-levers")}#l3-${l3.rowId}`;
+
+  return (
+    <div
+      className={cn(
+        "group rounded-2xl border bg-forge-surface shadow-sm transition",
+        expanded ? "border-accent-purple/40 shadow-card" : "border-forge-border",
+      )}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="flex w-full items-start justify-between gap-4 px-4 py-3 text-left"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-display text-sm font-semibold text-forge-ink">
+              {l3.l3.name}
+            </span>
+            {maxTier ? (
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+                  TIER_STYLES[maxTier].badge,
+                )}
+                title={`Highest priority of any AI-eligible activity in this capability: ${maxTier}`}
+              >
+                {maxTier}
+              </span>
+            ) : null}
+            <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
+              {l3.l4s.length}{" "}
+              {l3.l4s.length === 1 ? "activity" : "activities"}
+            </span>
+          </div>
+          {l3.l3.description ? (
+            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-forge-subtle">
+              {l3.l3.description}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-3 text-right">
+          <div>
+            <div className="font-mono text-base font-semibold tabular-nums text-forge-ink">
+              {formatUsdCompact(l3.aiUsd)}
+            </div>
+            <div className="text-[10px] uppercase tracking-wider text-forge-hint">
+              modeled AI · {Math.round(l3.aiPct)}%
+            </div>
+          </div>
+          <Icons.ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-forge-hint transition",
+              expanded ? "rotate-180 text-accent-purple-dark" : "",
+            )}
+            aria-hidden
+          />
+        </div>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {expanded ? (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="overflow-hidden border-t border-forge-border"
+          >
+            <div className="hidden grid-cols-12 gap-3 border-b border-forge-border bg-forge-well/50 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-forge-hint md:grid">
+              <div className="col-span-6">Activity (L4)</div>
+              <div className="col-span-2">Frequency</div>
+              <div className="col-span-2">Criticality</div>
+              <div className="col-span-1">Maturity</div>
+              <div className="col-span-1 text-right">Priority</div>
+            </div>
+
+            <div>
+              {l3.l4s.map((l4, i) => (
+                <L4Row key={l4.id} l4={l4} tower={tower} index={i} />
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 border-t border-forge-border bg-forge-well/40 px-4 py-2 text-[11px] text-forge-subtle">
+              <span>
+                Per-L3 AI $ matches the dial set on Step 2 — change once, both
+                surfaces update.
+              </span>
+              <Link
+                href={stepTwoHref}
+                className="inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-surface px-2.5 py-1 font-medium text-forge-body hover:border-accent-purple/40 hover:text-accent-purple-dark"
+                title="Adjust the AI dial for this capability on Step 2"
+              >
+                <Icons.SlidersHorizontal className="h-3 w-3" />
+                Adjust dial in Step 2
+                <Icons.ArrowUpRight className="h-3 w-3" />
+              </Link>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * Renders one L2 work-category panel: header with the L2 description / icon,
+ * and a vertical list of L3 cards each expandable to show AI-eligible L4s.
+ */
+export function ProcessLandscape({
+  l2,
+  tower,
+}: {
+  l2: InitiativeL2;
+  tower: Tower;
+}) {
+  const Icon = resolveIcon(l2.l2.icon);
+  const [expandedL3, setExpandedL3] = React.useState<string | null>(
+    l2.l3s[0]?.l3.id ?? null,
+  );
 
   return (
     <AnimatePresence mode="wait">
-      <motion.div
-        key={category.id}
+      <motion.section
+        key={l2.l2.id}
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -8 }}
@@ -212,32 +374,40 @@ export function ProcessLandscape({
               <Icon className="h-5 w-5" />
             </span>
             <div>
-              <div className="font-display text-lg font-semibold text-forge-ink">{category.name}</div>
-              <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-forge-subtle">
-                {category.description}
-              </p>
+              <div className="font-display text-lg font-semibold text-forge-ink">
+                {l2.l2.name}
+              </div>
+              {l2.l2.description ? (
+                <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-forge-subtle">
+                  {l2.l2.description}
+                </p>
+              ) : null}
             </div>
           </div>
-          <div className="text-xs text-forge-subtle">
-            <span className="font-semibold text-forge-ink">{totals.eligible}</span> of{" "}
-            <span className="font-semibold text-forge-ink">{totals.total}</span> processes AI-eligible
+          <div className="text-right text-xs text-forge-subtle">
+            <div className="font-mono text-lg font-semibold tabular-nums text-forge-ink">
+              {formatUsdCompact(l2.totalAiUsd)}
+            </div>
+            <div className="text-[10px] uppercase tracking-wider text-forge-hint">
+              modeled AI under this L2
+            </div>
           </div>
         </header>
 
-        <div className="hidden grid-cols-12 gap-3 border-b border-forge-border bg-forge-well/40 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-forge-hint md:grid">
-          <div className="col-span-5">Process</div>
-          <div className="col-span-2">Frequency</div>
-          <div className="col-span-2">Criticality</div>
-          <div className="col-span-2">Maturity</div>
-          <div className="col-span-1 text-right">AI</div>
-        </div>
-
-        <div>
-          {category.processes.map((proc) => (
-            <ProcessRow key={proc.id} tower={tower} process={proc} />
+        <div className="space-y-2 p-4 sm:p-5">
+          {l2.l3s.map((l3) => (
+            <L3RowCard
+              key={l3.l3.id}
+              l3={l3}
+              tower={tower}
+              expanded={expandedL3 === l3.l3.id}
+              onToggle={() =>
+                setExpandedL3((prev) => (prev === l3.l3.id ? null : l3.l3.id))
+              }
+            />
           ))}
         </div>
-      </motion.div>
+      </motion.section>
     </AnimatePresence>
   );
 }

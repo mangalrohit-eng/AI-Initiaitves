@@ -63,8 +63,9 @@ export function L3LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
 
   return (
     <div
+      id={`l3-${row.id}`}
       className={cn(
-        "rounded-2xl border border-forge-border bg-forge-surface/70 p-3 sm:p-4",
+        "scroll-mt-24 rounded-2xl border border-forge-border bg-forge-surface/70 p-3 sm:p-4",
       )}
     >
       <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr_1fr_minmax(120px,_0.7fr)] sm:gap-4">

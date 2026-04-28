@@ -28,7 +28,16 @@ export default function TowersPage() {
           </div>
           <p className="mt-3 text-sm leading-relaxed text-forge-body">
             Pick a tower to open its sequenced AI roadmap, four-lens initiative detail, and agent
-            architecture.
+            architecture. Every per-L3 dollar shown here is the modeled AI saving from the dial set
+            on{" "}
+            <Link
+              href="/impact-levers"
+              className="text-accent-purple-dark underline-offset-2 hover:underline"
+            >
+              Step 2 — Configure Impact Levers
+            </Link>
+            ; raise or lower a dial there and the corresponding capability immediately reflects on
+            this view.
           </p>
         </div>
 

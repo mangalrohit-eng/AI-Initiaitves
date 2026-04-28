@@ -25,6 +25,10 @@ import {
   definitionToViewModel,
   inferCapabilityViewFromRows,
 } from "@/lib/assess/capabilityMapTree";
+import {
+  buildL4VerdictLookupForTower,
+  summarizeCurationForTower,
+} from "@/lib/initiatives/curationLookup";
 import { downloadSingleTowerSampleCsv } from "@/lib/assess/downloadAssessSamples";
 import { clientGenerateL4Activities } from "@/lib/assess/assessClientApi";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
@@ -158,6 +162,17 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
         ? definitionToViewModel(def, def.name)
         : { l1Name: towerName, l2: [] };
 
+  // AI-curation verdict lookup + scoreboard for the tower's canonical map.
+  // Memoized so the panel doesn't recompute on every render.
+  const verdictLookup = React.useMemo(
+    () => buildL4VerdictLookupForTower(towerId),
+    [towerId],
+  );
+  const scoreboardSummary = React.useMemo(
+    () => summarizeCurationForTower(towerId) ?? undefined,
+    [towerId],
+  );
+
   // Capability-map step counts as "complete" the moment the tower lead has
   // uploaded a real capability map & headcount (i.e. they replaced the seed
   // map). The dials step still requires explicit Mark-complete on the
@@ -263,7 +278,13 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
                 onRegenerateAll={() => void regenerateAllOp.fire()}
               />
             ) : null}
-            <CapabilityMapPanel view={view} rows={rows} isPreview={isPreview} />
+            <CapabilityMapPanel
+              view={view}
+              rows={rows}
+              isPreview={isPreview}
+              verdictLookup={verdictLookup}
+              scoreboardSummary={scoreboardSummary}
+            />
           </div>
         ) : null}
 

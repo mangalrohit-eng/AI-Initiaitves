@@ -2,21 +2,38 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowUpRight } from "lucide-react";
-import type { Tower, TowerProcess } from "@/data/types";
-import { cn, findAiInitiative, slugify } from "@/lib/utils";
+import { ArrowUpRight, CalendarClock } from "lucide-react";
+import type { Tower } from "@/data/types";
+import { cn, slugify } from "@/lib/utils";
 import { TIER_META, priorityTier, type Tier } from "@/lib/priority";
+import { useTowerInitiatives } from "@/lib/initiatives/useTowerInitiatives";
+import type { InitiativeL3, InitiativeL4 } from "@/lib/initiatives/select";
+import { formatUsdCompact } from "@/lib/format";
+
+type RoadmapItem = {
+  l4: InitiativeL4;
+  l3: InitiativeL3;
+};
 
 function RoadmapCard({
   tower,
-  process,
+  item,
   index,
 }: {
   tower: Tower;
-  process: TowerProcess;
+  item: RoadmapItem;
   index: number;
 }) {
-  const initiative = findAiInitiative(tower, process);
+  const { l4, l3 } = item;
+  const initiative = l4.initiativeId
+    ? tower.processes.find((p) => p.id === l4.initiativeId)
+    : undefined;
+  const initiativeHref = initiative
+    ? `/tower/${tower.id}/process/${slugify(initiative.name)}`
+    : undefined;
+  const briefHref = l4.briefSlug ? `/tower/${tower.id}/brief/${l4.briefSlug}` : undefined;
+  const isLink = Boolean(initiativeHref || briefHref);
+
   const body = (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -24,47 +41,75 @@ function RoadmapCard({
       transition={{ delay: index * 0.03, duration: 0.3, ease: "easeOut" }}
       className={cn(
         "group relative rounded-xl border border-forge-border bg-forge-surface p-4 shadow-sm transition",
-        initiative ? "hover:border-accent-purple/50 hover:shadow-card" : "",
+        isLink ? "hover:border-accent-purple/50 hover:shadow-card" : "",
+        l4.isPlaceholder ? "border-dashed" : "",
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-forge-ink group-hover:text-accent-purple-dark">
-            {process.name}
+          <div
+            className={cn(
+              "text-sm font-semibold",
+              l4.isPlaceholder
+                ? "italic text-forge-subtle"
+                : "text-forge-ink group-hover:text-accent-purple-dark",
+            )}
+          >
+            {l4.name}
           </div>
-          {initiative ? (
-            <div className="mt-1 text-[11px] uppercase tracking-wide text-forge-hint">
-              {process.aiInitiativeRelation === "sub-process"
-                ? `Sub-process of ${initiative.name}`
-                : process.aiInitiativeRelation === "related"
-                  ? `Related to ${initiative.name}`
-                  : process.aiInitiativeRelation === "governance"
-                    ? `Governance within ${initiative.name}`
-                    : initiative.name}
-            </div>
-          ) : null}
+          <div className="mt-1 text-[11px] uppercase tracking-wide text-forge-hint">
+            {l3.l2Name} · {l3.l3.name}
+          </div>
         </div>
-        {initiative ? (
+        {isLink ? (
           <ArrowUpRight className="h-4 w-4 shrink-0 text-forge-hint transition group-hover:text-accent-purple" />
+        ) : l4.isPlaceholder ? (
+          <CalendarClock className="h-4 w-4 shrink-0 text-forge-hint" />
         ) : null}
       </div>
-      <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-forge-body">{process.aiRationale}</p>
-      {initiative ? (
-        <div className="mt-3 flex items-center gap-2 text-[11px] text-forge-subtle">
-          <span className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5 font-mono">
-            Impact: {initiative.impactTier}
-          </span>
+
+      {l4.aiRationale ? (
+        <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-forge-body">
+          {l4.aiRationale}
+        </p>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-forge-subtle">
+        <span className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5 font-mono tabular-nums text-forge-ink">
+          {formatUsdCompact(l3.aiUsd)} AI $
+        </span>
+        {initiative ? (
           <span className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5">
             {initiative.agents.length} agents
           </span>
-        </div>
-      ) : null}
+        ) : null}
+        {l4.frequency ? (
+          <span className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5">
+            {l4.frequency}
+          </span>
+        ) : null}
+        {l4.isPlaceholder ? (
+          <span
+            className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5"
+            title="L3 dial is set above 0 on Step 2 but no curated activity has been authored yet."
+          >
+            Pending discovery
+          </span>
+        ) : null}
+      </div>
     </motion.div>
   );
 
-  if (initiative) {
+  if (initiativeHref) {
     return (
-      <Link href={`/tower/${tower.id}/process/${slugify(initiative.name)}`} className="block">
+      <Link href={initiativeHref} className="block">
+        {body}
+      </Link>
+    );
+  }
+  if (briefHref) {
+    return (
+      <Link href={briefHref} className="block">
         {body}
       </Link>
     );
@@ -73,14 +118,27 @@ function RoadmapCard({
 }
 
 export function AiRoadmap({ tower }: { tower: Tower }) {
-  const flat: TowerProcess[] = tower.workCategories.flatMap((c) => c.processes);
-  const grouped: Record<Tier, TowerProcess[]> = { P1: [], P2: [], P3: [] };
-  for (const p of flat) {
-    const t = priorityTier(p.aiPriority);
-    if (t) grouped[t].push(p);
+  const result = useTowerInitiatives(tower);
+  const grouped: Record<Tier, RoadmapItem[]> = { P1: [], P2: [], P3: [] };
+  for (const l2 of result.l2s) {
+    for (const l3 of l2.l3s) {
+      for (const l4 of l3.l4s) {
+        const tier = priorityTier(l4.aiPriority);
+        if (!tier) continue;
+        grouped[tier].push({ l4, l3 });
+      }
+    }
   }
   const totalAi = grouped.P1.length + grouped.P2.length + grouped.P3.length;
-  if (totalAi === 0) return null;
+  if (totalAi === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-forge-border bg-forge-well/40 px-5 py-8 text-center text-sm text-forge-subtle">
+        No AI-eligible activities are currently sequenced for this tower. Open
+        Step 2 (Configure Impact Levers) and raise the AI dial on the
+        capabilities you want to bring into the roadmap.
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -107,7 +165,9 @@ export function AiRoadmap({ tower }: { tower: Tower }) {
                   <div className="font-display text-sm font-semibold text-forge-ink">
                     {tier} — {meta.label}
                   </div>
-                  <div className="text-[11px] text-forge-subtle">{meta.window}</div>
+                  <div className="text-[11px] text-forge-subtle">
+                    {meta.window}
+                  </div>
                 </div>
               </div>
               <div className="rounded-full border border-forge-border bg-forge-surface px-2 py-0.5 text-[11px] font-mono text-forge-body">
@@ -118,10 +178,17 @@ export function AiRoadmap({ tower }: { tower: Tower }) {
             <div className="mt-4 space-y-3">
               {items.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-forge-border bg-forge-surface/60 p-4 text-center text-xs text-forge-hint">
-                  No initiatives queued in this window.
+                  No activities queued in this window.
                 </div>
               ) : (
-                items.map((p, i) => <RoadmapCard key={p.id} tower={tower} process={p} index={i} />)
+                items.map((item, i) => (
+                  <RoadmapCard
+                    key={item.l4.id}
+                    tower={tower}
+                    item={item}
+                    index={i}
+                  />
+                ))
               )}
             </div>
           </div>

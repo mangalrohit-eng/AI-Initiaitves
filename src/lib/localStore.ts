@@ -2,6 +2,9 @@
 import type {
   AssessProgramV2,
   GlobalAssessAssumptions,
+  InitiativeReview,
+  InitiativeReviewSnapshot,
+  InitiativeStatus,
   L3WorkforceRow,
   TowerId,
 } from "@/data/assess/types";
@@ -516,6 +519,59 @@ function clamp01Pct(n: number): number {
 }
 
 /**
+ * Sanity-coerce a raw `initiativeReviews` blob coming off localStorage or a
+ * server payload. Drops malformed entries silently — the field is strictly
+ * additive, so older snapshots (no entries) and corrupted ones (some entries
+ * malformed) both round-trip cleanly.
+ *
+ * Exported so `assessProgramIO` can apply the same whitelist when validating
+ * the API GET/PUT envelope. Without a single source of truth here, the
+ * migration and the validator could drift and silently strip reviews.
+ */
+export function coerceInitiativeReviews(
+  raw: unknown,
+): Record<string, InitiativeReview> | undefined {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: Record<string, InitiativeReview> = {};
+  let kept = 0;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!k || typeof v !== "object" || v === null) continue;
+    const r = v as Record<string, unknown>;
+    const status = r.status === "approved" || r.status === "rejected" ? r.status : null;
+    if (!status) continue;
+    if (typeof r.decidedAt !== "string" || !r.decidedAt) continue;
+    if (typeof r.snapshot !== "object" || r.snapshot === null) continue;
+    const s = r.snapshot as Record<string, unknown>;
+    if (typeof s.name !== "string" || !s.name) continue;
+    if (typeof s.l2Name !== "string" || typeof s.l3Name !== "string") continue;
+    if (typeof s.rowId !== "string" || !s.rowId) continue;
+    const snapshot: InitiativeReviewSnapshot = {
+      name: s.name,
+      l2Name: s.l2Name,
+      l3Name: s.l3Name,
+      rowId: s.rowId,
+    };
+    if (typeof s.aiRationale === "string" && s.aiRationale) {
+      snapshot.aiRationale = s.aiRationale;
+    }
+    if (typeof s.aiPriority === "string" && s.aiPriority) {
+      // AiPriority is the union of full em-dash strings; trust the source
+      // since the only writers are our own helpers, but guard the type.
+      snapshot.aiPriority = s.aiPriority as InitiativeReviewSnapshot["aiPriority"];
+    }
+    const review: InitiativeReview = {
+      status: status as InitiativeStatus,
+      decidedAt: r.decidedAt,
+      snapshot,
+    };
+    if (typeof r.decidedBy === "string" && r.decidedBy) review.decidedBy = r.decidedBy;
+    out[k] = review;
+    kept += 1;
+  }
+  return kept > 0 ? out : undefined;
+}
+
+/**
  * Read-time migration from any prior snapshot to the current V4.
  *
  *   V2 -> V3: dropped scenarios + lever weights (already happened in prior
@@ -646,7 +702,7 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
       l3Rows = groupLegacyL4RowsToL3(legacyRows);
     }
 
-    towers[k as TowerId] = {
+    const towerState: TowerAssessState = {
       l3Rows,
       baseline,
       status,
@@ -663,6 +719,12 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
       aiConfirmedAt:
         typeof v.aiConfirmedAt === "string" ? v.aiConfirmedAt : undefined,
     };
+    // Tower-lead validate/reject decisions ride the existing AssessProgramV4
+    // envelope (no separate localStorage key). Strictly additive — older
+    // snapshots simply have no entries and every L4 reads as "pending".
+    const reviews = coerceInitiativeReviews(v.initiativeReviews);
+    if (reviews) towerState.initiativeReviews = reviews;
+    towers[k as TowerId] = towerState;
   }
 
   return { version: 4, towers, global };
@@ -758,6 +820,99 @@ export function setGlobalAssessAssumptions(patch: Partial<GlobalAssessAssumption
     ...p,
     global: { ...p.global, ...patch },
   }));
+}
+
+// ----- AI initiative review (validate / reject) -----------------------
+//
+// Per-L4 tower-lead decisions ride on TowerAssessState.initiativeReviews so
+// they persist via the existing AssessSyncProvider → /api/assess → Postgres
+// pipeline. No separate storage key, no separate pub/sub channel — every
+// write goes through `setTowerAssess` which already triggers the existing
+// `subscribe("assessProgram", ...)` channel and the debounced cloud save.
+
+/** Read all decisions for one tower (or `{}` if none). */
+export function getInitiativeReviews(
+  towerId: TowerId,
+): Record<string, InitiativeReview> {
+  const tower = getAssessProgram().towers[towerId];
+  return tower?.initiativeReviews ?? {};
+}
+
+/** Read one decision (or undefined). */
+export function getInitiativeReview(
+  towerId: TowerId,
+  l4Id: string,
+): InitiativeReview | undefined {
+  return getInitiativeReviews(towerId)[l4Id];
+}
+
+/**
+ * Write an approve / reject decision. Snapshots the L4 metadata so the
+ * rejected drawer can render even if the L4 disappears from the live
+ * selector output (dial moved to 0, capability regenerated, etc.).
+ */
+export function setInitiativeReview(
+  towerId: TowerId,
+  l4Id: string,
+  status: InitiativeStatus,
+  snapshot: InitiativeReviewSnapshot,
+  decidedBy?: string,
+): void {
+  updateAssessProgram((p) => {
+    const cur = p.towers[towerId] ?? { ...defaultTowerState() };
+    const reviews = { ...(cur.initiativeReviews ?? {}) };
+    const review: InitiativeReview = {
+      status,
+      decidedAt: new Date().toISOString(),
+      snapshot,
+    };
+    if (decidedBy && decidedBy.trim()) review.decidedBy = decidedBy.trim();
+    reviews[l4Id] = review;
+    return {
+      ...p,
+      towers: {
+        ...p.towers,
+        [towerId]: {
+          ...cur,
+          initiativeReviews: reviews,
+          // Bump lastUpdated so the SaveStatusPill flips to "saving".
+          lastUpdated: new Date().toISOString(),
+        },
+      },
+    };
+  });
+}
+
+/** Clear a decision (e.g. Restore from drawer, or revert Validated to pending). */
+export function clearInitiativeReview(towerId: TowerId, l4Id: string): void {
+  updateAssessProgram((p) => {
+    const cur = p.towers[towerId];
+    if (!cur?.initiativeReviews || !(l4Id in cur.initiativeReviews)) return p;
+    const next = { ...cur.initiativeReviews };
+    delete next[l4Id];
+    const nextReviews = Object.keys(next).length > 0 ? next : undefined;
+    return {
+      ...p,
+      towers: {
+        ...p.towers,
+        [towerId]: {
+          ...cur,
+          initiativeReviews: nextReviews,
+          lastUpdated: new Date().toISOString(),
+        },
+      },
+    };
+  });
+}
+
+/** Convenience: read all rejected decisions for the drawer. */
+export function getRejectedInitiatives(
+  towerId: TowerId,
+): Array<{ l4Id: string; review: InitiativeReview }> {
+  const reviews = getInitiativeReviews(towerId);
+  return Object.entries(reviews)
+    .filter(([, r]) => r.status === "rejected")
+    .map(([l4Id, review]) => ({ l4Id, review }));
 }
 
 // ----- "my towers" personalisation -------------------------------------

@@ -7,6 +7,7 @@ import { HoursSavedBar } from "@/components/charts/HoursSavedBar";
 import { PageShell } from "@/components/PageShell";
 import { OperatingModelSection } from "@/components/operatingModel/OperatingModelSection";
 import { AiRoadmap } from "@/components/operatingModel/AiRoadmap";
+import { InitiativeReviewChip } from "@/components/operatingModel/InitiativeReviewChip";
 import { TowerHeader } from "@/components/towers/TowerHeader";
 import { ShareBar } from "@/components/ui/ShareBar";
 import { ViewTracker } from "@/components/collab/ViewTracker";
@@ -83,14 +84,17 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
         </div>
 
         <section className="mt-14 space-y-3">
-          <div>
-            <h2 className="font-display text-xl font-semibold text-forge-ink">
-              AI transformation roadmap
-            </h2>
-            <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
-              AI-eligible initiatives sequenced by readiness and impact — now (0–6mo), next
-              (6–12mo), later (12–24mo). Click any card for the full four-lens design.
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-display text-xl font-semibold text-forge-ink">
+                AI transformation roadmap
+              </h2>
+              <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
+                AI-eligible initiatives sequenced by readiness and impact — now (0–6mo), next
+                (6–12mo), later (12–24mo). Click any card for the full four-lens design.
+              </p>
+            </div>
+            <InitiativeReviewChip tower={tower} />
           </div>
           <AiRoadmap tower={tower} />
         </section>

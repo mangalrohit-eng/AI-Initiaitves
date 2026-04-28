@@ -6,9 +6,12 @@ import { ArrowUpRight, CalendarClock } from "lucide-react";
 import type { Tower } from "@/data/types";
 import { cn, slugify } from "@/lib/utils";
 import { TIER_META, priorityTier, type Tier } from "@/lib/priority";
-import { useTowerInitiatives } from "@/lib/initiatives/useTowerInitiatives";
+import { useInitiativeReviews } from "@/lib/initiatives/useInitiativeReviews";
 import type { InitiativeL3, InitiativeL4 } from "@/lib/initiatives/select";
+import type { UseInitiativeReviewsResult } from "@/lib/initiatives/useInitiativeReviews";
+import type { InitiativeReview } from "@/data/assess/types";
 import { formatUsdCompact } from "@/lib/format";
+import { InitiativeReviewActions } from "./InitiativeReviewActions";
 
 type RoadmapItem = {
   l4: InitiativeL4;
@@ -19,10 +22,14 @@ function RoadmapCard({
   tower,
   item,
   index,
+  review,
+  actions,
 }: {
   tower: Tower;
   item: RoadmapItem;
   index: number;
+  review: InitiativeReview | undefined;
+  actions: UseInitiativeReviewsResult["actions"];
 }) {
   const { l4, l3 } = item;
   const initiative = l4.initiativeId
@@ -96,6 +103,14 @@ function RoadmapCard({
             No AI candidates
           </span>
         ) : null}
+        <InitiativeReviewActions
+          l4={l4}
+          l3={l3}
+          review={review}
+          actions={actions}
+          compact
+          className="ml-auto"
+        />
       </div>
     </motion.div>
   );
@@ -118,7 +133,7 @@ function RoadmapCard({
 }
 
 export function AiRoadmap({ tower }: { tower: Tower }) {
-  const result = useTowerInitiatives(tower);
+  const { result, reviews, actions } = useInitiativeReviews(tower);
   const grouped: Record<Tier, RoadmapItem[]> = { P1: [], P2: [], P3: [] };
   for (const l2 of result.l2s) {
     for (const l3 of l2.l3s) {
@@ -187,6 +202,8 @@ export function AiRoadmap({ tower }: { tower: Tower }) {
                     tower={tower}
                     item={item}
                     index={i}
+                    review={reviews[item.l4.id]}
+                    actions={actions}
                   />
                 ))
               )}

@@ -6,11 +6,14 @@ import * as Icons from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
 import type { Tower } from "@/data/types";
+import type { InitiativeReview } from "@/data/assess/types";
 import type { InitiativeL2, InitiativeL3, InitiativeL4 } from "@/lib/initiatives/select";
+import type { UseInitiativeReviewsResult } from "@/lib/initiatives/useInitiativeReviews";
 import { cn, slugify } from "@/lib/utils";
 import { TIER_STYLES, priorityTier } from "@/lib/priority";
 import { formatUsdCompact } from "@/lib/format";
 import { getTowerHref } from "@/lib/towerHref";
+import { InitiativeReviewActions } from "./InitiativeReviewActions";
 
 function resolveIcon(name?: string): LucideIcon {
   if (!name) return Icons.Layers;
@@ -41,14 +44,20 @@ const MATURITY_ACCENT: Record<string, string> = {
  */
 function L4Row({
   l4,
+  l3,
   tower,
   index,
   rowId,
+  review,
+  actions,
 }: {
   l4: InitiativeL4;
+  l3: InitiativeL3;
   tower: Tower;
   index: number;
   rowId: string;
+  review: InitiativeReview | undefined;
+  actions: UseInitiativeReviewsResult["actions"];
 }) {
   const tier = priorityTier(l4.aiPriority);
   const initiative = l4.initiativeId
@@ -117,6 +126,13 @@ function L4Row({
                   no AI candidates
                 </span>
               ) : null}
+              <InitiativeReviewActions
+                l4={l4}
+                l3={l3}
+                review={review}
+                actions={actions}
+                compact
+              />
             </div>
             {l4.aiRationale ? (
               <p className="mt-1 text-xs leading-relaxed text-forge-subtle">
@@ -245,11 +261,15 @@ function L3RowCard({
   tower,
   expanded,
   onToggle,
+  reviews,
+  actions,
 }: {
   l3: InitiativeL3;
   tower: Tower;
   expanded: boolean;
   onToggle: () => void;
+  reviews: Record<string, InitiativeReview>;
+  actions: UseInitiativeReviewsResult["actions"];
 }) {
   const maxTier = React.useMemo(() => {
     const tiers = l3.l4s.map((l) => priorityTier(l.aiPriority)).filter(Boolean);
@@ -343,9 +363,12 @@ function L3RowCard({
                 <L4Row
                   key={l4.id}
                   l4={l4}
+                  l3={l3}
                   tower={tower}
                   index={i}
                   rowId={l3.rowId}
+                  review={reviews[l4.id]}
+                  actions={actions}
                 />
               ))}
             </div>
@@ -379,9 +402,13 @@ function L3RowCard({
 export function ProcessLandscape({
   l2,
   tower,
+  reviews,
+  actions,
 }: {
   l2: InitiativeL2;
   tower: Tower;
+  reviews: Record<string, InitiativeReview>;
+  actions: UseInitiativeReviewsResult["actions"];
 }) {
   const Icon = resolveIcon(l2.l2.icon);
   const [expandedL3, setExpandedL3] = React.useState<string | null>(
@@ -434,6 +461,8 @@ export function ProcessLandscape({
               onToggle={() =>
                 setExpandedL3((prev) => (prev === l3.l3.id ? null : l3.l3.id))
               }
+              reviews={reviews}
+              actions={actions}
             />
           ))}
         </div>

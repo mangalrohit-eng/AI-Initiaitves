@@ -8,7 +8,7 @@ import type { Tower } from "@/data/types";
 import { ProcessLandscape } from "./ProcessLandscape";
 import { AiRoadmap } from "./AiRoadmap";
 import { StaleCurationBanner } from "./StaleCurationBanner";
-import { useTowerInitiatives } from "@/lib/initiatives/useTowerInitiatives";
+import { useInitiativeReviews } from "@/lib/initiatives/useInitiativeReviews";
 import type { InitiativeL2 } from "@/lib/initiatives/select";
 import { formatUsdCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -131,7 +131,7 @@ export function OperatingModelSection({
   tower: Tower;
   showRoadmap?: boolean;
 }) {
-  const result = useTowerInitiatives(tower);
+  const { result, reviews, actions } = useInitiativeReviews(tower);
   const [activeId, setActiveId] = React.useState<string>(
     () => result.l2s[0]?.l2.id ?? "",
   );
@@ -264,7 +264,12 @@ export function OperatingModelSection({
               </span>
             </div>
           </div>
-          <ProcessLandscape l2={active} tower={tower} />
+          <ProcessLandscape
+            l2={active}
+            tower={tower}
+            reviews={reviews}
+            actions={actions}
+          />
         </section>
       ) : null}
 

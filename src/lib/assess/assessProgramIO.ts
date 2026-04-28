@@ -6,7 +6,7 @@ import type {
 } from "@/data/assess/types";
 import { defaultGlobalAssessAssumptions, defaultTowerBaseline, defaultTowerState } from "@/data/assess/types";
 import { towers } from "@/data/towers";
-import { groupL4RowsToL3RowsForImport } from "@/lib/localStore";
+import { coerceInitiativeReviews, groupL4RowsToL3RowsForImport } from "@/lib/localStore";
 
 export const ASSESS_PROGRAM_FILE_FORMAT = "forge-assess-program-v4" as const;
 const SUPPORTED_PROGRAM_VERSIONS: ReadonlyArray<number> = [2, 3, 4];
@@ -181,6 +181,12 @@ export function importAssessProgramFromJsonText(
       const bRaw = isRecord(v.baseline) ? { ...defaultTowerBaseline, ...v.baseline } : defaultTowerBaseline;
       const st = v.status;
       const status = st === "empty" || st === "data" || st === "complete" ? st : base.status;
+      // Tower-lead validate/reject decisions on AI initiatives. Strictly
+      // additive — older exports have no entries and every L4 reads as
+      // "pending". Round-trip preserved here so the API GET/PUT pipeline
+      // doesn't silently strip the field on the way to / from Postgres.
+      const reviews = coerceInitiativeReviews(v.initiativeReviews);
+
       program.towers[k] = {
         l3Rows,
         baseline: {
@@ -202,6 +208,7 @@ export function importAssessProgramFromJsonText(
           typeof v.offshoreConfirmedAt === "string" ? v.offshoreConfirmedAt : undefined,
         aiConfirmedAt:
           typeof v.aiConfirmedAt === "string" ? v.aiConfirmedAt : undefined,
+        ...(reviews ? { initiativeReviews: reviews } : {}),
       };
     }
   }

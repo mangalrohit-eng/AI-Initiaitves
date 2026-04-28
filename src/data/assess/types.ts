@@ -163,11 +163,59 @@ export type TowerAssessReview = {
   aiConfirmedAt?: string;
 };
 
+/**
+ * Tower-lead decision on a single AI initiative (L4 activity).
+ *
+ *   - "approved"  — the lead has reviewed the AI idea and confirmed it makes
+ *                   sense for this tower. Renders with a "Validated" pill.
+ *   - "rejected"  — the lead has reviewed the AI idea and decided it does NOT
+ *                   make sense. Filtered out of the AI Initiatives roadmap and
+ *                   the L2 → L3 → L4 landscape, but preserved here so the lead
+ *                   can review and restore it later from the rejected drawer.
+ *
+ * `pending` is the implicit default — there's no entry in `initiativeReviews`
+ * for ideas the lead hasn't decided on yet.
+ */
+export type InitiativeStatus = "approved" | "rejected";
+
+/**
+ * Snapshot of the L4 activity at decision time. Captured so the rejected
+ * drawer can render even if the L4 disappears from the live selector output
+ * (e.g. dial moved to 0, capability map regenerated, name drift).
+ */
+export type InitiativeReviewSnapshot = {
+  name: string;
+  aiRationale?: string;
+  aiPriority?: AiPriority;
+  l2Name: string;
+  l3Name: string;
+  /** L3 row id — lets the drawer deep-link to Step 2 if dial changes are needed. */
+  rowId: string;
+};
+
+export type InitiativeReview = {
+  status: InitiativeStatus;
+  /** ISO timestamp of the last decision (approve / reject). */
+  decidedAt: string;
+  /** Optional display name, only set when `getDisplayName()` was non-empty. */
+  decidedBy?: string;
+  snapshot: InitiativeReviewSnapshot;
+};
+
 export type TowerAssessState = {
   l3Rows: L3WorkforceRow[];
   baseline: TowerBaseline;
   status: TowerAssessStatus;
   lastUpdated?: string;
+  /**
+   * Per-L4 tower-lead validate/reject decisions. Keyed by `InitiativeL4.id`.
+   * Strictly additive — older snapshots simply have this undefined and the
+   * AI Initiatives view treats every L4 as "pending review."
+   *
+   * Rides the existing `AssessProgramV4` envelope, so decisions persist
+   * to Postgres via `AssessSyncProvider` → `/api/assess` → `assess_workshop`.
+   */
+  initiativeReviews?: Record<string, InitiativeReview>;
 } & TowerAssessReview;
 
 export type ChecklistStepId =

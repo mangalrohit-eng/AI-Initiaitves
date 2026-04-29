@@ -12,7 +12,10 @@
     "build:check": "node scripts/build-check.cjs",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:lead-step": "tsx scripts/leadStepStatusTest.ts",
+    "test:program-smoke": "tsx scripts/programSmokeTest.ts",
+    "test:http-smoke": "node scripts/httpSmoke.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

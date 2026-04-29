@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import type { Tower } from "@/data/types";
 import { impactTierScore, operatingModelTotals } from "@/lib/utils";
@@ -27,7 +28,16 @@ function agentCountForTower(tower: Tower) {
   return tower.processes.reduce((n, p) => n + p.agents.length, 0);
 }
 
-export function TowerCard({ tower, index }: { tower: Tower; index: number }) {
+export function TowerCard({
+  tower,
+  index,
+  footer,
+}: {
+  tower: Tower;
+  index: number;
+  /** Optional row below metrics (e.g. deadline chip). */
+  footer?: React.ReactNode;
+}) {
   const agents = agentCountForTower(tower);
   const om = operatingModelTotals(tower);
   const pct = om.processCount === 0 ? 0 : Math.round((om.aiEligibleCount / om.processCount) * 100);
@@ -57,6 +67,8 @@ export function TowerCard({ tower, index }: { tower: Tower; index: number }) {
           </div>
 
           <p className="mt-4 line-clamp-2 text-sm text-forge-body">{tower.topOpportunityHeadline}</p>
+
+          {footer ? <div className="mt-3 min-w-0">{footer}</div> : null}
 
           <div className="mt-5 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
             <div>

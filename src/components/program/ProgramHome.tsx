@@ -10,6 +10,7 @@ import {
   Map as MapIcon,
   Sliders,
   Sparkles,
+  Table2,
   TrendingUp,
 } from "lucide-react";
 import { ProgramJourneyGuidance } from "@/components/program/ProgramJourneyGuidance";
@@ -109,6 +110,15 @@ export function ProgramHome() {
           <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-forge-subtle">
             Five steps to take a tower from raw capability map to a defended impact case.
             Pick up wherever you left off.
+          </p>
+          <p className="mt-2">
+            <Link
+              href="/program/tower-status"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-accent-purple-dark underline decoration-forge-border decoration-1 underline-offset-2 hover:decoration-accent-purple/50"
+            >
+              <Table2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Tower step status — Accenture leads, all towers, Steps 1–4
+            </Link>
           </p>
         </section>
 

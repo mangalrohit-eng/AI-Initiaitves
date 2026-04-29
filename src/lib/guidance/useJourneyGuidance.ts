@@ -4,7 +4,12 @@ import * as React from "react";
 import type { Tower } from "@/data/types";
 import type { TowerId } from "@/data/assess/types";
 import { towers } from "@/data/towers";
-import { getAssessProgram, getMyTowers, subscribe } from "@/lib/localStore";
+import {
+  getAssessProgram,
+  getAssessProgramHydrationSnapshot,
+  getMyTowers,
+  subscribe,
+} from "@/lib/localStore";
 import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
 import { getTowerStaleState } from "@/lib/initiatives/curationHash";
 import { useInitiativeReviews } from "@/lib/initiatives/useInitiativeReviews";
@@ -34,11 +39,11 @@ function dialStatus(
 }
 
 export function useGuidanceCapabilityMap(towerId: TowerId): ResolvedJourneyGuidance {
-  const [program, setProgram] = React.useState(getAssessProgram);
-  React.useEffect(
-    () => subscribe("assessProgram", () => setProgram(getAssessProgram())),
-    [],
-  );
+  const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
   return React.useMemo(() => {
     const rows = program.towers[towerId]?.l3Rows ?? [];
     const blankL4Count = rows.filter(
@@ -61,11 +66,11 @@ export function useGuidanceImpactLevers(
   towerId: TowerId,
   towerName: string,
 ): ResolvedJourneyGuidance {
-  const [program, setProgram] = React.useState(getAssessProgram);
-  React.useEffect(
-    () => subscribe("assessProgram", () => setProgram(getAssessProgram())),
-    [],
-  );
+  const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
   return React.useMemo(() => {
     const rows = program.towers[towerId]?.l3Rows ?? [];
     const stale = getTowerStaleState(program.towers[towerId]);
@@ -82,11 +87,11 @@ export function useGuidanceImpactLevers(
 
 export function useGuidanceAiInitiatives(tower: Tower): ResolvedJourneyGuidance {
   const { counts } = useInitiativeReviews(tower);
-  const [program, setProgram] = React.useState(getAssessProgram);
-  React.useEffect(
-    () => subscribe("assessProgram", () => setProgram(getAssessProgram())),
-    [],
-  );
+  const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
   return React.useMemo(() => {
     const tid = tower.id as TowerId;
     const stale = getTowerStaleState(program.towers[tid]);
@@ -100,12 +105,12 @@ export function useGuidanceAiInitiatives(tower: Tower): ResolvedJourneyGuidance 
 }
 
 export function useProgramHomeGuidance(): ResolvedJourneyGuidance {
-  const [program, setProgram] = React.useState(getAssessProgram);
+  const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());
   const [mine, setMine] = React.useState<TowerId[]>([]);
-  React.useEffect(
-    () => subscribe("assessProgram", () => setProgram(getAssessProgram())),
-    [],
-  );
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
   React.useEffect(() => {
     setMine(getMyTowers());
     return subscribe("myTowers", () => setMine(getMyTowers()));
@@ -121,11 +126,11 @@ export function useProgramHomeGuidance(): ResolvedJourneyGuidance {
  * (Step 4 only, always receives a `Tower`).
  */
 export function useGuidanceCapabilityMapHub(): ResolvedJourneyGuidance {
-  const [program, setProgram] = React.useState(getAssessProgram);
-  React.useEffect(
-    () => subscribe("assessProgram", () => setProgram(getAssessProgram())),
-    [],
-  );
+  const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
   return React.useMemo(() => {
     const hasAny = towers.some(
       (t) => (program.towers[t.id as TowerId]?.l3Rows.length ?? 0) > 0,
@@ -135,12 +140,12 @@ export function useGuidanceCapabilityMapHub(): ResolvedJourneyGuidance {
 }
 
 export function useGuidanceImpactHub(): ResolvedJourneyGuidance {
-  const [program, setProgram] = React.useState(getAssessProgram);
+  const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());
   const [mine, setMine] = React.useState<TowerId[]>([]);
-  React.useEffect(
-    () => subscribe("assessProgram", () => setProgram(getAssessProgram())),
-    [],
-  );
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
   React.useEffect(() => {
     setMine(getMyTowers());
     return subscribe("myTowers", () => setMine(getMyTowers()));
@@ -167,11 +172,11 @@ export function useGuidanceImpactHub(): ResolvedJourneyGuidance {
 }
 
 export function useGuidanceImpactEstimateSummary(): ResolvedJourneyGuidance {
-  const [program, setProgram] = React.useState(getAssessProgram);
-  React.useEffect(
-    () => subscribe("assessProgram", () => setProgram(getAssessProgram())),
-    [],
-  );
+  const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
   return React.useMemo(() => {
     const hasFootprint = towers.some(
       (t) => (program.towers[t.id as TowerId]?.l3Rows.length ?? 0) > 0,
@@ -181,12 +186,12 @@ export function useGuidanceImpactEstimateSummary(): ResolvedJourneyGuidance {
 }
 
 export function useGuidanceTowersList(): ResolvedJourneyGuidance {
-  const [program, setProgram] = React.useState(getAssessProgram);
+  const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());
   const [mine, setMine] = React.useState<TowerId[]>([]);
-  React.useEffect(
-    () => subscribe("assessProgram", () => setProgram(getAssessProgram())),
-    [],
-  );
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
   React.useEffect(() => {
     setMine(getMyTowers());
     return subscribe("myTowers", () => setMine(getMyTowers()));

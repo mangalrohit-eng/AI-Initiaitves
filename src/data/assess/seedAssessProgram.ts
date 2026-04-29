@@ -3,7 +3,11 @@ import type { CapabilityMapDefinition } from "@/data/capabilityMap/types";
 import { towers } from "@/data/towers";
 import { weightedTowerLevers } from "@/lib/assess/scenarioModel";
 import type { AssessProgramV2, L3WorkforceRow, TowerAssessState, TowerId } from "./types";
-import { defaultGlobalAssessAssumptions, defaultTowerBaseline } from "./types";
+import {
+  buildDefaultProgramLeadDeadlines,
+  defaultGlobalAssessAssumptions,
+  defaultTowerBaseline,
+} from "./types";
 import { inferL3Defaults } from "./seedAssessmentDefaults";
 import { rowStarterRationale } from "./rowRationale";
 
@@ -366,5 +370,6 @@ export function buildSeededAssessProgramV2(): AssessProgramV2 {
     version: 4,
     towers: tmap,
     global: { ...defaultGlobalAssessAssumptions },
+    leadDeadlines: buildDefaultProgramLeadDeadlines(),
   };
 }

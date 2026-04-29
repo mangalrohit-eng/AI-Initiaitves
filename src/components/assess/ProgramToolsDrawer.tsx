@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   ChevronDown,
@@ -11,6 +12,7 @@ import {
   HardDrive,
   RefreshCw,
   Sparkles,
+  Table2,
   Wrench,
 } from "lucide-react";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
@@ -90,7 +92,8 @@ export function ProgramToolsDrawer() {
 
   const importOp = useAsyncOp<void, [File]>({
     run: async (f) => {
-      const r = await readAssessProgramFile(f);
+      const cur = getAssessProgram();
+      const r = await readAssessProgramFile(f, { mergeLeadDeadlinesFrom: cur });
       if (!r.ok) throw new Error(r.error);
       setAssessProgram(r.program);
       if (sync?.canSync) await sync.flushSave();
@@ -268,6 +271,21 @@ export function ProgramToolsDrawer() {
                     <FileUp className="h-3.5 w-3.5 text-accent-teal" />
                     {importOp.state === "loading" ? "Importing..." : "Import JSON"}
                   </button>
+                  <Link
+                    href="/program/tower-status"
+                    className="inline-flex items-center gap-2 rounded-lg border border-forge-border bg-forge-surface px-3 py-2 text-xs text-forge-body hover:border-accent-teal/35"
+                  >
+                    <Table2 className="h-3.5 w-3.5 text-accent-teal" />
+                    Tower step status
+                  </Link>
+                  {allowedInternal ? (
+                    <Link
+                      href="/program/lead-deadlines"
+                      className="inline-flex items-center gap-2 rounded-lg border border-accent-purple/35 bg-accent-purple/5 px-3 py-2 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/15"
+                    >
+                      Lead deadlines (admin)
+                    </Link>
+                  ) : null}
                   <input
                     ref={fileRef}
                     type="file"

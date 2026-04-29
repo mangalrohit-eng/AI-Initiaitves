@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AUTH_COOKIE_NAME, isValidSessionToken } from "@/lib/auth";
+import {
+  ADMIN_AUTH_COOKIE_NAME,
+  AUTH_COOKIE_NAME,
+  isValidAdminSessionToken,
+  isValidSessionToken,
+} from "@/lib/auth";
 
-const PUBLIC_PATHS = new Set<string>(["/login"]);
-const PUBLIC_API_PATHS = new Set<string>(["/api/login", "/api/logout"]);
+const PUBLIC_PATHS = new Set<string>(["/login", "/login/admin"]);
+const PUBLIC_API_PATHS = new Set<string>(["/api/login", "/api/login/admin", "/api/logout"]);
 
 function clientPortalBlock(pathname: string, req: NextRequest): ReturnType<typeof NextResponse.redirect> | null {
   const mode = process.env.NEXT_PUBLIC_PORTAL_AUDIENCE?.toLowerCase().trim();
@@ -35,10 +40,22 @@ export async function middleware(req: NextRequest) {
     url.pathname = "/login";
     url.search = "";
     const from = pathname + (search || "");
-    if (from && from !== "/" && from !== "/login") {
+    if (from && from !== "/" && from !== "/login" && from !== "/login/admin") {
       url.searchParams.set("from", from);
     }
     return NextResponse.redirect(url);
+  }
+
+  if (pathname === "/program/lead-deadlines") {
+    const adminTok = req.cookies.get(ADMIN_AUTH_COOKIE_NAME)?.value;
+    const adminOk = await isValidAdminSessionToken(adminTok);
+    if (!adminOk) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/login/admin";
+      url.search = "";
+      url.searchParams.set("from", pathname + (search || ""));
+      return NextResponse.redirect(url);
+    }
   }
 
   return NextResponse.next();

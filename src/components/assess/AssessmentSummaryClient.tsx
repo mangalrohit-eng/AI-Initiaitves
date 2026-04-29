@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Camera,
@@ -25,6 +26,10 @@ import { PageShell } from "@/components/PageShell";
 import { ScreenGuidanceBar } from "@/components/guidance/ScreenGuidanceBar";
 import { useGuidanceImpactEstimateSummary } from "@/lib/guidance/useJourneyGuidance";
 import { useToast } from "@/components/feedback/ToastProvider";
+import { useAssessSync } from "@/components/assess/AssessSyncProvider";
+import { getAssessProgram, getAssessProgramHydrationSnapshot, subscribe, setTowerAssess } from "@/lib/localStore";
+import { LeadDeadlineChip } from "@/components/program/LeadDeadlineChip";
+import { stepCompletionNudge } from "@/lib/program/stepCompletionNudges";
 import { towers } from "@/data/towers";
 import type { AssessProgramV2, TowerId } from "@/data/assess/types";
 import {
@@ -35,7 +40,6 @@ import {
   towerOutcomeForState,
   towerPoolUsd,
 } from "@/lib/assess/scenarioModel";
-import { getAssessProgram, subscribe } from "@/lib/localStore";
 import { getPortalAudience, isInternalSurfaceAllowed } from "@/lib/portalAudience";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +53,7 @@ import { cn } from "@/lib/utils";
  */
 export function AssessmentSummaryClient() {
   const toast = useToast();
-  const [program, setProgram] = React.useState<AssessProgramV2>(getAssessProgram);
+  const [program, setProgram] = React.useState<AssessProgramV2>(() => getAssessProgramHydrationSnapshot());
   const [chartReady, setChartReady] = React.useState(false);
   const [presentMode, setPresentMode] = React.useState(false);
   const showExport = isInternalSurfaceAllowed(getPortalAudience());
@@ -302,7 +306,7 @@ export function AssessmentSummaryClient() {
         ) : (
           <ul className="mt-6 space-y-4">
             {withData.map((t) => (
-              <TowerCard
+              <ImpactSummaryTowerRow
                 key={t.id}
                 towerId={t.id as TowerId}
                 towerName={t.name}
@@ -328,7 +332,7 @@ export function AssessmentSummaryClient() {
   );
 }
 
-function TowerCard({
+function ImpactSummaryTowerRow({
   towerId,
   towerName,
   program,
@@ -339,15 +343,35 @@ function TowerCard({
   program: AssessProgramV2;
   presentMode: boolean;
 }) {
+  const router = useRouter();
+  const sync = useAssessSync();
+  const toast = useToast();
+  const [busy, setBusy] = React.useState(false);
   const o = towerOutcomeForState(towerId, program);
   const st = program.towers[towerId];
   if (!o || !st) return null;
   const pool = towerPoolUsd(st.l3Rows, program.global);
   const l2c = l2Concentration(st.l3Rows, program.global);
   const isComplete = st.status === "complete";
+  const step3Done = st.impactEstimateValidatedAt != null;
 
   const offSharePct = o.combined > 0 ? (o.offshore / (o.offshore + o.ai)) * 100 : 0;
   const aiSharePct = o.combined > 0 ? (o.ai / (o.offshore + o.ai)) * 100 : 0;
+
+  const onMarkStep3 = async () => {
+    setBusy(true);
+    try {
+      setTowerAssess(towerId, {
+        impactEstimateValidatedAt: new Date().toISOString(),
+      });
+      if (sync?.canSync) await sync.flushSave();
+      const n = stepCompletionNudge(3, towerName);
+      toast.success({ title: n.title, description: n.description, durationMs: 7000 });
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <li className="rounded-2xl border border-forge-border bg-forge-surface p-5">
@@ -370,6 +394,7 @@ function TowerCard({
             >
               {isComplete ? "Reviewed by Tower Lead" : "Pending Tower Lead review"}
             </span>
+            <LeadDeadlineChip towerName={towerName} towerId={towerId} step={3} program={program} />
           </div>
           <p className="mt-1 text-xs text-forge-subtle">
             Pool{" "}
@@ -427,18 +452,47 @@ function TowerCard({
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-xs">
-        <Link
-          href={`/impact-levers/tower/${towerId}`}
-          className="text-accent-purple-dark underline"
-        >
-          Open dials
-        </Link>
-        <span className="text-forge-hint">·</span>
-        <Link href={`/tower/${towerId}`} className="text-forge-body underline">
-          AI Initiatives
-        </Link>
-      </div>
+      {!presentMode ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-forge-border pt-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <Link
+              href={`/impact-levers/tower/${towerId}`}
+              className="text-accent-purple-dark underline"
+            >
+              Open dials
+            </Link>
+            <span className="text-forge-hint">·</span>
+            <Link href={`/tower/${towerId}`} className="text-forge-body underline">
+              AI Initiatives
+            </Link>
+          </div>
+          {step3Done ? (
+            <span className="font-mono text-[11px] text-accent-green">Step 3 reviewed</span>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void onMarkStep3()}
+              className="inline-flex shrink-0 items-center rounded-lg border border-accent-purple/40 bg-accent-purple/10 px-3 py-1.5 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/20 disabled:opacity-50"
+            >
+              {busy ? "Saving…" : "Mark Step 3 reviewed"}
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-xs">
+          <Link
+            href={`/impact-levers/tower/${towerId}`}
+            className="text-accent-purple-dark underline"
+          >
+            Open dials
+          </Link>
+          <span className="text-forge-hint">·</span>
+          <Link href={`/tower/${towerId}`} className="text-forge-body underline">
+            AI Initiatives
+          </Link>
+        </div>
+      )}
     </li>
   );
 }

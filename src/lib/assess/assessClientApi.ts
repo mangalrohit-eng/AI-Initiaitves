@@ -37,7 +37,17 @@ export async function clientGetAssess(): Promise<{
   error?: string;
   status: number;
 }> {
-  const res = await fetch("/api/assess", { method: "GET", credentials: "same-origin" });
+  let res: Response;
+  try {
+    res = await fetch("/api/assess", { method: "GET", credentials: "same-origin" });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    const hint =
+      raw === "Failed to fetch" || raw.includes("NetworkError")
+        ? "Could not reach /api/assess (network). Confirm the Next dev server is running and you opened the app via http://localhost, not a file URL."
+        : raw;
+    return { ok: false, error: hint, status: 0 };
+  }
   const text = await res.text();
   let body: unknown;
   try {
@@ -57,12 +67,22 @@ export async function clientPutAssess(program: AssessProgramV2): Promise<{
   error?: string;
   status: number;
 }> {
-  const res = await fetch("/api/assess", {
-    method: "PUT",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(program),
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api/assess", {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(program),
+    });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    const hint =
+      raw === "Failed to fetch" || raw.includes("NetworkError")
+        ? "Could not reach /api/assess (network). Confirm the Next dev server is running."
+        : raw;
+    return { ok: false, error: hint, status: 0 };
+  }
   const text = await res.text();
   let body: { error?: string } = {};
   try {

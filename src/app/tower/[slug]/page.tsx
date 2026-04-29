@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Map } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { TowerJourneyStepper } from "@/components/layout/TowerJourneyStepper";
+import { TowerAiLeadToolbar } from "@/components/towers/TowerAiLeadToolbar";
 import { HoursSavedBar } from "@/components/charts/HoursSavedBar";
 import { PageShell } from "@/components/PageShell";
 import { AiInitiativesTabs } from "@/components/operatingModel/AiInitiativesTabs";
@@ -55,12 +55,7 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
           title={tower.name}
         />
 
-        <TowerJourneyStepper
-          className="mt-3"
-          towerId={tower.id as TowerId}
-          towerName={tower.name}
-          current="ai-initiatives"
-        />
+        <TowerAiLeadToolbar towerId={tower.id as TowerId} towerName={tower.name} />
 
         <TowerDataExports tower={tower} className="mt-3" />
 

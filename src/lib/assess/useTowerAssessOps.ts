@@ -14,8 +14,10 @@ import { parseAssessFile } from "@/lib/assess/parseAssessFile";
 import { weightedTowerLevers } from "@/lib/assess/scenarioModel";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
 import { markRowsQueuedOnUpload } from "@/lib/initiatives/curationHash";
+import { stepCompletionNudge } from "@/lib/program/stepCompletionNudges";
 import {
   getAssessProgram,
+  getAssessProgramHydrationSnapshot,
   setTowerAssess,
   subscribe,
 } from "@/lib/localStore";
@@ -34,9 +36,12 @@ export type TowerAssessOps = ReturnType<typeof useTowerAssessOps>;
 export function useTowerAssessOps(towerId: TowerId, towerName: string) {
   const sync = useAssessSync();
   const toast = useToast();
-  const [program, setProgram] = React.useState(() => getAssessProgram());
+  const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());
 
-  React.useEffect(() => subscribe("assessProgram", () => setProgram(getAssessProgram())), []);
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
 
   // Flush any pending debounced save when the user actually navigates away
   // from the tower page. We hold sync in a ref so the cleanup observes the
@@ -232,9 +237,10 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       status: "complete",
     });
     if (sync?.canSync) await sync.flushSave();
+    const n = stepCompletionNudge(2, towerName);
     toast.success({
-      title: `${towerName} reviewed by tower lead`,
-      description: "It now anchors the impact estimate. Open AI Initiatives next.",
+      title: n.title,
+      description: n.description,
       action: {
         label: "Open AI Initiatives",
         onClick: () => {
@@ -260,7 +266,9 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       l1L3TreeValidatedAt: new Date().toISOString(),
     });
     if (sync?.canSync) await sync.flushSave();
-  }, [sync, towerId]);
+    const n = stepCompletionNudge(1, towerName);
+    toast.success({ title: n.title, description: n.description, durationMs: 6500 });
+  }, [sync, toast, towerId, towerName]);
 
   const clearL1L3TreeValidation = React.useCallback(async () => {
     setTowerAssess(towerId, { l1L3TreeValidatedAt: undefined });

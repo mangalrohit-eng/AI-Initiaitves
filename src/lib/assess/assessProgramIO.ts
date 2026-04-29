@@ -4,6 +4,7 @@ import type {
   L3WorkforceRow,
   TowerId,
 } from "@/data/assess/types";
+import { mergeLeadDeadlines, parseLeadDeadlines } from "@/lib/program/leadDeadlines";
 import { defaultGlobalAssessAssumptions, defaultTowerBaseline, defaultTowerState } from "@/data/assess/types";
 import { towers } from "@/data/towers";
 import { coerceInitiativeReviews, groupL4RowsToL3RowsForImport } from "@/lib/localStore";
@@ -152,6 +153,7 @@ function parseGlobal(x: unknown): GlobalAssessAssumptions {
 /** Parses and normalizes; returns an error string on failure. */
 export function importAssessProgramFromJsonText(
   text: string,
+  options?: { mergeLeadDeadlinesFrom?: AssessProgramV2 },
 ):
   | { ok: true; program: AssessProgramV2 }
   | { ok: false; error: string } {
@@ -255,9 +257,25 @@ export function importAssessProgramFromJsonText(
           typeof v.offshoreConfirmedAt === "string" ? v.offshoreConfirmedAt : undefined,
         aiConfirmedAt:
           typeof v.aiConfirmedAt === "string" ? v.aiConfirmedAt : undefined,
+        impactEstimateValidatedAt:
+          typeof v.impactEstimateValidatedAt === "string"
+            ? v.impactEstimateValidatedAt
+            : undefined,
+        aiInitiativesValidatedAt:
+          typeof v.aiInitiativesValidatedAt === "string"
+            ? v.aiInitiativesValidatedAt
+            : undefined,
         ...(reviews ? { initiativeReviews: reviews } : {}),
       };
     }
+  }
+
+  if (isRecord(programRaw) && Object.prototype.hasOwnProperty.call(programRaw, "leadDeadlines")) {
+    const parsed = parseLeadDeadlines(programRaw.leadDeadlines);
+    const base = options?.mergeLeadDeadlinesFrom?.leadDeadlines;
+    program.leadDeadlines = mergeLeadDeadlines(base, parsed ?? undefined);
+  } else if (options?.mergeLeadDeadlinesFrom?.leadDeadlines) {
+    program.leadDeadlines = options.mergeLeadDeadlinesFrom.leadDeadlines;
   }
 
   return { ok: true, program };
@@ -278,9 +296,10 @@ export function serializeAssessProgramForDownload(program: AssessProgramV2): str
   return JSON.stringify(exportAssessProgramToEnvelope(program), null, 2);
 }
 
-export async function readAssessProgramFile(file: File): Promise<
-  { ok: true; program: AssessProgramV2 } | { ok: false; error: string }
-> {
+export async function readAssessProgramFile(
+  file: File,
+  options?: { mergeLeadDeadlinesFrom?: AssessProgramV2 },
+): Promise<{ ok: true; program: AssessProgramV2 } | { ok: false; error: string }> {
   const text = await file.text();
-  return importAssessProgramFromJsonText(text);
+  return importAssessProgramFromJsonText(text, options);
 }

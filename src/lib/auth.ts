@@ -65,3 +65,55 @@ export async function verifyCredentials(
   const token = await computeSessionToken(expected.username, expected.password, expected.secret);
   return { ok: true, token };
 }
+
+/** Separate cookie for program-admin surfaces (lead deadlines). */
+export const ADMIN_AUTH_COOKIE_NAME = "forge_admin_session";
+
+/**
+ * Admin credentials for `/program/lead-deadlines`. When any of these env vars
+ * are unset, `isForgeAdminAuthConfigured()` is false and admin login returns 503.
+ */
+export function getExpectedAdminCredentials(): {
+  username: string;
+  password: string;
+  secret: string;
+} {
+  return {
+    username: process.env.FORGE_ADMIN_USERNAME ?? "",
+    password: process.env.FORGE_ADMIN_PASSWORD ?? "",
+    secret: process.env.FORGE_ADMIN_SECRET ?? "",
+  };
+}
+
+export function isForgeAdminAuthConfigured(): boolean {
+  const { username, password, secret } = getExpectedAdminCredentials();
+  return Boolean(username && password && secret);
+}
+
+export async function computeAdminSessionToken(
+  username: string,
+  password: string,
+  secret: string,
+): Promise<string> {
+  return sha256Hex(`admin::${secret}::${username}::${password}`);
+}
+
+export async function isValidAdminSessionToken(token: string | undefined | null): Promise<boolean> {
+  if (!token || !isForgeAdminAuthConfigured()) return false;
+  const { username, password, secret } = getExpectedAdminCredentials();
+  const expected = await computeAdminSessionToken(username, password, secret);
+  return constantTimeEquals(token, expected);
+}
+
+export async function verifyAdminCredentials(
+  username: string,
+  password: string,
+): Promise<{ ok: boolean; token?: string }> {
+  if (!isForgeAdminAuthConfigured()) return { ok: false };
+  const expected = getExpectedAdminCredentials();
+  const userOk = constantTimeEquals(username, expected.username);
+  const passOk = constantTimeEquals(password, expected.password);
+  if (!userOk || !passOk) return { ok: false };
+  const token = await computeAdminSessionToken(expected.username, expected.password, expected.secret);
+  return { ok: true, token };
+}

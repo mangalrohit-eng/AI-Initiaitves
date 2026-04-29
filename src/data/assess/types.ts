@@ -7,6 +7,7 @@ import type {
   TowerProcessMaturity,
 } from "@/data/types";
 import type { AiCurationStatus } from "@/data/capabilityMap/types";
+import { towers } from "@/data/towers";
 
 export type TowerId = Tower["id"];
 
@@ -236,7 +237,40 @@ export type TowerAssessReview = {
   headcountConfirmedAt?: string;
   offshoreConfirmedAt?: string;
   aiConfirmedAt?: string;
+  /** Tower lead marked the impact estimate (Step 3) reviewed for this tower. */
+  impactEstimateValidatedAt?: string;
+  /** Tower lead marked AI initiatives (Step 4) reviewed for this tower. */
+  aiInitiativesValidatedAt?: string;
 };
+
+/** Per-tower calendar due dates for lead milestones (YYYY-MM-DD). */
+export type TowerLeadDeadlines = {
+  step1Due?: string;
+  step2Due?: string;
+  step3Due?: string;
+  step4Due?: string;
+};
+
+/** Workshop default due-by dates (YYYY-MM-DD); admin and per-tower JSON can override. */
+export const DEFAULT_LEAD_DEADLINE_STEP1_YMD = "2026-05-08";
+export const DEFAULT_LEAD_DEADLINE_STEP2_YMD = "2026-05-15";
+export const DEFAULT_LEAD_DEADLINE_STEP4_YMD = "2026-05-22";
+
+/** One row per canonical tower; merged under stored `leadDeadlines` on read. */
+export function buildDefaultProgramLeadDeadlines(): Partial<
+  Record<TowerId, TowerLeadDeadlines>
+> {
+  const row: TowerLeadDeadlines = {
+    step1Due: DEFAULT_LEAD_DEADLINE_STEP1_YMD,
+    step2Due: DEFAULT_LEAD_DEADLINE_STEP2_YMD,
+    step4Due: DEFAULT_LEAD_DEADLINE_STEP4_YMD,
+  };
+  const out: Partial<Record<TowerId, TowerLeadDeadlines>> = {};
+  for (const t of towers) {
+    out[t.id] = { ...row };
+  }
+  return out;
+}
 
 /**
  * Tower-lead decision on a single AI initiative (L4 activity).
@@ -336,6 +370,8 @@ export type AssessProgramV4 = {
   version: 4;
   towers: Partial<Record<TowerId, TowerAssessState>>;
   global: GlobalAssessAssumptions;
+  /** Program admin: due-by dates per tower for Steps 1–4 (optional). */
+  leadDeadlines?: Partial<Record<TowerId, TowerLeadDeadlines>>;
 };
 
 /** Back-compat alias — every caller importing `AssessProgramV3` gets V4. */
@@ -362,5 +398,6 @@ export function defaultAssessProgramV2(): AssessProgramV4 {
     version: 4,
     towers: {},
     global: { ...defaultGlobalAssessAssumptions },
+    leadDeadlines: buildDefaultProgramLeadDeadlines(),
   };
 }

@@ -4,6 +4,9 @@ import * as React from "react";
 import { Search, X } from "lucide-react";
 import type { Tower } from "@/data/types";
 import { TowerGrid } from "./TowerGrid";
+import type { TowerId } from "@/data/assess/types";
+import { getAssessProgram, getAssessProgramHydrationSnapshot, subscribe } from "@/lib/localStore";
+import { LeadDeadlineChip } from "@/components/program/LeadDeadlineChip";
 
 function matches(tower: Tower, q: string) {
   if (!q) return true;
@@ -19,8 +22,29 @@ function matches(tower: Tower, q: string) {
 
 export function TowerGridFilterable({ towers }: { towers: Tower[] }) {
   const [q, setQ] = React.useState("");
+  const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());
+
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
 
   const filtered = React.useMemo(() => towers.filter((t) => matches(t, q)), [towers, q]);
+
+  const footerByTowerId = React.useMemo(() => {
+    const out: Partial<Record<string, React.ReactNode>> = {};
+    for (const t of filtered) {
+      out[t.id] = (
+        <LeadDeadlineChip
+          towerName={t.name}
+          towerId={t.id as TowerId}
+          step={4}
+          program={program}
+        />
+      );
+    }
+    return out;
+  }, [filtered, program]);
 
   return (
     <div className="space-y-6">
@@ -74,7 +98,7 @@ export function TowerGridFilterable({ towers }: { towers: Tower[] }) {
           </button>
         </div>
       ) : (
-        <TowerGrid towers={filtered} />
+        <TowerGrid towers={filtered} footerByTowerId={footerByTowerId} />
       )}
     </div>
   );

@@ -9,11 +9,16 @@ import type {
   TowerId,
 } from "@/data/assess/types";
 import { buildSeededAssessProgramV2 } from "@/data/assess/seedAssessProgram";
-import { defaultTowerState, type TowerAssessState } from "@/data/assess/types";
+import {
+  buildDefaultProgramLeadDeadlines,
+  defaultTowerState,
+  type TowerAssessState,
+} from "@/data/assess/types";
 import {
   bootstrapHashOnRead,
   markRowsStaleByHash,
 } from "@/lib/initiatives/curationHash";
+import { mergeLeadDeadlines, parseLeadDeadlines } from "@/lib/program/leadDeadlines";
 //
 // Conventions:
 //   - Every key is prefixed `forge.` to avoid collisions with other apps.
@@ -739,6 +744,14 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
         typeof v.offshoreConfirmedAt === "string" ? v.offshoreConfirmedAt : undefined,
       aiConfirmedAt:
         typeof v.aiConfirmedAt === "string" ? v.aiConfirmedAt : undefined,
+      impactEstimateValidatedAt:
+        typeof v.impactEstimateValidatedAt === "string"
+          ? v.impactEstimateValidatedAt
+          : undefined,
+      aiInitiativesValidatedAt:
+        typeof v.aiInitiativesValidatedAt === "string"
+          ? v.aiInitiativesValidatedAt
+          : undefined,
     };
     // Tower-lead validate/reject decisions ride the existing AssessProgramV4
     // envelope (no separate localStorage key). Strictly additive — older
@@ -748,7 +761,21 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
     towers[k as TowerId] = towerState;
   }
 
-  return { version: 4, towers, global };
+  const parsedLeadDeadlines =
+    r.leadDeadlines !== undefined && r.leadDeadlines !== null && typeof r.leadDeadlines === "object"
+      ? parseLeadDeadlines(r.leadDeadlines)
+      : undefined;
+  const leadDeadlines = mergeLeadDeadlines(
+    buildDefaultProgramLeadDeadlines(),
+    parsedLeadDeadlines,
+  );
+
+  return {
+    version: 4,
+    towers,
+    global,
+    ...(leadDeadlines && Object.keys(leadDeadlines).length > 0 ? { leadDeadlines } : {}),
+  };
 }
 
 /**
@@ -776,11 +803,25 @@ function migrateBootstrapCurationHash(program: AssessProgramV2): AssessProgramV2
   return touched ? { ...program, towers } : program;
 }
 
-export function getAssessProgram(): AssessProgramV2 {
-  const raw = safeGet<unknown>(KEYS.assessProgram, buildSeededAssessProgramV2());
+function finalizeAssessProgramFromRaw(raw: unknown): AssessProgramV2 {
   return migrateBootstrapCurationHash(
     migrateBuggySeedComplete(migrateAssessProgram(raw)),
   );
+}
+
+/**
+ * Deterministic workshop snapshot for React initial state (SSR + first client
+ * paint). Matches `getAssessProgram()` when there is no `localStorage` entry
+ * yet — avoids hydration mismatches vs `safeGet` returning the seeded fallback
+ * on the server while the browser reads persisted workshop state.
+ */
+export function getAssessProgramHydrationSnapshot(): AssessProgramV2 {
+  return finalizeAssessProgramFromRaw(buildSeededAssessProgramV2());
+}
+
+export function getAssessProgram(): AssessProgramV2 {
+  const raw = safeGet<unknown>(KEYS.assessProgram, buildSeededAssessProgramV2());
+  return finalizeAssessProgramFromRaw(raw);
 }
 
 /**

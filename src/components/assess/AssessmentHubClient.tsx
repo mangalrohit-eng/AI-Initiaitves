@@ -20,6 +20,7 @@ import { Term } from "@/components/help/Term";
 import { towers } from "@/data/towers";
 import {
   getAssessProgram,
+  getAssessProgramHydrationSnapshot,
   getMyTowers,
   subscribe,
 } from "@/lib/localStore";
@@ -31,6 +32,7 @@ import {
 } from "@/lib/assess/scenarioModel";
 import { getTowerHref } from "@/lib/towerHref";
 import { formatMoney } from "@/components/ui/MoneyCounter";
+import { LeadDeadlineChip } from "@/components/program/LeadDeadlineChip";
 
 type DialStatus = "no-footprint" | "default-only" | "dialed";
 
@@ -57,7 +59,7 @@ function dialStatusCopy(s: DialStatus): { label: string; className: string } {
  * re-seed live in `ProgramToolsDrawer` at the bottom.
  */
 export function AssessmentHubClient() {
-  const [program, setProgram] = React.useState<AssessProgramV2>(getAssessProgram);
+  const [program, setProgram] = React.useState<AssessProgramV2>(() => getAssessProgramHydrationSnapshot());
   const [mine, setMine] = React.useState<TowerId[]>([]);
   const impactHubGuidance = useGuidanceImpactHub();
 
@@ -258,16 +260,24 @@ export function AssessmentHubClient() {
                     </div>
                     {status !== "no-footprint" ? (
                       <div
-                        className={`mt-1 inline-flex items-center gap-1 text-[11px] ${
+                        className={`mt-1 flex flex-wrap items-center gap-2 text-[11px] ${
                           isComplete ? "text-accent-green" : "text-accent-amber"
                         }`}
                       >
                         {isComplete ? (
-                          <CheckCircle2 className="h-3 w-3" aria-hidden />
+                          <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
                         ) : (
-                          <Circle className="h-3 w-3" aria-hidden />
+                          <Circle className="h-3 w-3 shrink-0" aria-hidden />
                         )}
-                        {isComplete ? "Reviewed by Tower Lead" : "Pending Tower Lead review"}
+                        <span>
+                          {isComplete ? "Reviewed by Tower Lead" : "Pending Tower Lead review"}
+                        </span>
+                        <LeadDeadlineChip
+                          towerName={tw.name}
+                          towerId={tid}
+                          step={2}
+                          program={program}
+                        />
                       </div>
                     ) : null}
                   </div>

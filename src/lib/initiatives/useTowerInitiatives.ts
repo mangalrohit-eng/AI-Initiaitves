@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { getAssessProgram, subscribe } from "@/lib/localStore";
-import { buildSeededAssessProgramV2 } from "@/data/assess/seedAssessProgram";
+import { getAssessProgram, getAssessProgramHydrationSnapshot, subscribe } from "@/lib/localStore";
 import {
   selectInitiativesForTower,
   type SelectInitiativesResult,
@@ -23,13 +22,12 @@ import type { AssessProgramV2, TowerId } from "@/data/assess/types";
  * is generated against the seeded baseline (no `localStorage`). To keep the
  * first client render identical to that HTML — and avoid the React hydration
  * "Text content did not match" error when a user has edited Step 2 dials —
- * we seed initial state with the baseline program here too, then swap in
- * the persisted program inside `useEffect` after hydration completes.
+ * we seed initial state with `getAssessProgramHydrationSnapshot()` (same as
+ * a cold workshop with no `localStorage` entry), then swap in the persisted
+ * program inside `useEffect` after hydration completes.
  */
 export function useTowerInitiatives(tower: Tower): SelectInitiativesResult {
-  const [program, setProgram] = React.useState<AssessProgramV2>(() =>
-    buildSeededAssessProgramV2(),
-  );
+  const [program, setProgram] = React.useState<AssessProgramV2>(() => getAssessProgramHydrationSnapshot());
   React.useEffect(() => {
     setProgram(getAssessProgram());
     return subscribe("assessProgram", () => setProgram(getAssessProgram()));

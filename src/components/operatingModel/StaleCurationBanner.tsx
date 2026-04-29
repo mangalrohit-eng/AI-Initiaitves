@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import * as Icons from "lucide-react";
 import { useToast } from "@/components/feedback/ToastProvider";
-import { getAssessProgram, subscribe } from "@/lib/localStore";
+import { getAssessProgram, getAssessProgramHydrationSnapshot, subscribe } from "@/lib/localStore";
 import {
   getTowerStaleState,
   hasInFlightRows,
@@ -14,7 +14,6 @@ import {
   runForRows,
   type RunSummary,
 } from "@/lib/assess/curationPipeline";
-import { buildSeededAssessProgramV2 } from "@/data/assess/seedAssessProgram";
 import { getTowerHref } from "@/lib/towerHref";
 import type {
   AssessProgramV2,
@@ -50,7 +49,7 @@ export function StaleCurationBanner({
 }) {
   const toast = useToast();
   const [program, setProgram] = React.useState<AssessProgramV2>(() =>
-    buildSeededAssessProgramV2(),
+    getAssessProgramHydrationSnapshot(),
   );
   React.useEffect(() => {
     setProgram(getAssessProgram());

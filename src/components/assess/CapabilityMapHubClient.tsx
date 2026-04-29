@@ -26,6 +26,7 @@ import { towers } from "@/data/towers";
 import { downloadSingleTowerSampleCsv } from "@/lib/assess/downloadAssessSamples";
 import {
   getAssessProgram,
+  getAssessProgramHydrationSnapshot,
   getMyTowers,
   setAssessProgram,
   subscribe,
@@ -33,6 +34,7 @@ import {
 import type { AssessProgramV2, TowerId } from "@/data/assess/types";
 import { getTowerHref } from "@/lib/towerHref";
 import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
+import { LeadDeadlineChip } from "@/components/program/LeadDeadlineChip";
 
 type RowStatus = "not-started" | "in-progress" | "map-confirmed" | "complete";
 
@@ -66,7 +68,7 @@ export function CapabilityMapHubClient() {
   const sync = useAssessSync();
   const toast = useToast();
   const capGuidance = useGuidanceCapabilityMapHub();
-  const [program, setProgram] = React.useState<AssessProgramV2>(getAssessProgram);
+  const [program, setProgram] = React.useState<AssessProgramV2>(() => getAssessProgramHydrationSnapshot());
   const [mine, setMine] = React.useState<TowerId[]>([]);
 
   React.useEffect(() => {
@@ -237,13 +239,19 @@ export function CapabilityMapHubClient() {
                       {tw.name}
                     </span>
                   </div>
-                  <div className={`flex items-center gap-1.5 text-[11px] ${s.className}`}>
+                  <div className={`flex flex-wrap items-center gap-2 text-[11px] ${s.className}`}>
                     {status === "not-started" || status === "in-progress" ? (
                       <Circle className="h-3 w-3" />
                     ) : (
                       <CheckCircle2 className="h-3 w-3" />
                     )}
                     <span className="truncate">{s.label}</span>
+                    <LeadDeadlineChip
+                      towerName={tw.name}
+                      towerId={tw.id as TowerId}
+                      step={1}
+                      program={program}
+                    />
                   </div>
                   <div className="mt-1 flex items-center justify-between">
                     <span className="text-[11px] font-medium text-accent-purple-dark group-hover:text-accent-purple">

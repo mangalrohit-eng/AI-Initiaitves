@@ -14,6 +14,7 @@ import {
 } from "@/data/assess/types";
 import {
   getAssessProgram,
+  getAssessProgramHydrationSnapshot,
   setGlobalAssessAssumptions,
   subscribe,
 } from "@/lib/localStore";
@@ -28,7 +29,7 @@ import {
  */
 export function AssumptionsClient() {
   const toast = useToast();
-  const [program, setProgram] = React.useState<AssessProgramV2>(getAssessProgram);
+  const [program, setProgram] = React.useState<AssessProgramV2>(() => getAssessProgramHydrationSnapshot());
 
   React.useEffect(() => {
     setProgram(getAssessProgram());

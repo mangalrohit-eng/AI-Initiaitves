@@ -44,9 +44,10 @@ export type ComposedVerdict = {
   initiativeId?: string;
   briefSlug?: string;
   /**
-   * Provenance — used by the selector's source-mix log + the CurationPill UI.
+   * Provenance — used by the selector's source-mix log.
+   * `l4item` = persisted `L3WorkforceRow.l4Items` from Step 4 curation.
    */
-  source: "canonical" | "overlay" | "rubric";
+  source: "canonical" | "overlay" | "rubric" | "l4item";
 };
 
 export type ComposeInput = {

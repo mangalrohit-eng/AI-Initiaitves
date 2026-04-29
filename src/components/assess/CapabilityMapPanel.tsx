@@ -9,11 +9,6 @@ import type {
   MapViewL4,
 } from "@/lib/assess/capabilityMapTree";
 import { findRowForMapL3 } from "@/lib/assess/capabilityMapTree";
-import {
-  CurationPill,
-  CurationScoreboard,
-} from "@/components/capabilityMap/CurationPill";
-import type { ComposedVerdict } from "@/lib/initiatives/composeVerdict";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -25,22 +20,6 @@ type Props = {
    * those become meaningful only once the user loads a footprint.
    */
   isPreview?: boolean;
-  /**
-   * Optional verdict lookup — when present, every L4 chip renders a curation
-   * pill and the panel header shows the per-tower scoreboard. Built off the
-   * canonical capability map; safe to omit on the program-wide hub view.
-   */
-  verdictLookup?: {
-    byId: Map<string, ComposedVerdict>;
-    byNameKey: Map<string, ComposedVerdict>;
-  };
-  /** Aggregate counts shown in the scoreboard. Pair with `verdictLookup`. */
-  scoreboardSummary?: {
-    eligible: number;
-    notEligible: number;
-    pending: number;
-    totalL4: number;
-  };
 };
 
 /**
@@ -66,8 +45,6 @@ export function CapabilityMapPanel({
   view,
   rows,
   isPreview = false,
-  verdictLookup,
-  scoreboardSummary,
 }: Props) {
   const allL3Keys = React.useMemo(
     () => view.l2.flatMap((l2) => l2.l3.map((l3) => keyOf(l2.name, l3.name))),
@@ -149,15 +126,12 @@ export function CapabilityMapPanel({
 
   return (
     <div className="space-y-3">
-      {/* Top line: total L4 count, optional scoreboard, and master toggle. */}
+      {/* Top line: total L4 count and master toggle. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-[11px] tabular-nums text-forge-hint">
             {totalL4} L4 activities
           </span>
-          {scoreboardSummary && scoreboardSummary.totalL4 > 0 ? (
-            <CurationScoreboard {...scoreboardSummary} />
-          ) : null}
         </div>
         {totalL4 > 0 ? (
           <button
@@ -184,7 +158,7 @@ export function CapabilityMapPanel({
         ) : null}
       </div>
 
-      {isPreview ? <PreviewBanner /> : null}
+      {isPreview ? <PreviewBanner totalL4={totalL4} /> : null}
 
       {/* L1 banner — full width, deepest purple wash. */}
       <L1Banner name={view.l1Name} hc={towerHeadcount} />
@@ -218,7 +192,6 @@ export function CapabilityMapPanel({
                   l2Name={l2.name}
                   l3Nodes={l2.l3}
                   active={active}
-                  verdictLookup={verdictLookup}
                 />
               ))}
             </div>
@@ -276,7 +249,7 @@ function HeadcountCluster({
   );
 }
 
-function PreviewBanner() {
+function PreviewBanner({ totalL4 }: { totalL4: number }) {
   return (
     <div className="flex items-start gap-2 rounded-lg border border-accent-purple/30 bg-accent-purple/5 px-3 py-2 text-xs text-forge-body">
       <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-purple" aria-hidden />
@@ -285,6 +258,9 @@ function PreviewBanner() {
         predefined capability tree. Load the sample or upload your own
         capability map &amp; headcount to replace it — your map then drives the
         assessment and downstream impact.
+        {totalL4 > 0
+          ? " P-tier and AI eligibility tags on L4 chips show after you load a footprint and run Refresh AI guidance (AI Initiatives)."
+          : null}
       </span>
     </div>
   );
@@ -386,15 +362,10 @@ function L4BandColumn({
   l2Name,
   l3Nodes,
   active,
-  verdictLookup,
 }: {
   l2Name: string;
   l3Nodes: MapViewL3[];
   active: Set<string>;
-  verdictLookup?: {
-    byId: Map<string, ComposedVerdict>;
-    byNameKey: Map<string, ComposedVerdict>;
-  };
 }) {
   const activeL3sInThisL2 = l3Nodes.filter((l3) =>
     active.has(keyOf(l2Name, l3.name)),
@@ -423,7 +394,7 @@ function L4BandColumn({
               />
             ) : (
               l3.l4.map((l4) => (
-                <L4Box key={l4.id} l4={l4} verdictLookup={verdictLookup} />
+                <L4Box key={l4.id} l4={l4} />
               ))
             )}
           </React.Fragment>
@@ -433,45 +404,15 @@ function L4BandColumn({
   );
 }
 
-function L4Box({
-  l4,
-  verdictLookup,
-}: {
-  l4: MapViewL4;
-  verdictLookup?: {
-    byId: Map<string, ComposedVerdict>;
-    byNameKey: Map<string, ComposedVerdict>;
-  };
-}) {
-  const verdict = React.useMemo(() => {
-    if (!verdictLookup) return undefined;
-    const byId = verdictLookup.byId.get(l4.id);
-    if (byId) return byId;
-    return verdictLookup.byNameKey.get(l4.name.trim().toLowerCase().replace(/\s+/g, " "));
-  }, [verdictLookup, l4.id, l4.name]);
-
+function L4Box({ l4 }: { l4: MapViewL4 }) {
   return (
     <Box
       tier="l4"
       name={l4.name}
       hc={null}
-      title={
-        verdict?.aiRationale
-          ? `${l4.name} — ${verdict.aiRationale}`
-          : l4.name
-      }
+      title={l4.name}
       data-l4={l4.id}
       ariaLabel={`L4 ${l4.name}`}
-      trailingPill={
-        verdict ? (
-          <CurationPill
-            status={verdict.status}
-            priority={verdict.aiPriority}
-            rationale={verdict.aiRationale}
-            variant="map"
-          />
-        ) : null
-      }
     />
   );
 }
@@ -534,8 +475,6 @@ type BoxBaseProps = {
   ariaLabel?: string;
   ariaPressed?: boolean;
   onClick?: () => void;
-  /** Optional trailing element (e.g., CurationPill on L4 chips). */
-  trailingPill?: React.ReactNode;
   /** Stable dataset markers for future selectors (crawler / tests). */
   "data-l3"?: string;
   "data-l4"?: string;
@@ -557,7 +496,6 @@ function Box(props: BoxBaseProps) {
     ariaLabel,
     ariaPressed,
     onClick,
-    trailingPill,
     ...rest
   } = props;
 
@@ -592,7 +530,6 @@ function Box(props: BoxBaseProps) {
     <>
       {badgeTier ? <TierBadge tier={badgeTier} /> : null}
       <span className={nameClass}>{name}</span>
-      {trailingPill ? <span className="ml-0.5 shrink-0">{trailingPill}</span> : null}
       {hc != null ? (
         <HeadcountCluster hc={hc} variant="chip" title={CHIP_HC_TITLE} />
       ) : null}

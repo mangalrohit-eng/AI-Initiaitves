@@ -155,6 +155,8 @@ export type SelectInitiativesResult = {
       canonical: number;
       overlay: number;
       rubric: number;
+      /** Step 1 map only; selector Path C uses composeL4Verdict (never `l4item`). */
+      l4item: number;
       legacyTowerProcess: number;
       /** L4 surfaced from row.l4Items pipeline cache (Path 0). */
       l4Items: number;
@@ -213,6 +215,7 @@ export function selectInitiativesForTower(
     canonical: 0,
     overlay: 0,
     rubric: 0,
+    l4item: 0,
     legacyTowerProcess: 0,
     l4Items: 0,
   };
@@ -483,6 +486,7 @@ export function selectInitiativesForTower(
       sourceMix.canonical +
       sourceMix.overlay +
       sourceMix.rubric +
+      sourceMix.l4item +
       sourceMix.legacyTowerProcess +
       sourceMix.l4Items;
     if (total > 0) {
@@ -492,6 +496,7 @@ export function selectInitiativesForTower(
         `canonical=${sourceMix.canonical}`,
         `overlay=${sourceMix.overlay}`,
         `rubric=${sourceMix.rubric}`,
+        `l4item=${sourceMix.l4item}`,
         `legacy=${sourceMix.legacyTowerProcess}`,
         `l4Items=${sourceMix.l4Items}`,
       );

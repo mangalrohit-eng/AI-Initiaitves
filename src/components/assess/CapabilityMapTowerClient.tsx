@@ -29,10 +29,6 @@ import {
   inferCapabilityViewFromRows,
 } from "@/lib/assess/capabilityMapTree";
 import {
-  buildL4VerdictLookupForTower,
-  summarizeCurationForTower,
-} from "@/lib/initiatives/curationLookup";
-import {
   downloadBlob,
   downloadSingleTowerSampleCsv,
 } from "@/lib/assess/downloadAssessSamples";
@@ -189,23 +185,11 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   // overlays user data once anything has been uploaded.
   const def = getCapabilityMapForTower(towerId);
   const isPreview = rows.length === 0 && def != null;
-  const view =
-    rows.length > 0
-      ? inferCapabilityViewFromRows(towerName, rows)
-      : def != null
-        ? definitionToViewModel(def, def.name)
-        : { l1Name: towerName, l2: [] };
-
-  // AI-curation verdict lookup + scoreboard for the tower's canonical map.
-  // Memoized so the panel doesn't recompute on every render.
-  const verdictLookup = React.useMemo(
-    () => buildL4VerdictLookupForTower(towerId),
-    [towerId],
-  );
-  const scoreboardSummary = React.useMemo(
-    () => summarizeCurationForTower(towerId) ?? undefined,
-    [towerId],
-  );
+  const view = React.useMemo(() => {
+    if (rows.length > 0) return inferCapabilityViewFromRows(towerName, rows);
+    if (def != null) return definitionToViewModel(def, def.name);
+    return { l1Name: towerName, l2: [] };
+  }, [rows, towerName, def]);
 
   // Step 1 is "done" in the journey stepper when L1–L3 is confirmed, or the
   // tower was already fully signed off before this field existed.
@@ -434,13 +418,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
                 />
               </div>
             ) : null}
-            <CapabilityMapPanel
-              view={view}
-              rows={rows}
-              isPreview={isPreview}
-              verdictLookup={verdictLookup}
-              scoreboardSummary={scoreboardSummary}
-            />
+            <CapabilityMapPanel view={view} rows={rows} isPreview={isPreview} />
           </div>
         ) : null}
 

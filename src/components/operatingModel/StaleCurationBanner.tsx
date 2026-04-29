@@ -167,7 +167,7 @@ export function StaleCurationBanner({
           <p className="mt-1 text-xs leading-relaxed text-forge-subtle">
             {missingL4ForRefresh
               ? "Some queued capabilities have no L4 activities yet. Generate L4 activities on Step 1 first, then come back to refresh AI guidance."
-              : "Refresh runs the Versant-grounded LLM. If the LLM is unavailable, it falls back to the deterministic verdict composer + overlay rubric. Dollars and headcount on Steps 2 and 3 are unaffected."}
+              : "Refresh runs the Versant-grounded LLM. If the LLM is unavailable, it falls back to the deterministic verdict composer + overlay rubric. Until you refresh, P-tier and eligibility tags on the capability map stay out of date for the queued rows. Dollars and headcount on Steps 2 and 3 are unaffected."}
           </p>
         </div>
         {missingL4ForRefresh ? (

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, Eye } from "lucide-react";
+import { ChevronDown, Eye, Users } from "lucide-react";
 import type { L3WorkforceRow } from "@/data/assess/types";
 import type {
   CapabilityMapViewModel,
@@ -233,6 +233,49 @@ function keyOf(l2: string, l3: string): string {
   return `${l2}|${l3}`;
 }
 
+const CHIP_HC_TITLE =
+  "Headcount (FTE + contractor, onshore + offshore)";
+
+function HeadcountCluster({
+  hc,
+  title,
+  variant,
+}: {
+  hc: number;
+  title: string;
+  variant: "banner" | "chip";
+}) {
+  const banner = variant === "banner";
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-0.5 tabular-nums",
+        banner &&
+          "gap-1 rounded-md border border-accent-purple/40 bg-forge-surface/70 px-2 py-0.5",
+      )}
+      title={title}
+    >
+      <Users
+        className={cn(
+          "shrink-0 text-accent-purple-dark/75",
+          banner ? "h-3 w-3" : "h-2.5 w-2.5",
+        )}
+        aria-hidden
+      />
+      <span
+        className={cn(
+          "font-mono tabular-nums",
+          banner
+            ? "text-sm font-semibold text-forge-ink"
+            : "text-[9px] font-medium text-forge-subtle",
+        )}
+      >
+        {hc.toLocaleString()}
+      </span>
+    </span>
+  );
+}
+
 function PreviewBanner() {
   return (
     <div className="flex items-start gap-2 rounded-lg border border-accent-purple/30 bg-accent-purple/5 px-3 py-2 text-xs text-forge-body">
@@ -260,17 +303,11 @@ function L1Banner({ name, hc }: { name: string; hc: number | null }) {
         </span>
       </div>
       {hc != null ? (
-        <span
-          className="inline-flex items-baseline gap-1 rounded-md border border-accent-purple/40 bg-forge-surface/70 px-2 py-0.5"
+        <HeadcountCluster
+          hc={hc}
+          variant="banner"
           title="Total headcount across this tower (FTE + contractor, onshore + offshore)"
-        >
-          <span className="font-mono text-sm font-semibold tabular-nums text-forge-ink">
-            {hc.toLocaleString()}
-          </span>
-          <span className="text-[10px] uppercase tracking-wider text-accent-purple-dark">
-            total h/c
-          </span>
-        </span>
+        />
       ) : null}
     </div>
   );
@@ -301,21 +338,30 @@ function L2Column({
         name={name}
         hc={hc}
         title={name}
-        ariaLabel={`L2 ${name}`}
+        ariaLabel={
+          hc != null
+            ? `L2 ${name}, ${hc.toLocaleString()} headcount`
+            : `L2 ${name}`
+        }
       />
       {l3Nodes.map((l3) => {
         const isActive = active.has(keyOf(name, l3.name));
+        const l3Hc = l3HeadcountFn(l3);
         return (
           <Box
             key={l3.name}
             tier="l3"
             name={l3.name}
-            hc={l3HeadcountFn(l3)}
+            hc={l3Hc}
             title={l3.name}
             isActive={isActive}
             onClick={() => onToggleL3(l3.name)}
             data-l3={l3.name}
-            ariaLabel={`L3 ${l3.name}`}
+            ariaLabel={
+              l3Hc != null
+                ? `L3 ${l3.name}, ${l3Hc.toLocaleString()} headcount`
+                : `L3 ${l3.name}`
+            }
             ariaPressed={isActive}
           />
         );
@@ -422,7 +468,7 @@ function L4Box({
             status={verdict.status}
             priority={verdict.aiPriority}
             rationale={verdict.aiRationale}
-            variant="compact"
+            variant="map"
           />
         ) : null
       }
@@ -433,7 +479,7 @@ function L4Box({
 function GhostL3Caption({ name }: { name: string }) {
   return (
     <div
-      className="flex h-7 w-full items-center gap-1.5 rounded-md border border-dashed border-accent-purple/35 bg-accent-purple/5 px-2"
+      className="flex h-8 w-full items-center gap-1.5 rounded-md border border-dashed border-accent-purple/35 bg-accent-purple/5 px-2"
       title={name}
     >
       <TierBadge tier="l3" muted />
@@ -516,7 +562,7 @@ function Box(props: BoxBaseProps) {
   } = props;
 
   const className = cn(
-    "flex h-8 w-full items-center gap-2 rounded-md border px-2.5 text-left transition",
+    "flex h-8 w-full items-center gap-1.5 rounded-md border px-2 text-left transition",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/40",
     tier === "l2" &&
       "border-accent-purple/35 bg-accent-purple/12 text-forge-ink",
@@ -531,15 +577,11 @@ function Box(props: BoxBaseProps) {
   );
 
   const nameClass = cn(
-    "min-w-0 flex-1 truncate text-[12px] leading-none",
-    tier === "l2" && "font-display font-semibold",
-    tier === "l3" && "font-medium",
-    tier === "l4" && "italic-none",
-  );
-
-  const hcClass = cn(
-    "shrink-0 font-mono text-[10px] tabular-nums",
-    tier === "l4" ? "text-forge-hint" : "text-forge-subtle",
+    "min-w-0 flex-1 truncate leading-none",
+    tier === "l2" && "font-display text-[12px] font-semibold",
+    tier === "l3" && "text-[11px] font-medium",
+    tier === "l4" && "text-[10px] italic-none",
+    tier === "l4-empty" && "text-[11px]",
   );
 
   // L4-empty placeholder doesn't show a badge — keeps the dashed empty state quiet.
@@ -550,8 +592,10 @@ function Box(props: BoxBaseProps) {
     <>
       {badgeTier ? <TierBadge tier={badgeTier} /> : null}
       <span className={nameClass}>{name}</span>
-      {trailingPill ? <span className="ml-1 shrink-0">{trailingPill}</span> : null}
-      {hc != null ? <span className={hcClass}>{hc} h/c</span> : null}
+      {trailingPill ? <span className="ml-0.5 shrink-0">{trailingPill}</span> : null}
+      {hc != null ? (
+        <HeadcountCluster hc={hc} variant="chip" title={CHIP_HC_TITLE} />
+      ) : null}
     </>
   );
 

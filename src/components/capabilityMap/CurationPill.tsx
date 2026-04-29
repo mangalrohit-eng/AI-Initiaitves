@@ -5,14 +5,11 @@ import type { AiCurationStatus } from "@/data/capabilityMap/types";
 import type { AiPriority } from "@/data/types";
 
 /**
- * Compact pill rendered next to an L4 chip (or an L3 / L2 summary) on the
- * Capability Map. Communicates the deterministic-fallback verdict at a
- * glance, with a tooltip carrying the full Versant-grounded rationale.
- *
- * Read-only. The user-facing override flow lives behind the LLM pipeline
- * (PR 2) — this PR ships the verdict surface only.
+ * Verdict pill for the Capability Map. Variants `chip` / `compact` keep icons
+ * + full labels; `map` is ultra-tight for Step 1 L4 rows (glyph-only where
+ * possible) while `title` and `aria-label` stay unchanged.
  */
-export type CurationPillVariant = "chip" | "compact";
+export type CurationPillVariant = "chip" | "compact" | "map";
 
 const PRIORITY_TIER: Record<AiPriority, "P1" | "P2" | "P3"> = {
   "P1 — Immediate (0-6mo)": "P1",
@@ -34,9 +31,17 @@ export function CurationPill({
   variant?: CurationPillVariant;
   className?: string;
 }) {
-  const sized = variant === "compact" ? "px-1 py-px text-[9px]" : "px-1.5 py-px text-[10px]";
-  const base =
-    "inline-flex shrink-0 items-center gap-1 rounded font-mono font-semibold uppercase tabular-nums tracking-wider";
+  const isMap = variant === "map";
+  const base = cn(
+    "inline-flex shrink-0 items-center rounded font-mono font-semibold uppercase tabular-nums",
+    isMap ? "gap-0 tracking-tight" : "gap-1 tracking-wider",
+  );
+  const sized =
+    variant === "map"
+      ? "px-0.5 py-0 text-[8px] leading-none"
+      : variant === "compact"
+        ? "px-1 py-px text-[9px]"
+        : "px-1.5 py-px text-[10px]";
 
   if (status === "curated") {
     const tier = priority ? PRIORITY_TIER[priority] : null;
@@ -57,7 +62,7 @@ export function CurationPill({
         title={rationale ? `AI-eligible · ${rationale}` : "AI-eligible"}
         aria-label={tier ? `${tier} AI-eligible` : "AI-eligible"}
       >
-        <Sparkles className="h-2.5 w-2.5" aria-hidden />
+        {isMap ? null : <Sparkles className="h-2.5 w-2.5 shrink-0" aria-hidden />}
         <span>{tier ?? "AI"}</span>
       </span>
     );
@@ -75,8 +80,14 @@ export function CurationPill({
         title={rationale ? `Human-led · ${rationale}` : "Human-led — not AI-eligible"}
         aria-label="Human-led"
       >
-        <ShieldCheck className="h-2.5 w-2.5" aria-hidden />
-        <span>HUMAN</span>
+        {isMap ? (
+          <span>H</span>
+        ) : (
+          <>
+            <ShieldCheck className="h-2.5 w-2.5 shrink-0" aria-hidden />
+            <span>HUMAN</span>
+          </>
+        )}
       </span>
     );
   }
@@ -93,8 +104,14 @@ export function CurationPill({
       title={rationale ?? "Editorial sweep pending — verdict will refine on the next pipeline run."}
       aria-label="Pending discovery"
     >
-      <Compass className="h-2.5 w-2.5" aria-hidden />
-      <span>?</span>
+      {isMap ? (
+        <span>?</span>
+      ) : (
+        <>
+          <Compass className="h-2.5 w-2.5 shrink-0" aria-hidden />
+          <span>?</span>
+        </>
+      )}
     </span>
   );
 }

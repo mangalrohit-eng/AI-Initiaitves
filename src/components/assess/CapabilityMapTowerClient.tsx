@@ -53,6 +53,10 @@ import {
   ReplaceUploadConfirmDialog,
   type ReplaceUploadBusyState,
 } from "@/components/feedback/ReplaceUploadConfirmDialog";
+import {
+  ReloadSampleConfirmDialog,
+  type ReloadSampleBusyState,
+} from "@/components/feedback/ReloadSampleConfirmDialog";
 
 type Props = { towerId: TowerId; towerName: string };
 
@@ -214,6 +218,9 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   const [pendingFile, setPendingFile] = React.useState<File | null>(null);
   const [replaceBusy, setReplaceBusy] =
     React.useState<ReplaceUploadBusyState>(null);
+  const [reloadSampleDialogOpen, setReloadSampleDialogOpen] = React.useState(false);
+  const [reloadSampleBusy, setReloadSampleBusy] =
+    React.useState<ReloadSampleBusyState>(null);
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -237,6 +244,49 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
     closeReplaceDialog();
     if (f) void importOp.fire(f);
   }, [pendingFile, importOp, closeReplaceDialog]);
+
+  const closeReloadSampleDialog = React.useCallback(() => {
+    setReloadSampleDialogOpen(false);
+    setReloadSampleBusy(null);
+  }, []);
+
+  const onLoadSample = React.useCallback(() => {
+    if (rows.length === 0) {
+      void sampleLoadOp.fire();
+      return;
+    }
+    setReloadSampleDialogOpen(true);
+  }, [rows.length, sampleLoadOp]);
+
+  const onReloadSampleConfirm = React.useCallback(() => {
+    closeReloadSampleDialog();
+    void sampleLoadOp.fire();
+  }, [closeReloadSampleDialog, sampleLoadOp]);
+
+  const onExportThenReloadSample = React.useCallback(async () => {
+    setReloadSampleBusy("exporting");
+    try {
+      const program = getAssessProgram();
+      const body = serializeAssessProgramForDownload(program);
+      const name = `forge-assess-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      downloadBlob(name, body, "application/json;charset=utf-8");
+      toast.success({
+        title: "Backup downloaded",
+        description:
+          "Save the JSON somewhere safe (SharePoint / Teams). Restore via Program tools > Import backup.",
+        durationMs: 6000,
+      });
+    } catch (err) {
+      toast.error({
+        title: "Couldn't export backup",
+        description: err instanceof Error ? err.message : undefined,
+      });
+      setReloadSampleBusy(null);
+      return;
+    }
+    closeReloadSampleDialog();
+    void sampleLoadOp.fire();
+  }, [closeReloadSampleDialog, sampleLoadOp, toast]);
 
   const onExportThenReplace = React.useCallback(async () => {
     const f = pendingFile;
@@ -350,7 +400,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
           loadingSample={sampleLoadOp.state === "loading"}
           mapLocked={mapStepLocked}
           onPickFile={() => fileRef.current?.click()}
-          onLoadSample={() => void sampleLoadOp.fire()}
+          onLoadSample={onLoadSample}
           onDownloadSample={onTemplateDownload}
         />
 
@@ -454,6 +504,14 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
       onCancel={closeReplaceDialog}
       onReplace={onReplaceWithoutBackup}
       onExportThenReplace={() => void onExportThenReplace()}
+    />
+    <ReloadSampleConfirmDialog
+      open={reloadSampleDialogOpen}
+      towerName={towerName}
+      busy={reloadSampleBusy}
+      onCancel={closeReloadSampleDialog}
+      onReload={onReloadSampleConfirm}
+      onExportThenReload={() => void onExportThenReloadSample()}
     />
     </>
   );

@@ -128,28 +128,40 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     },
   });
 
-  const sampleLoadOp = useAsyncOp<{ rows: number }, []>({
+  const sampleLoadOp = useAsyncOp<{ rows: number; wasReload: boolean }, []>({
     run: async () => {
+      const hadRows =
+        (getAssessProgram().towers[towerId]?.l3Rows ?? []).length > 0;
       const seed = getTowerSeedState(towerId);
-      // Sample loads are seed data, NOT a tower-lead authored map. Clear any
-      // prior confirmation so the journey stepper reverts the Capability Map
-      // step to "in progress" until the lead actually uploads.
+      // Sample loads are seed data, NOT a tower-lead authored map. Clear
+      // confirmations, downstream step stamps, and initiative review keys so
+      // the journey and AI Initiatives view stay consistent with a fresh seed.
       setTowerAssess(towerId, {
         l3Rows: seed.l3Rows,
         baseline: seed.baseline,
         status: seed.status,
         capabilityMapConfirmedAt: undefined,
         l1L3TreeValidatedAt: undefined,
+        headcountConfirmedAt: undefined,
+        offshoreConfirmedAt: undefined,
+        aiConfirmedAt: undefined,
+        impactEstimateValidatedAt: undefined,
+        aiInitiativesValidatedAt: undefined,
+        initiativeReviews: {},
       });
       if (sync?.canSync) await sync.flushSave();
-      return { rows: seed.l3Rows.length };
+      return { rows: seed.l3Rows.length, wasReload: hadRows };
     },
     messages: {
       loadingTitle: `Loading sample for ${towerName}`,
-      successTitle: ({ rows: r }) =>
-        `Loaded ${r} starter row${r === 1 ? "" : "s"} for ${towerName}`,
-      successDescription:
-        "Heuristic starter defaults applied. Review and override per L3 in Configure Impact Levers.",
+      successTitle: ({ wasReload, rows: r }) =>
+        wasReload
+          ? "Starter sample reloaded"
+          : `Loaded ${r} starter row${r === 1 ? "" : "s"} for ${towerName}`,
+      successDescription: ({ wasReload }) =>
+        wasReload
+          ? `Current edits for ${towerName} were replaced with the original sample.`
+          : "Heuristic starter defaults applied. Review and override per L3 in Configure Impact Levers.",
       errorTitle: "Could not load sample",
     },
   });

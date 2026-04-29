@@ -43,8 +43,9 @@ export default function AdminLoginPage({
           <AdminLoginForm redirectTo={from} />
 
           <p className="mt-6 text-[11px] leading-relaxed text-white/40">
-            Requires workshop access first. Use the credentials set in{" "}
-            <span className="font-mono">FORGE_ADMIN_*</span> environment variables.
+            Sign in at <span className="font-mono">/login</span> first (workshop session,{" "}
+            <span className="font-mono">AUTH_*</span>). This form uses{" "}
+            <span className="font-mono">FORGE_ADMIN_*</span> for lead deadlines only.
           </p>
         </div>
       </div>

@@ -1,15 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export function AdminLoginForm({ redirectTo }: { redirectTo: string }) {
-  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const safeRedirect =
@@ -24,31 +21,28 @@ export function AdminLoginForm({ redirectTo }: { redirectTo: string }) {
     try {
       const res = await fetch("/api/login/admin", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (res.status === 503) {
         setError(data.error ?? "Admin login is not configured on this deployment.");
-        setIsSubmitting(false);
         return;
       }
       if (!res.ok || !data.ok) {
         setError(data.error || "Sign in failed. Please try again.");
-        setIsSubmitting(false);
         return;
       }
-      startTransition(() => {
-        router.replace(safeRedirect);
-        router.refresh();
-      });
+      window.location.assign(safeRedirect);
     } catch {
       setError("Network error. Please try again.");
+    } finally {
       setIsSubmitting(false);
     }
   }
 
-  const busy = isSubmitting || isPending;
+  const busy = isSubmitting;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>

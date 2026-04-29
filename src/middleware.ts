@@ -9,6 +9,12 @@ import {
 const PUBLIC_PATHS = new Set<string>(["/login", "/login/admin"]);
 const PUBLIC_API_PATHS = new Set<string>(["/api/login", "/api/login/admin", "/api/logout"]);
 
+/** Match PUBLIC_PATHS / route logic even when the URL has a trailing slash. */
+function normalizePathname(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith("/")) return pathname.slice(0, -1);
+  return pathname;
+}
+
 function clientPortalBlock(pathname: string, req: NextRequest): ReturnType<typeof NextResponse.redirect> | null {
   const mode = process.env.NEXT_PUBLIC_PORTAL_AUDIENCE?.toLowerCase().trim();
   if (mode !== "client") return null;
@@ -24,11 +30,12 @@ function clientPortalBlock(pathname: string, req: NextRequest): ReturnType<typeo
 
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
+  const path = normalizePathname(pathname);
 
-  const block = clientPortalBlock(pathname, req);
+  const block = clientPortalBlock(path, req);
   if (block) return block;
 
-  if (PUBLIC_PATHS.has(pathname) || PUBLIC_API_PATHS.has(pathname)) {
+  if (PUBLIC_PATHS.has(path) || PUBLIC_API_PATHS.has(path)) {
     return NextResponse.next();
   }
 
@@ -39,14 +46,14 @@ export async function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
-    const from = pathname + (search || "");
+    const from = path + (search || "");
     if (from && from !== "/" && from !== "/login" && from !== "/login/admin") {
       url.searchParams.set("from", from);
     }
     return NextResponse.redirect(url);
   }
 
-  if (pathname === "/program/lead-deadlines") {
+  if (path === "/program/lead-deadlines") {
     const adminTok = req.cookies.get(ADMIN_AUTH_COOKIE_NAME)?.value;
     const adminOk = await isValidAdminSessionToken(adminTok);
     if (!adminOk) {

@@ -40,7 +40,7 @@ export type LLMRowResult = {
 };
 
 export type InferLLMOptions = {
-  /** Override `OPENAI_MODEL` env (default `gpt-4o-mini`). */
+  /** Override env (`OPENAI_INFER_DEFAULTS_MODEL` then `OPENAI_MODEL`; default `gpt-4o-mini`). */
   model?: string;
   /** Abort timeout in ms (default 60_000). */
   timeoutMs?: number;
@@ -155,7 +155,11 @@ export async function inferTowerDefaultsWithLLM(
   }
   if (!rows.length) return [];
 
-  const model = options.model ?? process.env.OPENAI_MODEL?.trim() ?? DEFAULT_MODEL;
+  const model =
+    options.model ??
+    process.env.OPENAI_INFER_DEFAULTS_MODEL?.trim() ??
+    process.env.OPENAI_MODEL?.trim() ??
+    DEFAULT_MODEL;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   const controller = new AbortController();

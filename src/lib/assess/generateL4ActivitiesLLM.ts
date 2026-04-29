@@ -34,6 +34,7 @@ export type LLMGenerateL4Result = {
 };
 
 export type GenerateL4Options = {
+  /** Override env (`OPENAI_GENERATE_L4_MODEL` then `OPENAI_MODEL`; default `gpt-4o-mini`). */
   model?: string;
   timeoutMs?: number;
   /** Min activities per L3 (default 4). */
@@ -132,7 +133,11 @@ export async function generateL4ActivitiesWithLLM(
   }
   if (!rows.length) return [];
 
-  const model = options.model ?? process.env.OPENAI_MODEL?.trim() ?? DEFAULT_MODEL;
+  const model =
+    options.model ??
+    process.env.OPENAI_GENERATE_L4_MODEL?.trim() ??
+    process.env.OPENAI_MODEL?.trim() ??
+    DEFAULT_MODEL;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const minPerL3 = Math.max(1, Math.floor(options.minPerL3 ?? DEFAULT_MIN));
   const maxPerL3 = Math.max(minPerL3, Math.floor(options.maxPerL3 ?? DEFAULT_MAX));

@@ -11,8 +11,9 @@
  *     `selectInitiativesForTower` emits LLM-curated L4 cards with a
  *     resolvable `llmBriefHref` — proving the lazy LLM brief route is
  *     reachable from the AI Initiatives view.
- *  3. Persisting a `GeneratedBrief` onto the cached L4 round-trips
- *     through the localStore migration path used by the LLM brief page.
+ *  3. Persisting `GeneratedBrief` / `GeneratedProcessCache` onto the cached
+ *     L4 round-trips through the localStore migration path used by the LLM
+ *     brief page.
  *
  * Pure in-memory simulation; no fetch, no LLM, no localStorage. The
  * pipeline path is exercised separately by `curateInitiativesContract`.
@@ -34,6 +35,7 @@ import {
   type TowerId,
 } from "../src/data/assess/types";
 import { selectInitiativesForTower } from "../src/lib/initiatives/select";
+import { buildFallbackProcess } from "../src/lib/assess/curateBriefLLM";
 import { towers } from "../src/data/towers";
 
 let pass = 0;
@@ -257,7 +259,7 @@ console.log("\n--- 2b. Empty-state branching: queued vs no-rows vs dial-zero ---
   );
 }
 
-console.log("\n--- 3. GeneratedBrief survives JSON serialization ---");
+console.log("\n--- 3. Legacy GeneratedBrief + GeneratedProcessCache JSON round-trip ---");
 
 const brief: GeneratedBrief = {
   preState:
@@ -275,19 +277,33 @@ const brief: GeneratedBrief = {
   generatedAt: new Date().toISOString(),
   source: "llm",
 };
+
 const sampleL4: L4Item = {
   id: "sample-l4-roundtrip",
   name: "Sample L4",
+  source: "llm",
   aiCurationStatus: "curated",
   aiEligible: true,
   aiPriority: "P1 — Immediate (0-6mo)",
   aiRationale: "Round-trip test.",
   generatedBrief: brief,
+  generatedProcess: {
+    process: buildFallbackProcess({
+      towerId: "finance",
+      l2: "R2R",
+      l3: "Recon",
+      l4Name: "IC matching",
+      l4Id: "sample-l4-roundtrip",
+      aiRationale: "Test proc cache.",
+    }),
+    generatedAt: new Date().toISOString(),
+    source: "llm",
+  },
 };
 const rehydrated = JSON.parse(JSON.stringify(sampleL4)) as L4Item;
 assert(
   Boolean(rehydrated.generatedBrief),
-  "3a) generatedBrief survives JSON serialization (the localStore path)",
+  "3a) generatedBrief survives JSON serialization (localStore path)",
 );
 assert(
   rehydrated.generatedBrief?.source === "llm" &&
@@ -304,6 +320,14 @@ assert(
 assert(
   rehydrated.generatedBrief?.toolsRequired?.[0] === "BlackLine",
   "3d) toolsRequired vendor allow-list value preserved",
+);
+assert(
+  Boolean(rehydrated.generatedProcess?.process?.id),
+  "3e) generatedProcess.process.id survives round-trip",
+);
+assert(
+  rehydrated.generatedProcess?.process.name === "IC matching",
+  "3f) generatedProcess.process.name preserved",
 );
 
 console.log("\n========================================");

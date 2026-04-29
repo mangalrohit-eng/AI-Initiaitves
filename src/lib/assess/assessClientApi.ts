@@ -1,6 +1,6 @@
 import type {
   AssessProgramV2,
-  GeneratedBrief,
+  GeneratedProcessCache,
   L4Item,
   TowerId,
 } from "@/data/assess/types";
@@ -294,13 +294,11 @@ export async function clientCurateInitiatives(
 
 export type CurateBriefInput = {
   towerId: TowerId;
-  /** Parent row L2 (display only — keeps the prompt grounded). */
   l2: string;
-  /** Parent row L3. */
   l3: string;
-  /** L4 name verbatim — round-tripped so the server doesn't have to fuzzy-match. */
   l4Name: string;
-  /** L4Item.aiRationale — keeps the brief consistent with the card. */
+  /** Stable L4 id for synthetic `Process.id` and cache keys. */
+  l4Id: string;
   aiRationale: string;
   agentOneLine?: string;
   primaryVendor?: string;
@@ -310,20 +308,15 @@ export type CurateBriefSource = "llm" | "fallback";
 
 export type CurateBriefResult = {
   source: CurateBriefSource;
-  brief: GeneratedBrief;
+  generatedProcess: GeneratedProcessCache;
   warning?: string;
 };
 
 /**
- * Asks the server to generate a Versant-grounded `AIProcessBrief` shape for
- * a single LLM-curated L4. Called lazily by the LLM-brief page on the user's
- * first click; the result is cached on `L4Item.generatedBrief` and flows
- * through the existing `localStore` + `assess_workshop` persistence channel.
- *
- * Server is stateless — the client round-trips the L4 + parent context so
- * the route doesn't have to re-read the persisted assess program. Falls back
- * to a deterministic placeholder brief on any LLM failure so the page
- * always renders.
+ * Asks the server to generate a Versant-grounded full `Process` for a single
+ * LLM-curated L4. Called lazily by the LLM-brief page on the user's first
+ * click; the result is cached on `L4Item.generatedProcess` and flows through
+ * `localStore` + `assess_workshop` persistence.
  */
 export async function clientCurateBrief(
   input: CurateBriefInput,
@@ -351,17 +344,17 @@ export async function clientCurateBrief(
   const data = body as {
     ok?: boolean;
     source?: CurateBriefSource;
-    brief?: GeneratedBrief;
+    generatedProcess?: GeneratedProcessCache;
     warning?: string;
   };
-  if (!data.ok || !data.brief || !data.source) {
-    return { ok: false, error: "Malformed brief response", status: res.status };
+  if (!data.ok || !data.generatedProcess || !data.source) {
+    return { ok: false, error: "Malformed curate-brief response", status: res.status };
   }
   return {
     ok: true,
     result: {
       source: data.source,
-      brief: data.brief,
+      generatedProcess: data.generatedProcess,
       warning: data.warning,
     },
   };

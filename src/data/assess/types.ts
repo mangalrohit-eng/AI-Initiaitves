@@ -1,5 +1,6 @@
 import type {
   AiPriority,
+  Process,
   Tower,
   TowerProcessCriticality,
   TowerProcessFrequency,
@@ -28,14 +29,10 @@ export type NotEligibleReason =
 export type L4ItemSource = "canonical" | "llm" | "fallback" | "manual";
 
 /**
- * Lazily-generated AIProcessBrief content for L4s without a hand-curated
- * overlay match. Populated on first click into the LLM-brief route and
- * cached on the parent `L4Item`. Invalidated implicitly when the row is
- * re-curated (the pipeline rewrites the entire `l4Items` array atomically).
- *
- * Mirror of the hand-curated `AIProcessBrief` shape from `data/types.ts`,
- * trimmed to the five lightweight fields that the brief card renders. Full
- * 4-lens deep dives stay 100% hand-curated — never auto-generated.
+ * Lazily-generated short brief for L4s (legacy v1). Superseded by
+ * `generatedProcess` for the full four-lens `Process` view. Kept for
+ * migration and for JSON round-trip tests; new generations should write
+ * `GeneratedProcessCache` only.
  */
 export type GeneratedBrief = {
   /** Versant-grounded narrative of the current ("today") workflow + pain. */
@@ -50,6 +47,19 @@ export type GeneratedBrief = {
   keyMetric: string;
   generatedAt: string;
   source: "llm" | "fallback";
+};
+
+/**
+ * Full `Process` initiative view cached from the LLM-brief route
+ * (`/tower/.../brief/llm/...`). Drives the same `ProcessMetrics` +
+ * `ProcessExperience` layout as hand-authored process pages.
+ */
+export type GeneratedProcessCache = {
+  process: Process;
+  generatedAt: string;
+  source: "llm" | "fallback";
+  /** Present when `source === "llm"`: which model and API path the server used. */
+  inference?: { model: string; mode: "responses" | "chat" };
 };
 
 /**
@@ -85,14 +95,14 @@ export type L4Item = {
   // ----- Optional click-through targets (when an asset exists) -----
   initiativeId?: string;
   briefSlug?: string;
-  /**
-   * Lazily-generated AIProcessBrief cache for L4s without a hand-curated
-   * `briefSlug` overlay match. Populated on the user's first click into the
-   * LLM-brief route at `/tower/[slug]/brief/llm/[rowId]/[l4Id]`. Subsequent
-   * clicks render from this cache. Cleared implicitly whenever the parent
-   * row's `l4Items` array is rewritten by the curation pipeline.
-   */
+  /** @deprecated Use `generatedProcess` — retained for one-shot migration of older localStorage. */
   generatedBrief?: GeneratedBrief;
+  /**
+   * Cached full `Process` from the LLM-brief route. When present, the lazy
+   * route renders `ProcessExperience` (four-lens) instead of the legacy
+   * short brief panels.
+   */
+  generatedProcess?: GeneratedProcessCache;
 };
 
 /**

@@ -68,6 +68,7 @@ export type CurateLLMRow = {
 };
 
 export type CurateLLMOptions = {
+  /** Override env (`OPENAI_CURATE_INITIATIVES_MODEL` then `OPENAI_MODEL`; default `gpt-4o-mini`). */
   model?: string;
   timeoutMs?: number;
 };
@@ -382,7 +383,10 @@ export async function curateInitiativesWithLLM(
   }
 
   const model =
-    options.model ?? process.env.OPENAI_MODEL?.trim() ?? DEFAULT_MODEL;
+    options.model ??
+    process.env.OPENAI_CURATE_INITIATIVES_MODEL?.trim() ??
+    process.env.OPENAI_MODEL?.trim() ??
+    DEFAULT_MODEL;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   const controller = new AbortController();

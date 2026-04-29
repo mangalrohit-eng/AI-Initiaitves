@@ -7,6 +7,7 @@
  *     l2: string,
  *     l3: string,
  *     l4Name: string,
+ *     l4Id: string,
  *     aiRationale: string,
  *     agentOneLine?: string,
  *     primaryVendor?: string,
@@ -16,47 +17,33 @@
  *   {
  *     ok: true,
  *     source: "llm" | "fallback",
- *     brief: {
- *       preState: string,
- *       postState: string,
- *       agentsInvolved: { name: string; role: string }[],
- *       toolsRequired: string[],
- *       keyMetric: string,
- *       generatedAt: string,
- *       source: "llm" | "fallback",
- *     },
+ *     generatedProcess: { process: Process, generatedAt, source },
  *     warning?: string,
  *   }
- *
- * Behaviour:
- *   - Tries OpenAI first when `OPENAI_API_KEY` is configured.
- *   - Falls back to a deterministic Versant-flavored brief on any LLM
- *     failure so the page always renders. The fallback is intentionally
- *     spare — it tells the user what to fill in next, rather than
- *     fabricating financials.
- *   - Mirrors the contract of `/api/assess/curate-initiatives`. Server is
- *     stateless: input carries the L4 + parent context so we don't need to
- *     read the persisted assess program.
  */
 
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE_NAME, isValidSessionToken } from "@/lib/auth";
 import {
+  buildFallbackProcess,
   curateBriefWithLLM,
+  getCurateBriefInferenceMeta,
   isLLMConfigured,
   type CurateBriefLLMInput,
 } from "@/lib/assess/curateBriefLLM";
-import type { GeneratedBrief, TowerId } from "@/data/assess/types";
+import type { GeneratedProcessCache, TowerId } from "@/data/assess/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 type Body = {
   towerId?: unknown;
   l2?: unknown;
   l3?: unknown;
   l4Name?: unknown;
+  l4Id?: unknown;
   aiRationale?: unknown;
   agentOneLine?: unknown;
   primaryVendor?: unknown;
@@ -81,11 +68,12 @@ export async function POST(req: Request) {
   const l2 = typeof body.l2 === "string" ? body.l2.trim() : "";
   const l3 = typeof body.l3 === "string" ? body.l3.trim() : "";
   const l4Name = typeof body.l4Name === "string" ? body.l4Name.trim() : "";
+  const l4Id = typeof body.l4Id === "string" ? body.l4Id.trim() : "";
   const aiRationale =
     typeof body.aiRationale === "string" ? body.aiRationale.trim() : "";
-  if (!l2 || !l3 || !l4Name || !aiRationale) {
+  if (!l2 || !l3 || !l4Name || !l4Id || !aiRationale) {
     return NextResponse.json(
-      { error: "Missing l2 / l3 / l4Name / aiRationale" },
+      { error: "Missing l2 / l3 / l4Name / l4Id / aiRationale" },
       { status: 400 },
     );
   }
@@ -103,6 +91,7 @@ export async function POST(req: Request) {
     l2,
     l3,
     l4Name,
+    l4Id,
     aiRationale,
     agentOneLine,
     primaryVendor,
@@ -111,19 +100,21 @@ export async function POST(req: Request) {
   let warning: string | undefined;
   if (isLLMConfigured()) {
     try {
-      const result = await curateBriefWithLLM(input);
-      const brief: GeneratedBrief = {
-        ...result,
+      const process = await curateBriefWithLLM(input);
+      const inf = getCurateBriefInferenceMeta();
+      const generatedProcess: GeneratedProcessCache = {
+        process,
         generatedAt: new Date().toISOString(),
         source: "llm",
+        inference: { model: inf.model, mode: inf.mode },
       };
       return NextResponse.json(
-        { ok: true, source: "llm" as const, brief },
+        { ok: true, source: "llm" as const, generatedProcess },
         { status: 200 },
       );
     } catch (e) {
       warning =
-        "AI brief generation unavailable; rendered the deterministic placeholder. " +
+        "AI process generation unavailable; rendered the deterministic placeholder. " +
         (e instanceof Error ? e.message : "Unknown LLM error.") +
         ` [env=${describeRuntimeEnv()}]`;
     }
@@ -133,32 +124,15 @@ export async function POST(req: Request) {
       ` [env=${describeRuntimeEnv()}]`;
   }
 
-  // Deterministic fallback. Intentionally spare — the user knows the brief
-  // wasn't LLM-generated and the page surfaces the warning. We don't
-  // fabricate financials or agent specifics; we hand back a placeholder
-  // shape that respects the Versant content rules ("TBD — subject to
-  // discovery" rather than invented dollars).
-  const brief: GeneratedBrief = {
-    preState: `${l3} → ${l4Name} runs manually today across ${towerId.replace(/-/g, " ")} workstreams. Cycle time, exception rate, and headcount cost — TBD — subject to discovery during the deeper assessment.`,
-    postState: `${agentOneLine ?? "An agent stack"} replaces the routine work. Humans focus on review, exceptions, and edge cases. Specific savings — TBD — subject to discovery.`,
-    agentsInvolved: [
-      {
-        name: "Primary Agent",
-        role:
-          agentOneLine ??
-          "Executes the routine workflow end-to-end and surfaces exceptions for human review.",
-      },
-    ],
-    toolsRequired: primaryVendor
-      ? [primaryVendor]
-      : ["TBD — subject to discovery"],
-    keyMetric: "TBD — subject to discovery",
+  const process = buildFallbackProcess(input);
+  const generatedProcess: GeneratedProcessCache = {
+    process,
     generatedAt: new Date().toISOString(),
     source: "fallback",
   };
 
   return NextResponse.json(
-    { ok: true, source: "fallback" as const, brief, warning },
+    { ok: true, source: "fallback" as const, generatedProcess, warning },
     { status: 200 },
   );
 }

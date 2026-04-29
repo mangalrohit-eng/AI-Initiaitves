@@ -83,7 +83,8 @@ export type InitiativeL4 = {
    * hit) that don't carry a hand-curated `briefSlug` overlay match. The
    * UI prefers `initiativeId` → `briefSlug` → `llmBriefHref`. Resolves to
    * `/tower/[slug]/brief/llm/[rowId]/[l4Id]` and the page generates the
-   * brief on first visit, caching it on `L4Item.generatedBrief`.
+   * brief on first visit, caching the result on `L4Item.generatedProcess` (full
+   * `Process`) or legacy `L4Item.generatedBrief` for older stores.
    */
   llmBriefHref?: string;
 };

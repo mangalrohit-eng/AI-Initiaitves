@@ -8,6 +8,34 @@ import { ASSESS_WORKSHOP_ID, getDb, isDatabaseUrlConfigured } from "@/lib/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** True when Postgres is configured but the driver failed to connect or query (not a logic error). */
+function isDatabaseConnectionFailure(e: unknown): boolean {
+  const parts: string[] = [];
+  parts.push(String(e));
+  if (e instanceof Error) {
+    parts.push(e.message, e.name, "code" in e ? String((e as NodeJS.ErrnoException).code) : "");
+  }
+  if (typeof AggregateError !== "undefined" && e instanceof AggregateError) {
+    for (const err of e.errors) {
+      if (err instanceof Error) parts.push(err.message, err.name);
+    }
+  }
+  const s = parts.join(" ").toLowerCase();
+  return (
+    s.includes("connect_timeout") ||
+    s.includes("econnrefused") ||
+    s.includes("etimedout") ||
+    s.includes("enotfound") ||
+    s.includes("eai_again") ||
+    s.includes("getaddrinfo") ||
+    s.includes("connection terminated") ||
+    s.includes("connection closed") ||
+    s.includes("socket closed") ||
+    s.includes("password authentication failed") ||
+    s.includes("server closed the connection")
+  );
+}
+
 /**
  * GET — load persisted assess program, or { program: null, db: unconfigured } if no DB URL env is set.
  * PUT — validate body as AssessProgramV2 and upsert one row in Postgres.
@@ -49,6 +77,12 @@ export async function GET() {
       { status: 200 },
     );
   } catch (e) {
+    if (isDatabaseConnectionFailure(e)) {
+      return NextResponse.json(
+        { ok: true, program: null, db: "unavailable" as const },
+        { status: 200 },
+      );
+    }
     const msg = e instanceof Error ? e.message : "Database error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }

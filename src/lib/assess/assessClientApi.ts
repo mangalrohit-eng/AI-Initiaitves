@@ -27,7 +27,9 @@ export type InferDefaultsResult = {
 export type GetAssessResponse =
   | { ok: true; program: AssessProgramV2; db: "ok"; updatedAt: string | null }
   | { ok: true; program: null; db: "ok"; updatedAt: null }
-  | { ok: true; program: null; db: "unconfigured" };
+  | { ok: true; program: null; db: "unconfigured" }
+  /** DATABASE_URL is set but Postgres could not be reached (timeout, DNS, refused, etc.). */
+  | { ok: true; program: null; db: "unavailable" };
 
 export async function clientGetAssess(): Promise<{
   ok: boolean;

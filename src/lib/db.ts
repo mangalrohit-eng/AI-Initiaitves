@@ -23,7 +23,7 @@ export function getDb(): ReturnType<typeof postgres> | null {
   const url = getDatabaseUrl();
   if (!url) return null;
   if (!sqlInstance) {
-    sqlInstance = postgres(url, { max: 1, idle_timeout: 20, connect_timeout: 10 });
+    sqlInstance = postgres(url, { max: 1, idle_timeout: 20, connect_timeout: 20 });
   }
   return sqlInstance;
 }

@@ -10,7 +10,7 @@ import { SaveStatusPill } from "@/components/assess/SaveStatusPill";
 const DEBOUNCE_MS = 650;
 
 export type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
-type DbMode = "unknown" | "unconfigured" | "cloud" | "cloud_empty";
+type DbMode = "unknown" | "unconfigured" | "unavailable" | "cloud" | "cloud_empty";
 
 type Ctx = {
   /** Load complete; safe to read assess UI state. */
@@ -91,6 +91,12 @@ export function AssessSyncProvider({ children }: { children: React.ReactNode }) 
     if (d.db === "unconfigured") {
       setCanSync(false);
       setDbMode("unconfigured");
+      setReady(true);
+      return;
+    }
+    if (d.db === "unavailable") {
+      setCanSync(false);
+      setDbMode("unavailable");
       setReady(true);
       return;
     }
@@ -193,6 +199,16 @@ export function AssessSyncProvider({ children }: { children: React.ReactNode }) 
             <div className="border-b border-forge-hint/40 bg-forge-well/50 px-4 py-2 text-center text-xs text-forge-hint">
               Assess data is local to this browser only. Set <code className="font-mono">DATABASE_URL</code> in{" "}
               <code className="font-mono">.env.local</code> and run the migration to enable shared persistence.
+            </div>
+          ) : null}
+          {dbMode === "unavailable" ? (
+            <div className="border-b border-accent-amber/40 bg-accent-amber/5 px-4 py-2 text-center text-xs text-forge-body">
+              Could not reach the assessment database (timeout, refused, or bad{" "}
+              <code className="font-mono">DATABASE_URL</code>). You are on{" "}
+              <span className="font-semibold text-forge-ink">browser-local data</span> only until the connection
+              works. Fix or remove <code className="font-mono">DATABASE_URL</code> /{" "}
+              <code className="font-mono">POSTGRES_URL</code> in <code className="font-mono">.env.local</code>, then
+              retry from the save pill or reload.
             </div>
           ) : null}
           <SaveStatusPill />

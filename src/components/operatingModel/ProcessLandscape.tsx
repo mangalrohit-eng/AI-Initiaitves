@@ -105,6 +105,12 @@ function L4Row({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span
+                className="rounded border border-forge-border bg-forge-well px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-forge-hint"
+                title="Hierarchy level"
+              >
+                L4
+              </span>
+              <span
                 className={cn(
                   "font-medium",
                   l4.isPlaceholder ? "italic text-forge-subtle" : "text-forge-ink",
@@ -270,6 +276,7 @@ function L3RowCard({
   onToggle,
   reviews,
   actions,
+  showBreadcrumb = true,
 }: {
   l3: InitiativeL3;
   tower: Tower;
@@ -277,6 +284,7 @@ function L3RowCard({
   onToggle: () => void;
   reviews: Record<string, InitiativeReview>;
   actions: UseInitiativeReviewsResult["actions"];
+  showBreadcrumb?: boolean;
 }) {
   const maxTier = React.useMemo(() => {
     const tiers = l3.l4s.map((l) => priorityTier(l.aiPriority)).filter(Boolean);
@@ -303,6 +311,12 @@ function L3RowCard({
       >
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="rounded border border-forge-border bg-forge-well px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-forge-hint"
+              title="Hierarchy level"
+            >
+              L3
+            </span>
             <span className="font-display text-sm font-semibold text-forge-ink">
               {l3.l3.name}
             </span>
@@ -322,6 +336,11 @@ function L3RowCard({
               {l3.l4s.length === 1 ? "activity" : "activities"}
             </span>
           </div>
+          {showBreadcrumb ? (
+            <p className="mt-1 font-mono text-[11px] text-forge-hint">
+              {l3.l2Name} · {l3.l3.name}
+            </p>
+          ) : null}
           {l3.l3.description ? (
             <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-forge-subtle">
               {l3.l3.description}
@@ -403,77 +422,143 @@ function L3RowCard({
 }
 
 /**
- * Renders one L2 work-category panel: header with the L2 description / icon,
- * and a vertical list of L3 cards each expandable to show AI-eligible L4s.
+ * Nested L2 sections with L3 rows (L4 expands per L3). All L2s visible;
+ * L3 panels start collapsed.
  */
 export function ProcessLandscape({
-  l2,
+  l2s,
   tower,
   reviews,
   actions,
 }: {
-  l2: InitiativeL2;
+  l2s: InitiativeL2[];
   tower: Tower;
   reviews: Record<string, InitiativeReview>;
   actions: UseInitiativeReviewsResult["actions"];
 }) {
-  const Icon = resolveIcon(l2.l2.icon);
-  const [expandedL3, setExpandedL3] = React.useState<string | null>(
-    l2.l3s[0]?.l3.id ?? null,
+  const [expandedL3Keys, setExpandedL3Keys] = React.useState<Set<string>>(
+    () => new Set(),
   );
 
-  return (
-    <AnimatePresence mode="wait">
-      <motion.section
-        key={l2.l2.id}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -8 }}
-        transition={{ duration: 0.25, ease: "easeOut" }}
-        className="overflow-hidden rounded-2xl border border-forge-border bg-forge-surface shadow-card"
-      >
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-forge-border bg-forge-well/60 px-5 py-4">
-          <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-accent-purple/40 bg-accent-purple/10 text-accent-purple-dark">
-              <Icon className="h-5 w-5" />
-            </span>
-            <div>
-              <div className="font-display text-lg font-semibold text-forge-ink">
-                {l2.l2.name}
-              </div>
-              {l2.l2.description ? (
-                <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-forge-subtle">
-                  {l2.l2.description}
-                </p>
-              ) : null}
-            </div>
-          </div>
-          <div className="text-right text-xs text-forge-subtle">
-            <div className="font-mono text-lg font-semibold tabular-nums text-forge-ink">
-              {formatUsdCompact(l2.totalAiUsd)}
-            </div>
-            <div className="text-[10px] uppercase tracking-wider text-forge-hint">
-              modeled AI under this L2
-            </div>
-          </div>
-        </header>
+  const toggleL3 = React.useCallback((l2Id: string, l3Id: string) => {
+    const key = `${l2Id}::${l3Id}`;
+    setExpandedL3Keys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
-        <div className="space-y-2 p-4 sm:p-5">
-          {l2.l3s.map((l3) => (
-            <L3RowCard
-              key={l3.l3.id}
-              l3={l3}
-              tower={tower}
-              expanded={expandedL3 === l3.l3.id}
-              onToggle={() =>
-                setExpandedL3((prev) => (prev === l3.l3.id ? null : l3.l3.id))
-              }
-              reviews={reviews}
-              actions={actions}
-            />
-          ))}
+  const collapseAll = React.useCallback(() => {
+    setExpandedL3Keys(new Set());
+  }, []);
+
+  const anyExpanded = expandedL3Keys.size > 0;
+
+  return (
+    <div className="space-y-6">
+      {l2s.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="max-w-3xl text-xs text-forge-subtle">
+            The{" "}
+            <span className="font-medium text-forge-body">Priority roadmap</span>{" "}
+            tab lists only P1–P3-tagged activities; this view is the full scoped
+            set. Expand an L3 row for L4 activities.
+          </p>
+          {anyExpanded ? (
+            <button
+              type="button"
+              onClick={collapseAll}
+              className="shrink-0 text-xs font-medium text-accent-purple-dark hover:underline"
+            >
+              Collapse all
+            </button>
+          ) : null}
         </div>
-      </motion.section>
-    </AnimatePresence>
+      ) : null}
+
+      {l2s.map((l2) => {
+        const Icon = resolveIcon(l2.l2.icon);
+        return (
+          <motion.section
+            key={l2.l2.id}
+            id={`l2-${l2.l2.id}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="overflow-hidden scroll-mt-24 rounded-2xl border border-forge-border bg-forge-surface shadow-card"
+          >
+            <header className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-forge-border bg-forge-well/95 px-4 py-3 backdrop-blur-sm sm:px-5 sm:py-4">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <span
+                  className="mt-0.5 rounded border border-forge-border bg-forge-surface px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-forge-hint"
+                  title="Hierarchy level"
+                >
+                  L2
+                </span>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-accent-purple/40 bg-accent-purple/10 text-accent-purple-dark">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <div className="font-display text-lg font-semibold text-forge-ink">
+                    {l2.l2.name}
+                  </div>
+                  {l2.l2.description ? (
+                    <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-forge-subtle">
+                      {l2.l2.description}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1 text-right text-xs text-forge-subtle sm:flex-row sm:items-center sm:gap-4">
+                <div className="text-right">
+                  <div className="text-[10px] uppercase tracking-wider text-forge-hint">
+                    AI-eligible activities
+                  </div>
+                  <div className="font-mono text-sm font-semibold tabular-nums text-forge-ink">
+                    {l2.curatedL4Count}
+                    {l2.placeholderL4Count > 0 ? (
+                      <span className="font-normal text-forge-hint">
+                        {" "}
+                        (+{l2.placeholderL4Count} pending)
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] uppercase tracking-wider text-forge-hint">
+                    Modeled AI $
+                  </div>
+                  <div className="font-mono text-lg font-semibold tabular-nums text-forge-ink">
+                    {formatUsdCompact(l2.totalAiUsd)}
+                  </div>
+                </div>
+              </div>
+            </header>
+
+            <div className="overflow-x-auto">
+              <div className="min-w-[min(100%,640px)] space-y-2 p-4 sm:p-5">
+                {l2.l3s.map((l3) => {
+                  const key = `${l2.l2.id}::${l3.l3.id}`;
+                  return (
+                    <L3RowCard
+                      key={l3.l3.id}
+                      l3={l3}
+                      tower={tower}
+                      expanded={expandedL3Keys.has(key)}
+                      onToggle={() => toggleL3(l2.l2.id, l3.l3.id)}
+                      reviews={reviews}
+                      actions={actions}
+                      showBreadcrumb
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </motion.section>
+        );
+      })}
+    </div>
   );
 }

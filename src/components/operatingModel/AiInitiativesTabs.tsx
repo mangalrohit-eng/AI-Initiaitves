@@ -41,7 +41,7 @@ const TABS: ReadonlyArray<TabDef> = [
  *
  * Both panes are always mounted and the inactive one is hidden via the
  * Tailwind `hidden` class so internal state inside OperatingModelSection
- * (active L2 card) and ProcessLandscape (expanded L3 rows) survives tab
+ * (expanded L3 keys in ProcessLandscape) and AiRoadmap survives tab
  * switches — important for the user-experience feel of the page.
  *
  * The StaleCurationBanner is hoisted up here from OperatingModelSection

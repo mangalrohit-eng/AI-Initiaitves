@@ -9,6 +9,7 @@ import { AiInitiativesTabs } from "@/components/operatingModel/AiInitiativesTabs
 import { InitiativeReviewChip } from "@/components/operatingModel/InitiativeReviewChip";
 import { TowerHeader } from "@/components/towers/TowerHeader";
 import { TowerAiJourneyGuidance } from "@/components/towers/TowerAiJourneyGuidance";
+import { TowerDataExports } from "@/components/assess/TowerDataExports";
 import { ShareBar } from "@/components/ui/ShareBar";
 import { ViewTracker } from "@/components/collab/ViewTracker";
 import { towers } from "@/data/towers";
@@ -60,6 +61,8 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
           towerName={tower.name}
           current="ai-initiatives"
         />
+
+        <TowerDataExports tower={tower} className="mt-3" />
 
         <TowerAiJourneyGuidance tower={tower} />
 

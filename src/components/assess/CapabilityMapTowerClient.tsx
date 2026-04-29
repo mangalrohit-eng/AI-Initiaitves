@@ -46,6 +46,8 @@ import {
   isL1L3TreeLocked,
   isCapabilityMapJourneyStepDone,
 } from "@/lib/assess/capabilityMapStepStatus";
+import { TowerDataExports } from "@/components/assess/TowerDataExports";
+import { towers } from "@/data/towers";
 import { cn } from "@/lib/utils";
 import {
   ReplaceUploadConfirmDialog,
@@ -283,6 +285,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   const journeyGuidance = useGuidanceCapabilityMap(towerId);
   const onConfirmGuidance =
     journeyGuidance.actionKind === "confirm" ? () => void markL1L3TreeValidated() : undefined;
+  const towerVm = towers.find((t) => t.id === towerId);
   return (
     <>
     <PageShell>
@@ -302,6 +305,8 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
           current="capability-map"
           completed={completedModules}
         />
+
+        {towerVm ? <TowerDataExports tower={towerVm} className="mt-3" /> : null}
 
         <ScreenGuidanceBar
           guidance={journeyGuidance}

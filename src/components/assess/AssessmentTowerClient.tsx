@@ -32,6 +32,8 @@ import { getTowerHref } from "@/lib/towerHref";
 import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
+import { TowerDataExports } from "@/components/assess/TowerDataExports";
+import { towers } from "@/data/towers";
 
 type Props = { towerId: TowerId; towerName: string };
 
@@ -276,6 +278,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
   // the seeded program.
   const staleState = getTowerStaleState(tState);
   const impactGuidance = useGuidanceImpactLevers(towerId, towerName);
+  const towerVm = towers.find((t) => t.id === towerId);
 
   return (
     <PageShell>
@@ -295,6 +298,8 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
           current="impact-levers"
           completed={completedModules}
         />
+
+        {towerVm ? <TowerDataExports tower={towerVm} className="mt-3" /> : null}
 
         <ScreenGuidanceBar guidance={impactGuidance} className="mt-3" />
 

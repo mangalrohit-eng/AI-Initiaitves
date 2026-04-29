@@ -5,6 +5,7 @@ import type { Tower } from "@/data/types";
 import type { TowerId } from "@/data/assess/types";
 import { towers } from "@/data/towers";
 import { getAssessProgram, getMyTowers, subscribe } from "@/lib/localStore";
+import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
 import { getTowerStaleState } from "@/lib/initiatives/curationHash";
 import { useInitiativeReviews } from "@/lib/initiatives/useInitiativeReviews";
 import {
@@ -49,6 +50,9 @@ export function useGuidanceCapabilityMap(towerId: TowerId): ResolvedJourneyGuida
       blankL4Count,
       stale,
       towerId,
+      l1L3JourneyStepComplete: isCapabilityMapJourneyStepDone(
+        program.towers[towerId],
+      ),
     });
   }, [program, towerId]);
 }

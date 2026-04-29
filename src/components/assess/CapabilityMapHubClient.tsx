@@ -32,19 +32,24 @@ import {
 } from "@/lib/localStore";
 import type { AssessProgramV2, TowerId } from "@/data/assess/types";
 import { getTowerHref } from "@/lib/towerHref";
+import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
 
-type RowStatus = "not-started" | "in-progress" | "complete";
+type RowStatus = "not-started" | "in-progress" | "map-confirmed" | "complete";
 
 function rowStatus(program: AssessProgramV2, towerId: TowerId): RowStatus {
   const t = program.towers[towerId];
   if (!t || !t.l3Rows.length) return "not-started";
-  return t.status === "complete" ? "complete" : "in-progress";
+  if (t.status === "complete") return "complete";
+  if (isCapabilityMapJourneyStepDone(t)) return "map-confirmed";
+  return "in-progress";
 }
 
 function statusCopy(s: RowStatus): { label: string; className: string } {
   if (s === "complete") return { label: "Reviewed by Tower Lead", className: "text-accent-green" };
+  if (s === "map-confirmed")
+    return { label: "L1–L3 confirmed", className: "text-accent-green" };
   if (s === "in-progress")
-    return { label: "Pending Tower Lead review", className: "text-accent-amber" };
+    return { label: "Pending map confirmation", className: "text-accent-amber" };
   return { label: "Not started", className: "text-forge-subtle" };
 }
 
@@ -101,10 +106,13 @@ export function CapabilityMapHubClient() {
     status: rowStatus(program, tw.id as TowerId),
     isMine: minePicked && mine.includes(tw.id as TowerId),
   }));
-  const completed = statuses.filter((s) => s.status === "complete").length;
+  const mapConfirmed = statuses.filter(
+    (s) => s.status === "map-confirmed" || s.status === "complete",
+  ).length;
   const inProgress = statuses.filter((s) => s.status === "in-progress").length;
+  const notStarted = statuses.filter((s) => s.status === "not-started").length;
 
-  const hasAnyData = completed + inProgress > 0;
+  const hasAnyData = mapConfirmed + inProgress > 0;
 
   return (
     <PageShell>
@@ -195,7 +203,7 @@ export function CapabilityMapHubClient() {
             &gt; Towers ({towers.length}){minePicked ? " · my towers first" : ""}
           </h2>
           <span className="font-mono text-[11px] tabular-nums text-forge-hint">
-            {completed} reviewed · {inProgress} in progress · {towers.length - completed - inProgress} not started
+            {mapConfirmed} L1–L3 confirmed · {inProgress} in progress · {notStarted} not started
           </span>
         </div>
         <ul
@@ -230,10 +238,10 @@ export function CapabilityMapHubClient() {
                     </span>
                   </div>
                   <div className={`flex items-center gap-1.5 text-[11px] ${s.className}`}>
-                    {status === "complete" ? (
-                      <CheckCircle2 className="h-3 w-3" />
-                    ) : (
+                    {status === "not-started" || status === "in-progress" ? (
                       <Circle className="h-3 w-3" />
+                    ) : (
+                      <CheckCircle2 className="h-3 w-3" />
                     )}
                     <span className="truncate">{s.label}</span>
                   </div>

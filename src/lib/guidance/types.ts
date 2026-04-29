@@ -12,6 +12,11 @@ export type ResolvedJourneyGuidance = {
   /** Optional primary link for this screen (e.g. program home resume). */
   actionHref?: string;
   actionLabel?: string;
+  /**
+   * "confirm" = primary CTA is a button (ScreenGuidanceBar + onConfirm).
+   * Omitted or "link" = primary is a Next.js Link to actionHref.
+   */
+  actionKind?: "link" | "confirm";
   staleKind: StaleKind;
 };
 
@@ -20,6 +25,8 @@ export type CapabilityMapGuidanceInput = {
   blankL4Count: number;
   stale: TowerStaleState;
   towerId: import("@/data/assess/types").TowerId;
+  /** True after user confirms L1–L3, or legacy `status === "complete"`. */
+  l1L3JourneyStepComplete: boolean;
 };
 
 export type ImpactLeversGuidanceInput = {

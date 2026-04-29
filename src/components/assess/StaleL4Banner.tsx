@@ -25,6 +25,7 @@ export function StaleL4Banner({
   generating,
   onGenerate,
   hideTitle = false,
+  mapLocked = false,
 }: {
   blankL4Count: number;
   totalL3s: number;
@@ -32,6 +33,7 @@ export function StaleL4Banner({
   onGenerate: () => void;
   /** When the screen guidance bar already states the primary headline. */
   hideTitle?: boolean;
+  mapLocked?: boolean;
 }) {
   if (blankL4Count === 0) return null;
 
@@ -72,11 +74,13 @@ export function StaleL4Banner({
         <button
           type="button"
           onClick={onGenerate}
-          disabled={generating}
+          disabled={generating || mapLocked}
           title={
-            generating
-              ? "Generation in progress"
-              : "Run the Versant-grounded LLM to fill in L4 activities for blank L3 capabilities."
+            mapLocked
+              ? "Unlock the map in the action bar to generate L4 activities."
+              : generating
+                ? "Generation in progress"
+                : "Run the Versant-grounded LLM to fill in L4 activities for blank L3 capabilities."
           }
           className={cn(
             "inline-flex items-center gap-2 rounded-lg bg-accent-amber px-4 py-2 text-sm font-semibold text-near-black transition",

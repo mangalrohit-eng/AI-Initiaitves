@@ -32,9 +32,19 @@ export function resolveCapabilityMapGuidance(
       actionLabel: "Jump to Generate L4",
     };
   }
+  if (!input.l1L3JourneyStepComplete) {
+    return {
+      tier: 2,
+      title:
+        "Review the L1–L3 tree and headcount for this tower, then mark it validated to continue.",
+      staleKind: null,
+      actionLabel: "Confirm L1–L3 reviewed",
+      actionKind: "confirm",
+    };
+  }
   return {
     tier: 2,
-    title: "Validate the L1–L3 tree, confirm headcount in the table, then open Configure Impact Levers for the same tower.",
+    title: "Next: open Configure Impact Levers to score offshore and AI dials for each L3.",
     staleKind: null,
     actionHref: getTowerHref(towerId, "impact-levers"),
     actionLabel: "Configure Impact Levers",

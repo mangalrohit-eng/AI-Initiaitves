@@ -23,12 +23,22 @@ function tierStyles(tier: GuidanceTier): { border: string; icon: string } {
 export function ScreenGuidanceBar({
   guidance,
   className,
+  onConfirm,
+  onUnlock,
+  mapStepLocked,
 }: {
   guidance: ResolvedJourneyGuidance;
   className?: string;
+  onConfirm?: () => void;
+  onUnlock?: () => void;
+  /**
+   * When the tower lead has marked L1–L3 as reviewed (lock). Shows an
+   * secondary Unlock control on the Capability Map.
+   */
+  mapStepLocked?: boolean;
 }) {
   const pathname = usePathname();
-  const { tier, title, actionHref, actionLabel } = guidance;
+  const { tier, title, actionHref, actionLabel, actionKind } = guidance;
   const styles = tierStyles(tier);
 
   const linkHref = React.useMemo(() => {
@@ -38,6 +48,21 @@ export function ScreenGuidanceBar({
     }
     return actionHref;
   }, [actionHref, pathname]);
+
+  const isConfirm = actionKind === "confirm" && actionLabel;
+  const isLinkPrimary = !isConfirm && linkHref && actionLabel;
+
+  const ctaClass = cn(
+    "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition sm:w-auto",
+    tier === 1
+      ? "bg-accent-amber text-near-black hover:bg-accent-amber/90"
+      : "bg-accent-purple text-white hover:bg-accent-purple-dark",
+  );
+
+  if (isConfirm && process.env.NODE_ENV === "development" && !onConfirm) {
+    // eslint-disable-next-line no-console
+    console.warn("ScreenGuidanceBar: actionKind confirm without onConfirm");
+  }
 
   return (
     <section
@@ -64,22 +89,32 @@ export function ScreenGuidanceBar({
             </div>
           </div>
         </div>
-        {linkHref && actionLabel ? (
-          <div className="shrink-0 w-full sm:w-auto sm:pl-0 pl-7">
-            <Link
-              href={linkHref}
-              className={cn(
-                "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition sm:w-auto",
-                tier === 1
-                  ? "bg-accent-amber text-near-black hover:bg-accent-amber/90"
-                  : "bg-accent-purple text-white hover:bg-accent-purple-dark",
-              )}
+        <div className="flex w-full shrink-0 flex-wrap items-stretch justify-end gap-2 sm:items-center sm:pl-0 pl-7">
+          {mapStepLocked && onUnlock ? (
+            <button
+              type="button"
+              onClick={onUnlock}
+              className="inline-flex w-full min-w-0 items-center justify-center rounded-lg border border-forge-border bg-forge-well/50 px-3.5 py-2 text-sm font-medium text-forge-body transition hover:border-accent-purple/35 hover:text-forge-ink sm:w-auto"
             >
-              {actionLabel}
-              <ChevronRight className="h-4 w-4" aria-hidden />
-            </Link>
-          </div>
-        ) : null}
+              Unlock to edit map
+            </button>
+          ) : null}
+          {isConfirm && actionLabel && onConfirm ? (
+            <div className="w-full sm:w-auto">
+              <button type="button" onClick={onConfirm} className={cn("w-full", ctaClass)}>
+                {actionLabel}
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          ) : isLinkPrimary ? (
+            <div className="w-full sm:w-auto">
+              <Link href={linkHref!} className={cn("inline-flex w-full sm:w-auto", ctaClass)}>
+                {actionLabel}
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </Link>
+            </div>
+          ) : null}
+        </div>
       </div>
     </section>
   );

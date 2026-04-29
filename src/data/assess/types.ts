@@ -218,6 +218,11 @@ export type TowerAssessStatus = "empty" | "data" | "complete";
  */
 export type TowerAssessReview = {
   capabilityMapConfirmedAt?: string;
+  /**
+   * Set when the tower lead confirms the L1–L3 review from the journey bar on
+   * the Capability Map. Locks map/headcount edits until explicit unlock.
+   */
+  l1L3TreeValidatedAt?: string;
   headcountConfirmedAt?: string;
   offshoreConfirmedAt?: string;
   aiConfirmedAt?: string;

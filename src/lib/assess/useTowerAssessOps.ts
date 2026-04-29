@@ -19,6 +19,7 @@ import {
   setTowerAssess,
   subscribe,
 } from "@/lib/localStore";
+import { isL1L3TreeLocked } from "@/lib/assess/capabilityMapStepStatus";
 
 export type TowerAssessOps = ReturnType<typeof useTowerAssessOps>;
 
@@ -68,6 +69,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
   const patchRow = React.useCallback(
     (id: string, patch: Partial<L3WorkforceRow>) => {
       const cur = getAssessProgram().towers[towerId] ?? defaultTowerState();
+      if (isL1L3TreeLocked(cur)) return;
       setTowerAssess(towerId, {
         l3Rows: cur.l3Rows.map((r) => (r.id === id ? { ...r, ...patch } : r)),
         status: cur.status === "empty" ? "data" : cur.status,
@@ -100,6 +102,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
         baseline: { ...defaultTowerBaseline },
         status: "data",
         capabilityMapConfirmedAt: new Date().toISOString(),
+        l1L3TreeValidatedAt: undefined,
         headcountConfirmedAt: undefined,
         offshoreConfirmedAt: undefined,
         aiConfirmedAt: undefined,
@@ -131,6 +134,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
         baseline: seed.baseline,
         status: seed.status,
         capabilityMapConfirmedAt: undefined,
+        l1L3TreeValidatedAt: undefined,
       });
       if (sync?.canSync) await sync.flushSave();
       return { rows: seed.l3Rows.length };
@@ -251,6 +255,22 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     });
   }, [rows.length, sync, toast, towerId, towerName]);
 
+  const markL1L3TreeValidated = React.useCallback(async () => {
+    setTowerAssess(towerId, {
+      l1L3TreeValidatedAt: new Date().toISOString(),
+    });
+    if (sync?.canSync) await sync.flushSave();
+  }, [sync, towerId]);
+
+  const clearL1L3TreeValidation = React.useCallback(async () => {
+    setTowerAssess(towerId, { l1L3TreeValidatedAt: undefined });
+    if (sync?.canSync) await sync.flushSave();
+    toast.info({
+      title: "Capability map unlocked for editing",
+      description: "You can change headcount, upload a new map, or adjust L4 activities. Confirm again when ready to proceed.",
+    });
+  }, [sync, toast, towerId]);
+
   return {
     program,
     tState,
@@ -268,5 +288,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     overwriteAllOp,
     doMarkComplete,
     doUnmarkComplete,
+    markL1L3TreeValidated,
+    clearL1L3TreeValidation,
   };
 }

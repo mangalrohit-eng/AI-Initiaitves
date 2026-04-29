@@ -12,6 +12,7 @@ import {
 } from "@/lib/assess/capabilityCounts";
 import { VERSANT_REPORTED_FTE } from "@/data/assess/seedAssessProgram";
 import { towers } from "@/data/towers";
+import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -54,6 +55,9 @@ export function CapabilityScoreboard(props: Props) {
     const counts = programCounts!;
     const headcount = programHeadcount!;
     const completed = towers.filter(
+      (t) => isCapabilityMapJourneyStepDone(program.towers[t.id]),
+    ).length;
+    const leadSignOff = towers.filter(
       (t) => program.towers[t.id]?.status === "complete",
     ).length;
     const versantGap = headcount.fte - VERSANT_REPORTED_FTE;
@@ -107,9 +111,15 @@ export function CapabilityScoreboard(props: Props) {
         />
         <Tile
           icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-          label="Towers reviewed"
+          label="L1–L3 confirmed"
           value={`${completed}/${towers.length}`}
-          subtle={completed > 0 ? "signed off by tower lead" : "awaiting tower lead review"}
+          subtle={
+            leadSignOff > 0
+              ? `${leadSignOff} also signed off on impact levers`
+              : completed > 0
+                ? "confirm on each tower or legacy Step 2 sign-off"
+                : "awaiting confirmation on capability maps"
+          }
           accent={completed > 0 ? "green" : undefined}
         />
       </div>

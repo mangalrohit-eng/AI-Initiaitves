@@ -42,6 +42,10 @@ import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import { getAssessProgram, setTowerAssess } from "@/lib/localStore";
 import { getTowerHref } from "@/lib/towerHref";
+import {
+  isL1L3TreeLocked,
+  isCapabilityMapJourneyStepDone,
+} from "@/lib/assess/capabilityMapStepStatus";
 import { cn } from "@/lib/utils";
 import {
   ReplaceUploadConfirmDialog,
@@ -65,8 +69,17 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   const toast = useToast();
   const sync = useAssessSync();
   const ops = useTowerAssessOps(towerId, towerName);
-  const { rows, tState, importOp, sampleLoadOp, patchRow } = ops;
+  const {
+    rows,
+    tState,
+    importOp,
+    sampleLoadOp,
+    patchRow,
+    markL1L3TreeValidated,
+    clearL1L3TreeValidation,
+  } = ops;
   const fileRef = React.useRef<HTMLInputElement>(null);
+  const mapStepLocked = isL1L3TreeLocked(tState);
 
   // Count L3 capabilities that don't yet have any L4 activities. The Generate
   // L4 button only acts on those (so canonical seeds with activities aren't
@@ -85,6 +98,10 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   const runGenerateL4 = React.useCallback(
     async (mode: "fillBlanks" | "regenerateAll"): Promise<GenerateL4Outcome> => {
       if (!rows.length) throw new Error("Load a capability map & headcount first.");
+      const curCheck = getAssessProgram().towers[towerId];
+      if (isL1L3TreeLocked(curCheck)) {
+        throw new Error("Unlock the capability map in the action bar to change L4 activities.");
+      }
       const targetRows =
         mode === "fillBlanks"
           ? rows.filter((r) => !r.l4Activities || r.l4Activities.length === 0)
@@ -184,13 +201,10 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
     [towerId],
   );
 
-  // Capability-map step counts as "complete" the moment the tower lead has
-  // uploaded a real capability map & headcount (i.e. they replaced the seed
-  // map). The dials step still requires explicit Mark-complete on the
-  // Configure Impact Levers page.
-  const isCapabilityMapAuthored = tState.capabilityMapConfirmedAt != null;
+  // Step 1 is "done" in the journey stepper when L1–L3 is confirmed, or the
+  // tower was already fully signed off before this field existed.
   const completedModules: ReadonlyArray<"capability-map"> =
-    isCapabilityMapAuthored || ops.isComplete ? ["capability-map"] : [];
+    isCapabilityMapJourneyStepDone(tState) ? ["capability-map"] : [];
 
   // Safety dialog state for the upload path. Only shown when the tower
   // already has data — first-time uploads (rows.length === 0) skip the
@@ -267,7 +281,10 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   }, [toast, towerId, towerName]);
 
   const journeyGuidance = useGuidanceCapabilityMap(towerId);
+  const onConfirmGuidance =
+    journeyGuidance.actionKind === "confirm" ? () => void markL1L3TreeValidated() : undefined;
   return (
+    <>
     <PageShell>
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <Breadcrumbs
@@ -286,7 +303,13 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
           completed={completedModules}
         />
 
-        <ScreenGuidanceBar guidance={journeyGuidance} className="mt-3" />
+        <ScreenGuidanceBar
+          guidance={journeyGuidance}
+          className="mt-3"
+          onConfirm={onConfirmGuidance}
+          onUnlock={mapStepLocked ? () => void clearL1L3TreeValidation() : undefined}
+          mapStepLocked={mapStepLocked}
+        />
 
         <div className="mt-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h1 className="font-display text-2xl font-semibold text-forge-ink">
@@ -307,6 +330,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
               blankL4Count={blankL4Count}
               totalL3s={rows.length}
               generating={generateBlanksOp.state === "loading"}
+              mapLocked={mapStepLocked}
               onGenerate={() => void generateBlanksOp.fire()}
               hideTitle
             />
@@ -319,28 +343,10 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
           lastUpdated={tState.lastUpdated}
           uploading={importOp.state === "loading"}
           loadingSample={sampleLoadOp.state === "loading"}
+          mapLocked={mapStepLocked}
           onPickFile={() => fileRef.current?.click()}
           onLoadSample={() => void sampleLoadOp.fire()}
           onDownloadSample={onTemplateDownload}
-        />
-
-        {/* Hidden file input shared by both empty + loaded CTA states. */}
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          className="hidden"
-          onChange={onFile}
-        />
-
-        <ReplaceUploadConfirmDialog
-          open={pendingFile != null}
-          fileName={pendingFile?.name ?? ""}
-          towerName={towerName}
-          busy={replaceBusy}
-          onCancel={closeReplaceDialog}
-          onReplace={onReplaceWithoutBackup}
-          onExportThenReplace={() => void onExportThenReplace()}
         />
 
         {importOp.data && importOp.data.warnings.length > 0 ? (
@@ -358,6 +364,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
               isPreview={isPreview}
               authoredAt={tState.capabilityMapConfirmedAt}
               rowsCount={rows.length}
+              l1L3TreeValidatedAt={tState.l1L3TreeValidatedAt}
             />
             {rows.length > 0 ? (
               <div id="generate-l4-toolbar">
@@ -366,6 +373,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
                   totalL3s={rows.length}
                   generatingBlanks={generateBlanksOp.state === "loading"}
                   regeneratingAll={regenerateAllOp.state === "loading"}
+                  locked={mapStepLocked}
                   onGenerateBlanks={() => void generateBlanksOp.fire()}
                   onRegenerateAll={() => void regenerateAllOp.fire()}
                 />
@@ -401,7 +409,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
                 ›
               </span>
             </summary>
-            <HeadcountTable rows={rows} onPatch={patchRow} />
+            <HeadcountTable readOnly={mapStepLocked} rows={rows} onPatch={patchRow} />
           </details>
         ) : null}
 
@@ -426,6 +434,23 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
         ) : null}
       </div>
     </PageShell>
+    <input
+      ref={fileRef}
+      type="file"
+      accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      className="hidden"
+      onChange={onFile}
+    />
+    <ReplaceUploadConfirmDialog
+      open={pendingFile != null}
+      fileName={pendingFile?.name ?? ""}
+      towerName={towerName}
+      busy={replaceBusy}
+      onCancel={closeReplaceDialog}
+      onReplace={onReplaceWithoutBackup}
+      onExportThenReplace={() => void onExportThenReplace()}
+    />
+    </>
   );
 }
 
@@ -433,10 +458,12 @@ function MapSourceBanner({
   isPreview,
   authoredAt,
   rowsCount,
+  l1L3TreeValidatedAt,
 }: {
   isPreview: boolean;
   authoredAt?: string;
   rowsCount: number;
+  l1L3TreeValidatedAt?: string;
 }) {
   if (isPreview) {
     return (
@@ -453,27 +480,53 @@ function MapSourceBanner({
   }
   if (authoredAt) {
     return (
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent-green/35 bg-accent-green/8 px-3 py-1.5">
-        <span className="inline-flex items-center gap-2 text-xs font-medium text-accent-green">
-          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-          Tower lead upload · {rowsCount} L3 capabilit{rowsCount === 1 ? "y" : "ies"}
-        </span>
-        <span className="text-[11px] text-forge-subtle">
-          Confirmed {formatRelative(authoredAt)} · drives the impact-lever dials &amp; impact estimate downstream.
-        </span>
+      <div className="space-y-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent-green/35 bg-accent-green/8 px-3 py-1.5">
+          <span className="inline-flex items-center gap-2 text-xs font-medium text-accent-green">
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+            Tower lead upload · {rowsCount} L3 capabilit{rowsCount === 1 ? "y" : "ies"}
+          </span>
+          <span className="text-[11px] text-forge-subtle">
+            Confirmed {formatRelative(authoredAt)} · drives the impact-lever dials &amp; impact estimate
+            downstream.
+          </span>
+        </div>
+        {l1L3TreeValidatedAt ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent-teal/35 bg-accent-teal/8 px-3 py-1.5">
+            <span className="text-xs font-medium text-accent-teal">
+              L1–L3 review confirmed — map and headcount are locked for editing.
+            </span>
+            <span className="text-[11px] text-forge-subtle">
+              Confirmed {formatRelative(l1L3TreeValidatedAt)} · use Unlock to edit map in the action
+              bar above.
+            </span>
+          </div>
+        ) : null}
       </div>
     );
   }
   // Rows present but loaded from "Load sample" — seed data, not authored.
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-forge-border bg-forge-well/40 px-3 py-1.5">
-      <span className="inline-flex items-center gap-2 text-xs font-medium text-forge-body">
-        <Info className="h-3.5 w-3.5 text-accent-purple-dark" aria-hidden />
-        Sample seed loaded · {rowsCount} L3 capabilit{rowsCount === 1 ? "y" : "ies"}
-      </span>
-      <span className="text-[11px] text-forge-subtle">
-        Upload your capability map &amp; headcount to confirm the tower lead version.
-      </span>
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-forge-border bg-forge-well/40 px-3 py-1.5">
+        <span className="inline-flex items-center gap-2 text-xs font-medium text-forge-body">
+          <Info className="h-3.5 w-3.5 text-accent-purple-dark" aria-hidden />
+          Sample seed loaded · {rowsCount} L3 capabilit{rowsCount === 1 ? "y" : "ies"}
+        </span>
+        <span className="text-[11px] text-forge-subtle">
+          Upload your capability map &amp; headcount to confirm the tower lead version.
+        </span>
+      </div>
+      {l1L3TreeValidatedAt ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent-teal/35 bg-accent-teal/8 px-3 py-1.5">
+          <span className="text-xs font-medium text-accent-teal">
+            L1–L3 review confirmed — map and headcount are locked for editing.
+          </span>
+          <span className="text-[11px] text-forge-subtle">
+            Confirmed {formatRelative(l1L3TreeValidatedAt)} · use Unlock in the action bar above.
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -494,6 +547,7 @@ function GenerateL4Toolbar({
   totalL3s,
   generatingBlanks,
   regeneratingAll,
+  locked,
   onGenerateBlanks,
   onRegenerateAll,
 }: {
@@ -501,10 +555,12 @@ function GenerateL4Toolbar({
   totalL3s: number;
   generatingBlanks: boolean;
   regeneratingAll: boolean;
+  locked?: boolean;
   onGenerateBlanks: () => void;
   onRegenerateAll: () => void;
 }) {
   const noBlanks = blankL4Count === 0;
+  const disabledAll = locked;
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-forge-border bg-forge-surface/60 px-3 py-2">
       <div className="text-[11px] text-forge-subtle">
@@ -517,16 +573,23 @@ function GenerateL4Toolbar({
             · {blankL4Count} L3{blankL4Count === 1 ? "" : "s"} need generation
           </span>
         )}
+        {locked ? (
+          <span className="ml-1 block text-forge-hint sm:ml-2 sm:inline">
+            Unlock the map in the action bar to change activities.
+          </span>
+        ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <button
           type="button"
           onClick={onGenerateBlanks}
-          disabled={generatingBlanks || noBlanks}
+          disabled={generatingBlanks || noBlanks || disabledAll}
           title={
-            noBlanks
-              ? "Every L3 already has activities. Use Regenerate all to replace them."
-              : "Generate L4 activities only for L3s that don't have any yet."
+            disabledAll
+              ? "Unlock the map in the action bar to generate L4 activities."
+              : noBlanks
+                ? "Every L3 already has activities. Use Regenerate all to replace them."
+                : "Generate L4 activities only for L3s that don't have any yet."
           }
           className={cn(
             "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition",
@@ -546,8 +609,12 @@ function GenerateL4Toolbar({
         <button
           type="button"
           onClick={onRegenerateAll}
-          disabled={regeneratingAll}
-          title="Replace every L3's activity list (LLM-first, canonical-map fallback)."
+          disabled={regeneratingAll || disabledAll}
+          title={
+            disabledAll
+              ? "Unlock the map in the action bar to regenerate L4 activities."
+              : "Replace every L3's activity list (LLM-first, canonical-map fallback)."
+          }
           className="inline-flex items-center gap-1.5 rounded-md border border-forge-border px-2.5 py-1 text-[11px] text-forge-body transition hover:border-accent-purple/30 disabled:opacity-60"
         >
           {regeneratingAll ? "Regenerating..." : "Regenerate all"}
@@ -562,6 +629,7 @@ function CapabilityMapCta({
   lastUpdated,
   uploading,
   loadingSample,
+  mapLocked,
   onPickFile,
   onLoadSample,
   onDownloadSample,
@@ -570,11 +638,14 @@ function CapabilityMapCta({
   lastUpdated?: string;
   uploading: boolean;
   loadingSample: boolean;
+  mapLocked?: boolean;
   onPickFile: () => void;
   onLoadSample: () => void;
   onDownloadSample: () => void;
 }) {
   const isEmpty = rowsCount === 0;
+  const fileDisabled = uploading || mapLocked;
+  const sampleDisabled = loadingSample || mapLocked;
 
   if (isEmpty) {
     return (
@@ -598,7 +669,7 @@ function CapabilityMapCta({
             <button
               type="button"
               onClick={onPickFile}
-              disabled={uploading}
+              disabled={fileDisabled}
               className={cn(
                 "inline-flex items-center gap-2 rounded-lg bg-accent-purple px-4 py-2 text-sm font-semibold text-white transition",
                 "hover:bg-accent-purple-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/50",
@@ -611,7 +682,7 @@ function CapabilityMapCta({
             <button
               type="button"
               onClick={onLoadSample}
-              disabled={loadingSample}
+              disabled={sampleDisabled}
               className="inline-flex items-center gap-2 rounded-lg border border-accent-teal/40 bg-accent-teal/10 px-4 py-2 text-sm font-medium text-accent-teal transition hover:border-accent-teal/60 disabled:opacity-60"
             >
               <Sparkles className="h-4 w-4" aria-hidden />
@@ -678,7 +749,7 @@ function CapabilityMapCta({
         <button
           type="button"
           onClick={onPickFile}
-          disabled={uploading}
+          disabled={fileDisabled}
           className="inline-flex items-center gap-1.5 rounded-md border border-accent-purple/35 bg-accent-purple/10 px-2.5 py-1.5 text-xs font-medium text-accent-purple-dark transition hover:border-accent-purple/55 disabled:opacity-60"
         >
           <Upload className="h-3.5 w-3.5" aria-hidden />
@@ -687,7 +758,7 @@ function CapabilityMapCta({
         <button
           type="button"
           onClick={onLoadSample}
-          disabled={loadingSample}
+          disabled={sampleDisabled}
           className="inline-flex items-center gap-1.5 rounded-md border border-accent-teal/35 bg-accent-teal/10 px-2.5 py-1.5 text-xs font-medium text-accent-teal transition hover:border-accent-teal/55 disabled:opacity-60"
         >
           <Sparkles className="h-3.5 w-3.5" aria-hidden />
@@ -748,9 +819,11 @@ function formatRelative(iso: string): string {
 function HeadcountTable({
   rows,
   onPatch,
+  readOnly,
 }: {
   rows: L3WorkforceRow[];
   onPatch: (id: string, patch: Partial<L3WorkforceRow>) => void;
+  readOnly?: boolean;
 }) {
   return (
     <div className="overflow-x-auto border-t border-forge-border">
@@ -785,10 +858,11 @@ function HeadcountTable({
                 (k) => (
                   <td key={k} className="px-1 py-1">
                     <input
-                      className="w-16 rounded border border-forge-border bg-forge-page px-1 py-0.5 text-right font-mono text-xs"
+                      className="w-16 rounded border border-forge-border bg-forge-page px-1 py-0.5 text-right font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
                       type="number"
                       min={0}
                       step={1}
+                      disabled={readOnly}
                       value={r[k]}
                       onChange={(e) => {
                         const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
@@ -800,10 +874,11 @@ function HeadcountTable({
               )}
               <td className="px-1 py-1">
                 <input
-                  className="w-24 rounded border border-forge-border bg-forge-page px-1 py-0.5 text-right font-mono text-xs"
+                  className="w-24 rounded border border-forge-border bg-forge-page px-1 py-0.5 text-right font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
                   type="number"
                   min={0}
                   step={1000}
+                  disabled={readOnly}
                   value={r.annualSpendUsd ?? ""}
                   placeholder="optional"
                   onChange={(e) => {

@@ -29,6 +29,7 @@ import { getAssessProgram, setTowerAssess } from "@/lib/localStore";
 import { getTowerStaleState } from "@/lib/initiatives/curationHash";
 import type { L3WorkforceRow, TowerId } from "@/data/assess/types";
 import { getTowerHref } from "@/lib/towerHref";
+import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
 
@@ -62,7 +63,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
 
   const completedModules: ReadonlyArray<"capability-map" | "impact-levers"> = (() => {
     const arr: Array<"capability-map" | "impact-levers"> = [];
-    if (rows.length > 0) arr.push("capability-map");
+    if (isCapabilityMapJourneyStepDone(tState)) arr.push("capability-map");
     if (isComplete) arr.push("impact-levers");
     return arr;
   })();

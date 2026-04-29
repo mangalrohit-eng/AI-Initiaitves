@@ -247,6 +247,8 @@ export function importAssessProgramFromJsonText(
           typeof v.capabilityMapConfirmedAt === "string"
             ? v.capabilityMapConfirmedAt
             : undefined,
+        l1L3TreeValidatedAt:
+          typeof v.l1L3TreeValidatedAt === "string" ? v.l1L3TreeValidatedAt : undefined,
         headcountConfirmedAt:
           typeof v.headcountConfirmedAt === "string" ? v.headcountConfirmedAt : undefined,
         offshoreConfirmedAt:

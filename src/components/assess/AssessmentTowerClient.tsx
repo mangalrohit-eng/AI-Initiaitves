@@ -562,6 +562,7 @@ function TowerLeadSignoff({
 
   return (
     <section
+      id="tower-lead-signoff"
       aria-label="Tower lead sign-off"
       className={
         "rounded-2xl border p-5 transition " +

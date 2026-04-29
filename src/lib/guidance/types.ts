@@ -18,6 +18,9 @@ export type ResolvedJourneyGuidance = {
    */
   actionKind?: "link" | "confirm";
   staleKind: StaleKind;
+  /** Optional second outline link (e.g. jump to sign-off section on same page). */
+  secondaryActionHref?: string;
+  secondaryActionLabel?: string;
 };
 
 export type CapabilityMapGuidanceInput = {

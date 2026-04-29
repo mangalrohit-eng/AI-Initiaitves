@@ -17,7 +17,7 @@ export function resolveCapabilityMapGuidance(
   if (rowCount === 0) {
     return {
       tier: 0,
-      title: "Load your tower’s capability map and headcount, or return to the hub to load the illustrative sample program.",
+      title: "Load this tower’s map and headcount here, or open the Capability Map hub for the illustrative sample.",
       staleKind: null,
       actionHref: "/capability-map",
       actionLabel: "Back to hub",
@@ -26,7 +26,7 @@ export function resolveCapabilityMapGuidance(
   if (blankL4Count > 0 && stale.l4Stale) {
     return {
       tier: 1,
-      title: "Refresh the tree: run Generate L4 activities for every blank L3 before you configure dials (Step 2) or design AI initiatives (Step 4).",
+      title: "Run Generate L4 for every blank L3 before you open Step 2 or Step 4.",
       staleKind: "l4",
       actionHref: "#generate-l4-toolbar",
       actionLabel: "Jump to Generate L4",
@@ -35,8 +35,7 @@ export function resolveCapabilityMapGuidance(
   if (!input.l1L3JourneyStepComplete) {
     return {
       tier: 2,
-      title:
-        "Review the L1–L3 tree and headcount for this tower, then mark it validated to continue.",
+      title: "Review this tower’s L1–L3 tree and headcount, then confirm below.",
       staleKind: null,
       actionLabel: "Confirm L1–L3 reviewed",
       actionKind: "confirm",
@@ -44,7 +43,7 @@ export function resolveCapabilityMapGuidance(
   }
   return {
     tier: 2,
-    title: "Next: open Configure Impact Levers to score offshore and AI dials for each L3.",
+    title: "Open Configure Impact Levers to set offshore and AI for each L3.",
     staleKind: null,
     actionHref: getTowerHref(towerId, "impact-levers"),
     actionLabel: "Configure Impact Levers",
@@ -61,7 +60,7 @@ export function resolveImpactLeversGuidance(
   if (rowCount === 0) {
     return {
       tier: 0,
-      title: `No capability map and headcount for ${towerName}—open the Capability Map and upload or load sample data first.`,
+      title: `No map or headcount for ${towerName} yet — open the Capability Map and upload or load sample data.`,
       staleKind: null,
       actionHref: getTowerHref(towerId, "capability-map"),
       actionLabel: "Open Capability Map",
@@ -70,25 +69,31 @@ export function resolveImpactLeversGuidance(
   if (stale.dialsStale) {
     return {
       tier: 1,
-      title: "Re-score the offshore and AI dials: values are at upload defaults; run the Versant-grounded inference so per-L3 rationales attach to every lever.",
+      title:
+        "Set offshore and AI for every L3 — this tower is still on upload-default levers (use the panel below or set sliders row by row).",
       staleKind: "dials",
       actionHref: "#stale-dials-panel",
-      actionLabel: "Jump to re-score",
+      actionLabel: "Jump to dial tools",
     };
   }
   if (!isTowerLeadComplete) {
     return {
       tier: 3,
-      title: "Align with leadership: use Tower lead sign-off when this tower’s dials and assumptions match your read—this anchors the Step 3 impact view.",
+      title:
+        "When these dial positions match your read, scroll to Tower lead sign-off and mark this tower reviewed.",
       staleKind: null,
+      actionHref: "#tower-lead-signoff",
+      actionLabel: "Jump to sign-off",
     };
   }
   return {
     tier: 3,
-    title: "Dials and sign-off are in place; open this tower in AI Initiatives for the sequenced agenda and 4-lens process detail.",
+    title: "Open AI Initiatives for this tower’s sequenced roadmap and 4-lens process detail.",
     staleKind: null,
     actionHref: getTowerHref(towerId, "ai-initiatives"),
     actionLabel: "Open AI Initiatives",
+    secondaryActionHref: "#tower-lead-signoff",
+    secondaryActionLabel: "Jump to sign-off section",
   };
 }
 
@@ -102,7 +107,7 @@ export function resolveAiInitiativesGuidance(
   if (stale.missingL4ForRefresh) {
     return {
       tier: 1,
-      title: `Queued curation is blocked on L4: open ${towerName} on the Capability Map and run Generate L4 activities, then return here to refresh AI guidance.`,
+      title: `Open ${towerName} on the Capability Map and run Generate L4 for blank rows — curation cannot refresh until L4 exists.`,
       staleKind: "curation",
       actionHref: getTowerHref(towerId, "capability-map"),
       actionLabel: "Open Capability Map",
@@ -111,7 +116,7 @@ export function resolveAiInitiativesGuidance(
   if (stale.initiativesStale) {
     return {
       tier: 1,
-      title: "Refresh the initiative list: the capability map changed and AI eligibility is queued—run Refresh AI guidance so the roadmap and dollars match the latest L2–L4 list.",
+      title: "Run Refresh AI guidance so the roadmap and dollars match your latest L2–L4 list.",
       staleKind: "curation",
       actionHref: "#stale-curation-panel",
       actionLabel: "Jump to refresh",
@@ -120,13 +125,14 @@ export function resolveAiInitiativesGuidance(
   if (pendingReviewCount > 0) {
     return {
       tier: 2,
-      title: `Validate or reject every L4 initiative below—the header chip still shows ${pendingReviewCount} pending. Decisions apply across the By capability and Priority roadmap tabs.`,
+      title: `Validate or reject each L4 below — ${pendingReviewCount} still pending in the header chip.`,
       staleKind: null,
     };
   }
   return {
     tier: 3,
-    title: "Validate the capability map, roadmap, and agent view against the dial set on Configure Impact Levers; change a dial there and this tower’s modeled savings update on the next load.",
+    title:
+      "Spot-check roadmap rows against your Step 2 dials; change a dial on Configure Impact Levers and reload this view to refresh modeled savings.",
     staleKind: null,
   };
 }
@@ -135,7 +141,7 @@ export function hubCapabilityMapLine(hasAnyTowerData: boolean): ResolvedJourneyG
   if (!hasAnyTowerData) {
     return {
       tier: 0,
-      title: "Start by loading the illustrative sample or scrolling to a tower, uploading a capability map, and running Generate L4 where rows are still blank.",
+      title: "Load the illustrative sample or pick a tower below, then upload a map and run Generate L4 on any blank L3.",
       staleKind: null,
       actionHref: "#tower-list",
       actionLabel: "Jump to towers",
@@ -143,7 +149,7 @@ export function hubCapabilityMapLine(hasAnyTowerData: boolean): ResolvedJourneyG
   }
   return {
     tier: 2,
-    title: "Open each tower, confirm the map and headcount, then go to Step 2—my towers and completed counts are tracked in the grid below.",
+    title: "Open each tower, confirm map and headcount on Step 1, then move to Step 2 — progress is tracked in the grid below.",
     staleKind: null,
   };
 }
@@ -163,7 +169,7 @@ export function hubImpactLeversLine(
   if (hasDefaultOnlyTower && nextTower) {
     return {
       tier: 2,
-      title: `Configure dials: ${nextTower.name} still has upload-default levers—open that tower, run Re-score, or set sliders manually, then return here to see the roll-up refresh.`,
+      title: `${nextTower.name} still has upload-default levers — open that tower on Step 2 and set offshore and AI for each L3.`,
       staleKind: null,
       actionHref: getTowerHref(nextTower.id as TowerId, "impact-levers"),
       actionLabel: `Open ${nextTower.name}`,
@@ -171,7 +177,7 @@ export function hubImpactLeversLine(
   }
   return {
     tier: 3,
-    title: "Review the program-wide total; open a tower in Step 2 to stress-test levers, then go to the Impact estimate summary in Step 3.",
+    title: "Review the program roll-up here, then open Step 3 (impact estimate summary) when you are ready to brief leadership.",
     staleKind: null,
     actionHref: "/impact-levers/summary",
     actionLabel: "Open impact estimate",
@@ -182,13 +188,14 @@ export function impactEstimateSummaryLine(hasFootprint: boolean): ResolvedJourne
   if (!hasFootprint) {
     return {
       tier: 0,
-      title: "Add tower data in Step 1 so this program-wide view shows blended offshore and AI savings; load the sample on the hub if you are exploring the model.",
+      title: "Add tower data on Step 1 first — or load the illustrative sample on the Capability Map hub to explore the model.",
       staleKind: null,
     };
   }
   return {
     tier: 3,
-    title: "Validate the program roll-up, adjust offshore and AI under Assumptions if the blended rates are wrong, and export a CSV or PNG for MS NOW, CNBC, and Golf leadership reviews.",
+    title:
+      "Validate the program roll-up against your workshop read — open Assumptions if blended offshore or AI rates need changing.",
     staleKind: null,
     actionHref: "/assumptions",
     actionLabel: "Open Assumptions",
@@ -201,7 +208,7 @@ export function towersPageLine(
   if (resume) {
     return {
       tier: 2,
-      title: `Start with ${resume.name}: curation and dial logic are still in motion. Open the tower, refresh AI guidance on Step 4 if the banner is lit, and clear pending validations before you go deep on a single process.`,
+      title: `Start with ${resume.name} — refresh AI guidance on Step 4 if the banner is lit, then clear pending L4 validations.`,
       staleKind: null,
       actionHref: getTowerHref(resume.id, "ai-initiatives"),
       actionLabel: `Open ${resume.name}`,

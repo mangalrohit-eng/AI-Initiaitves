@@ -38,7 +38,15 @@ export function ScreenGuidanceBar({
   mapStepLocked?: boolean;
 }) {
   const pathname = usePathname();
-  const { tier, title, actionHref, actionLabel, actionKind } = guidance;
+  const {
+    tier,
+    title,
+    actionHref,
+    actionLabel,
+    actionKind,
+    secondaryActionHref,
+    secondaryActionLabel,
+  } = guidance;
   const styles = tierStyles(tier);
 
   const linkHref = React.useMemo(() => {
@@ -49,14 +57,27 @@ export function ScreenGuidanceBar({
     return actionHref;
   }, [actionHref, pathname]);
 
+  const secondaryHref = React.useMemo(() => {
+    if (!secondaryActionHref) return null;
+    if (secondaryActionHref.startsWith("#")) {
+      return pathname ? `${pathname}${secondaryActionHref}` : secondaryActionHref;
+    }
+    return secondaryActionHref;
+  }, [secondaryActionHref, pathname]);
+
   const isConfirm = actionKind === "confirm" && actionLabel;
   const isLinkPrimary = !isConfirm && linkHref && actionLabel;
+  const isSecondaryLink = secondaryHref && secondaryActionLabel;
 
   const ctaClass = cn(
     "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition sm:w-auto",
     tier === 1
       ? "bg-accent-amber text-near-black hover:bg-accent-amber/90"
       : "bg-accent-purple text-white hover:bg-accent-purple-dark",
+  );
+
+  const secondaryClass = cn(
+    "inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-forge-border bg-forge-well/50 px-3.5 py-2 text-sm font-medium text-forge-body transition hover:border-accent-purple/35 hover:text-forge-ink sm:w-auto",
   );
 
   if (isConfirm && process.env.NODE_ENV === "development" && !onConfirm) {
@@ -107,9 +128,25 @@ export function ScreenGuidanceBar({
               </button>
             </div>
           ) : isLinkPrimary ? (
-            <div className="w-full sm:w-auto">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <Link href={linkHref!} className={cn("inline-flex w-full sm:w-auto", ctaClass)}>
                 {actionLabel}
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </Link>
+              {isSecondaryLink ? (
+                <Link
+                  href={secondaryHref!}
+                  className={cn("inline-flex w-full sm:w-auto", secondaryClass)}
+                >
+                  {secondaryActionLabel}
+                  <ChevronRight className="h-4 w-4" aria-hidden />
+                </Link>
+              ) : null}
+            </div>
+          ) : isSecondaryLink ? (
+            <div className="w-full sm:w-auto">
+              <Link href={secondaryHref!} className={cn("inline-flex w-full sm:w-auto", secondaryClass)}>
+                {secondaryActionLabel}
                 <ChevronRight className="h-4 w-4" aria-hidden />
               </Link>
             </div>

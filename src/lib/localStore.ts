@@ -6,11 +6,13 @@ import type {
   InitiativeReviewSnapshot,
   InitiativeStatus,
   L3WorkforceRow,
+  OffshoreAssumptions,
   TowerId,
 } from "@/data/assess/types";
 import { buildSeededAssessProgramV2 } from "@/data/assess/seedAssessProgram";
 import {
   buildDefaultProgramLeadDeadlines,
+  DEFAULT_OFFSHORE_ASSUMPTIONS,
   defaultTowerState,
   type TowerAssessState,
 } from "@/data/assess/types";
@@ -882,6 +884,36 @@ export function setGlobalAssessAssumptions(patch: Partial<GlobalAssessAssumption
     ...p,
     global: { ...p.global, ...patch },
   }));
+}
+
+/**
+ * Step-5 (Offshore Plan) editable assumptions. Patches `program.offshoreAssumptions`
+ * in place, falling back to `DEFAULT_OFFSHORE_ASSUMPTIONS` when absent. Stamps
+ * `setAt` so consumers can show "edited X minutes ago" if needed.
+ *
+ * Mirrors `setGlobalAssessAssumptions` — the AssessSyncProvider debounces the
+ * server flush via the same subscribe channel.
+ */
+export function setOffshoreAssumptions(
+  patch: Partial<OffshoreAssumptions>,
+): void {
+  updateAssessProgram((p) => ({
+    ...p,
+    offshoreAssumptions: {
+      ...DEFAULT_OFFSHORE_ASSUMPTIONS,
+      ...(p.offshoreAssumptions ?? {}),
+      ...patch,
+      setAt: new Date().toISOString(),
+    },
+  }));
+}
+
+/**
+ * Read the program's offshore-assumption overlay, defaulting to the canonical
+ * Bangalore + Pune + Manila trio when the field is absent.
+ */
+export function getOffshoreAssumptions(): OffshoreAssumptions {
+  return getAssessProgram().offshoreAssumptions ?? { ...DEFAULT_OFFSHORE_ASSUMPTIONS };
 }
 
 // ----- AI initiative review (validate / reject) -----------------------

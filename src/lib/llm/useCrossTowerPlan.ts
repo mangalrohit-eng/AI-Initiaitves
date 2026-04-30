@@ -54,11 +54,14 @@ type GenerateOptions = {
 /**
  * Manages the lifecycle of the GPT-5.5 plan generation for the Cross-Tower
  * AI Plan page. Stateful — keeps the latest plan in React state so the page
- * can render LLM-authored regions immediately on subsequent program changes
- * (until the next regenerate).
+ * can render LLM-authored regions immediately on subsequent renders.
  *
- * Auto-fires once per `inputHash` change (so dial edits trigger a regenerate),
- * but a user click on the regenerate button can force a refresh too.
+ * Manual-only: the hook does NOT auto-fire on mount or on `inputHash`
+ * changes. The page is responsible for surfacing a "stale" or "first run"
+ * nudge so the user knows when to click Regenerate. Reasoning: workshop
+ * usage patterns (rapid threshold/dial nudging) made auto-fire spend tokens
+ * on intermediate states the user never sees. Click is the single source of
+ * generation intent.
  */
 export function useCrossTowerPlan(
   program: SelectProgramResult,
@@ -67,7 +70,6 @@ export function useCrossTowerPlan(
   regenerate: (opts?: GenerateOptions) => Promise<void>;
 } {
   const [state, setState] = React.useState<PlanFetchState>(INITIAL_STATE);
-  const lastFiredHashRef = React.useRef<string | null>(null);
   const inflightControllerRef = React.useRef<AbortController | null>(null);
 
   const fetchPlan = React.useCallback(
@@ -139,14 +141,6 @@ export function useCrossTowerPlan(
     },
     [program],
   );
-
-  // Auto-fire on first load and whenever the deterministic input hash changes
-  // (e.g. user edits a dial in another tab, or the seeded program changes).
-  React.useEffect(() => {
-    if (lastFiredHashRef.current === program.inputHash) return;
-    lastFiredHashRef.current = program.inputHash;
-    void fetchPlan();
-  }, [program.inputHash, fetchPlan]);
 
   // Cleanup any in-flight request on unmount.
   React.useEffect(() => {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   CalendarClock,
+  Construction,
   Cpu,
   Globe2,
   Map as MapIcon,
@@ -28,6 +29,8 @@ type FlowStep = {
   status: StepStatus;
   /** Visually anchor the workflow halves: discover/size vs. design. */
   band: "discover" | "design";
+  /** Step is open and navigable but content is still being authored. */
+  wip?: boolean;
 };
 
 /**
@@ -80,11 +83,12 @@ const FLOW: ReadonlyArray<FlowStep> = [
     step: 5,
     title: "Design offshore initiative",
     description:
-      "Translate the offshore dial into locations, role mix, and TSA-aware runway.",
+      "Accenture-led India GCC in three TSA-paced waves — org transition, scope, and carve-outs.",
     href: "/offshore-plan",
     icon: <Globe2 className="h-6 w-6" />,
-    status: "coming-soon",
+    status: "active",
     band: "design",
+    wip: true,
   },
 ];
 
@@ -174,6 +178,7 @@ export function ProgramHome() {
 function FlowStepCard({ step, isLast }: { step: FlowStep; isLast: boolean }) {
   const isActive = step.status === "active";
   const bandPurple = step.band === "discover";
+  const isWip = isActive && step.wip === true;
 
   return (
     <li className="relative list-none">
@@ -181,23 +186,36 @@ function FlowStepCard({ step, isLast }: { step: FlowStep; isLast: boolean }) {
         href={step.href}
         aria-disabled={!isActive}
         className={
-          "group flex h-full min-h-[180px] flex-col gap-3 rounded-2xl border p-4 transition " +
+          "group relative flex h-full min-h-[180px] flex-col overflow-hidden rounded-2xl border transition " +
           (isActive
-            ? bandPurple
-              ? "border-accent-purple/30 bg-forge-surface hover:border-accent-purple/60 hover:shadow-[0_0_0_1px_rgba(161,0,255,0.22)]"
-              : "border-accent-teal/30 bg-forge-surface hover:border-accent-teal/60 hover:shadow-[0_0_0_1px_rgba(0,191,165,0.22)]"
+            ? isWip
+              ? "border-forge-border-strong bg-forge-surface hover:border-forge-hint"
+              : bandPurple
+                ? "border-accent-purple/30 bg-forge-surface hover:border-accent-purple/60 hover:shadow-[0_0_0_1px_rgba(161,0,255,0.22)]"
+                : "border-accent-teal/30 bg-forge-surface hover:border-accent-teal/60 hover:shadow-[0_0_0_1px_rgba(0,191,165,0.22)]"
             : "border-forge-border bg-forge-surface/60 hover:border-forge-border-strong")
         }
       >
+        {/* WIP banner — full-width neutral strip, prominent but de-emphasized */}
+        {isWip ? (
+          <div className="flex items-center justify-center gap-1.5 border-b border-forge-border-strong bg-forge-well-strong px-3 py-1 text-[9px] font-bold uppercase tracking-[0.22em] text-forge-subtle">
+            <Construction className="h-2.5 w-2.5" aria-hidden />
+            Work in progress
+          </div>
+        ) : null}
+
+        <div className="flex flex-1 flex-col gap-3 p-4">
         {/* Top: numbered chip + icon */}
         <div className="flex items-center justify-between">
           <span
             className={
               "inline-flex h-7 w-7 items-center justify-center rounded-full font-mono text-[11px] font-bold " +
               (isActive
-                ? bandPurple
-                  ? "bg-accent-purple text-white"
-                  : "bg-accent-teal text-white"
+                ? isWip
+                  ? "border border-forge-border-strong bg-forge-well text-forge-subtle"
+                  : bandPurple
+                    ? "bg-accent-purple text-white"
+                    : "bg-accent-teal text-white"
                 : "border border-forge-border-strong bg-forge-well text-forge-subtle")
             }
             aria-hidden
@@ -208,9 +226,11 @@ function FlowStepCard({ step, isLast }: { step: FlowStep; isLast: boolean }) {
             className={
               "flex h-10 w-10 items-center justify-center rounded-xl border " +
               (isActive
-                ? bandPurple
-                  ? "border-accent-purple/30 bg-accent-purple/10 text-accent-purple-dark"
-                  : "border-accent-teal/30 bg-accent-teal/10 text-accent-teal"
+                ? isWip
+                  ? "border-forge-border bg-forge-well/60 text-forge-subtle"
+                  : bandPurple
+                    ? "border-accent-purple/30 bg-accent-purple/10 text-accent-purple-dark"
+                    : "border-accent-teal/30 bg-accent-teal/10 text-accent-teal"
                 : "border-forge-border bg-forge-well/40 text-forge-subtle")
             }
             aria-hidden
@@ -239,10 +259,20 @@ function FlowStepCard({ step, isLast }: { step: FlowStep; isLast: boolean }) {
         {/* Footer: status + arrow */}
         <div className="flex items-center justify-between">
           {isActive ? (
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-accent-purple-dark group-hover:text-accent-purple">
-              Open
-              <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-            </span>
+            isWip ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-full border border-forge-border-strong bg-forge-well px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-forge-subtle">
+                  <Construction className="h-2.5 w-2.5" aria-hidden />
+                  WIP — preview
+                </span>
+                <ArrowRight className="h-3 w-3 text-forge-subtle transition-transform group-hover:translate-x-0.5" aria-hidden />
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-accent-purple-dark group-hover:text-accent-purple">
+                Open
+                <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+              </span>
+            )
           ) : (
             <span className="inline-flex items-center gap-1 rounded-full border border-accent-amber/40 bg-accent-amber/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-amber">
               <CalendarClock className="h-2.5 w-2.5" aria-hidden />
@@ -258,6 +288,7 @@ function FlowStepCard({ step, isLast }: { step: FlowStep; isLast: boolean }) {
               &gt;
             </span>
           ) : null}
+        </div>
         </div>
       </Link>
     </li>

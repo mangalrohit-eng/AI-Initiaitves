@@ -74,22 +74,16 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     id: "offshore-plan",
     name: "Offshore Plan",
     navLabel: "Offshore Plan",
-    tagline: "Translate the offshore dials into a delivery plan: locations, role mix, transition runway.",
+    tagline:
+      "Accenture-led India GCC in three TSA-paced waves — 24-month org transition with named editorial / SOX / BB- carve-outs.",
     shortDescription:
-      "Take the offshore percentages from Capability Map and turn them into a defensible plan — target locations, role-by-role offshorability, transition risk, and runway against the BB- credit covenants.",
+      "The committed offshore proposal: managed-service GCC in Bangalore + Pune (Manila for multi-brand contact), wave roadmap against NBCU TSA expirations, per-tower org transition (today onshore → retained + GCC India), and the named carve-outs (Brian Carovillano editorial veto, Anand Kini SOX gate, BB- covenant savings floor).",
     path: "/offshore-plan",
     iconId: "globe-2",
     order: 30,
     audience: "both",
     showInTopNav: false,
-    status: "coming-soon",
-    comingSoonLabel: "Coming next",
-    comingSoonBullets: [
-      "Recommended locations by tower (India / Philippines / nearshore) keyed off task complexity and editorial sensitivity.",
-      "Role-level offshorability with the editorial / news / political-brand carve-outs the BB- credit story demands.",
-      "Wave-by-wave transition runway against the NBCU TSA expiration.",
-      "Cost-to-serve estimates before / after, declared in the same tier framework as Capability Map.",
-    ],
+    status: "active",
   },
   {
     id: "prototypes",

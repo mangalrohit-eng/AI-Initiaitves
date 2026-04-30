@@ -6,12 +6,48 @@ import { AnimatePresence, motion } from "framer-motion";
 
 export type TabItem = { id: string; label: string; content: React.ReactNode };
 
-export function TabGroup({ tabs, className }: { tabs: TabItem[]; className?: string }) {
-  const [active, setActive] = React.useState(tabs[0]?.id ?? "");
+/**
+ * `TabGroup` works in either uncontrolled (default) or controlled mode.
+ *
+ *   - Uncontrolled: omit `value` and `onChange`. The component owns the
+ *     active-tab state and resets to `tabs[0]` if the active id ever stops
+ *     existing in the tab set.
+ *   - Controlled: pass both `value` and `onChange`. Lets a parent component
+ *     deep-link or programmatically switch tabs (e.g., the Offshore Plan's
+ *     OffshoreActionBar jumps to the Assumptions tab from the page header).
+ */
+export function TabGroup({
+  tabs,
+  className,
+  value,
+  onChange,
+}: {
+  tabs: TabItem[];
+  className?: string;
+  value?: string;
+  onChange?: (id: string) => void;
+}) {
+  const isControlled = value !== undefined && typeof onChange === "function";
+  const [internalActive, setInternalActive] = React.useState(tabs[0]?.id ?? "");
+  const active = isControlled ? (value as string) : internalActive;
 
   React.useEffect(() => {
-    if (!tabs.find((t) => t.id === active) && tabs[0]) setActive(tabs[0].id);
-  }, [active, tabs]);
+    if (isControlled) return;
+    if (!tabs.find((t) => t.id === internalActive) && tabs[0]) {
+      setInternalActive(tabs[0].id);
+    }
+  }, [internalActive, tabs, isControlled]);
+
+  const setActive = React.useCallback(
+    (id: string) => {
+      if (isControlled) {
+        onChange?.(id);
+      } else {
+        setInternalActive(id);
+      }
+    },
+    [isControlled, onChange],
+  );
 
   const index = Math.max(
     0,

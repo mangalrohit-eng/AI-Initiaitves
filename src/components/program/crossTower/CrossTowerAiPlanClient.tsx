@@ -2,7 +2,13 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, RefreshCw, Sparkles, ArrowLeft } from "lucide-react";
+import {
+  AlertTriangle,
+  RefreshCw,
+  Sparkles,
+  ArrowLeft,
+  Wand2,
+} from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { TabGroup, type TabItem } from "@/components/ui/TabGroup";
@@ -68,24 +74,43 @@ export function CrossTowerAiPlanClient() {
   const program = useProgramInitiatives(threshold);
   const { state, regenerate } = useCrossTowerPlan(program);
 
-  // Debounce rapid regenerate clicks (idempotent — but prevents duplicate
-  // server calls during workshop demos when a user double-clicks).
-  const [debouncing, setDebouncing] = React.useState(false);
-  const handleRegenerate = React.useCallback(async () => {
-    if (state.status === "loading") return;
-    if (debouncing) return;
-    setDebouncing(true);
-    try {
-      await regenerate({ forceRegenerate: true });
-    } finally {
-      setTimeout(() => setDebouncing(false), 600);
-    }
-  }, [state.status, debouncing, regenerate]);
-
+  // Manual-flow state derivation:
+  //   - `hasGenerated`: a plan (or fallback "deterministic" source) has been
+  //     authored at least once this session.
+  //   - `isStale`: the live program (after threshold / dial edits) no longer
+  //     matches the scenario the last generation was authored against.
+  //   - `isFirstRun`: nothing has been generated yet AND we're not currently
+  //     loading. Uses `!== "loading"` (not `=== "idle"`) so a failed Generate
+  //     click (status === "error") still surfaces the "Generate plan" CTA;
+  //     the error banner with its inline Retry sits above and is unaffected.
   const isLoading = state.status === "loading";
   const isError = state.status === "error";
   const llmPlan = state.plan;
   const narrativeUnavailable = state.narrativeUnavailable;
+  const hasGenerated = state.plan !== null || state.source !== null;
+  const isStale =
+    hasGenerated &&
+    state.inputHash !== null &&
+    state.inputHash !== program.inputHash;
+  const isFirstRun = !hasGenerated && !isLoading;
+
+  // Debounce rapid regenerate clicks (idempotent — but prevents duplicate
+  // server calls during workshop demos when a user double-clicks). Pass
+  // `forceRegenerate` only on a fresh-state click (the user is asking for a
+  // *new* narrative for an unchanged scenario); first-run and stale clicks
+  // benefit from a server-cache hit if the (scenario, threshold) combo was
+  // generated before.
+  const [debouncing, setDebouncing] = React.useState(false);
+  const handleRegenerate = React.useCallback(async () => {
+    if (isLoading) return;
+    if (debouncing) return;
+    setDebouncing(true);
+    try {
+      await regenerate({ forceRegenerate: !isFirstRun && !isStale });
+    } finally {
+      setTimeout(() => setDebouncing(false), 600);
+    }
+  }, [isLoading, debouncing, regenerate, isFirstRun, isStale]);
 
   const tabs: TabItem[] = [
     {
@@ -224,10 +249,13 @@ export function CrossTowerAiPlanClient() {
               onChange={persistThreshold}
               excludedCount={program.threshold.excludedCount}
               excludedAiUsd={program.threshold.excludedAiUsd}
+              isStale={isStale}
             />
             <RegenerateAction
               state={state}
               isLoading={isLoading || debouncing}
+              isFirstRun={isFirstRun}
+              isStale={isStale}
               onClick={handleRegenerate}
             />
           </div>
@@ -290,34 +318,109 @@ export function CrossTowerAiPlanClient() {
 function RegenerateAction({
   state,
   isLoading,
+  isFirstRun,
+  isStale,
   onClick,
 }: {
   state: ReturnType<typeof useCrossTowerPlan>["state"];
   isLoading: boolean;
+  isFirstRun: boolean;
+  isStale: boolean;
   onClick: () => void;
 }) {
   const auditLine = formatAuditLine(state);
   const sourceChip = formatSourceChip(state);
+
+  // Mode resolution — `loading` overrides everything; otherwise `isFirstRun`
+  // takes priority over `isStale`. (`isFirstRun` and `isStale` are mutually
+  // exclusive by construction at the call site, but we resolve defensively.)
+  const mode: "loading" | "firstRun" | "stale" | "fresh" = isLoading
+    ? "loading"
+    : isFirstRun
+      ? "firstRun"
+      : isStale
+        ? "stale"
+        : "fresh";
+
+  const buttonClasses =
+    mode === "loading"
+      ? "cursor-not-allowed border-forge-border bg-forge-well/60 text-forge-subtle"
+      : mode === "stale"
+        ? "border-accent-amber/60 bg-accent-amber/10 text-accent-amber hover:border-accent-amber hover:bg-accent-amber/15"
+        : "border-accent-purple/40 bg-accent-purple/10 text-accent-purple-dark hover:border-accent-purple hover:bg-accent-purple/15";
+
+  const Icon =
+    mode === "firstRun"
+      ? Wand2
+      : RefreshCw;
+
+  const label =
+    mode === "loading"
+      ? "Recomputing…"
+      : mode === "firstRun"
+        ? "Generate plan"
+        : mode === "stale"
+          ? "Refresh plan"
+          : "Regenerate plan";
+
+  const ariaLabel =
+    mode === "firstRun"
+      ? "Generate cross-tower AI plan narrative"
+      : mode === "stale"
+        ? "Refresh stale cross-tower AI plan narrative"
+        : "Regenerate cross-tower AI plan narrative";
+
+  const caption =
+    mode === "loading"
+      ? "Calling GPT-5.5 — narrative refresh in flight."
+      : mode === "firstRun"
+        ? "Click to author the GPT-5.5 narrative for this scenario. Numerics, Gantt, and Tech View are already populated."
+        : mode === "stale"
+          ? "Plan stale — scenario or threshold changed since the last generation. Click to refresh narrative."
+          : "Regenerate refreshes narrative only — Gantt, listing, and Tech View update live with scenario edits.";
+
   return (
     <div className="flex flex-col items-end gap-2 sm:items-end">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={isLoading}
-        className={[
-          "group inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium shadow-sm transition",
-          isLoading
-            ? "cursor-not-allowed border-forge-border bg-forge-well/60 text-forge-subtle"
-            : "border-accent-purple/40 bg-accent-purple/10 text-accent-purple-dark hover:border-accent-purple hover:bg-accent-purple/15",
-        ].join(" ")}
-        aria-label="Regenerate cross-tower AI plan"
-      >
-        <RefreshCw
-          className={`h-4 w-4 ${isLoading ? "animate-spin" : "transition group-hover:rotate-45"}`}
-          aria-hidden
-        />
-        {isLoading ? "Recomputing…" : "Regenerate Plan"}
-      </button>
+      <div className="flex items-center gap-2">
+        {mode === "stale" ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-full border border-accent-amber/50 bg-accent-amber/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent-amber"
+            aria-hidden
+          >
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-amber" />
+            Stale
+          </span>
+        ) : null}
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={isLoading}
+          aria-label={ariaLabel}
+          className={[
+            "group relative inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium shadow-sm transition",
+            buttonClasses,
+          ].join(" ")}
+        >
+          {mode === "stale" ? (
+            <span
+              className="absolute -right-1 -top-1 h-2.5 w-2.5 animate-pulse rounded-full border border-forge-bg bg-accent-amber"
+              aria-hidden
+            />
+          ) : null}
+          <Icon
+            className={[
+              "h-4 w-4",
+              mode === "loading"
+                ? "animate-spin"
+                : mode === "firstRun"
+                  ? "transition group-hover:scale-110"
+                  : "transition group-hover:rotate-45",
+            ].join(" ")}
+            aria-hidden
+          />
+          {label}
+        </button>
+      </div>
       <div className="flex items-center gap-2">
         {sourceChip ? (
           <span className="inline-flex items-center rounded-full border border-forge-border bg-forge-surface px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-forge-subtle">
@@ -326,9 +429,8 @@ function RegenerateAction({
         ) : null}
         <span className="text-[11px] text-forge-subtle">{auditLine}</span>
       </div>
-      <span className="text-[10px] text-forge-hint">
-        Regenerate refreshes narrative only — Gantt, listing, and Tech View
-        update live with scenario edits.
+      <span className="max-w-xs text-right text-[10px] leading-snug text-forge-hint">
+        {caption}
       </span>
     </div>
   );
@@ -338,7 +440,7 @@ function formatAuditLine(
   state: ReturnType<typeof useCrossTowerPlan>["state"],
 ): string {
   if (state.status === "loading") return "Recomputing…";
-  if (!state.generatedAt) return "Awaiting first run";
+  if (!state.generatedAt) return "Narrative not yet generated";
   const t = new Date(state.generatedAt);
   const time = isNaN(t.getTime())
     ? state.generatedAt
@@ -365,7 +467,7 @@ function formatSourceChip(
 
 function defaultExecutiveSummary(warning: string | null): string {
   if (warning) {
-    return "Cross-tower plan, grounded in the live capability map and impact-lever dials. Plan narrative is generated by GPT-5.5; numerics, value buildup, Gantt, and phase membership stay deterministic. Initiatives below the plan threshold are opportunistic — handled inside the tower roadmaps.";
+    return "Cross-tower plan, grounded in the live capability map and impact-lever dials. Numerics, value buildup, Gantt, Tech View, and phase membership are populated below; the GPT-5.5 narrative is regenerated on demand. Initiatives below the plan threshold are opportunistic — handled inside the tower roadmaps.";
   }
-  return "Versant's cross-tower AI plan: in-plan initiatives sequenced across three horizons (P1 immediate / P2 near-term / P3 medium-term), grounded in the deterministic capability map and impact-lever dials. Initiatives below the plan threshold are opportunistic and addressed inside the tower roadmaps. Numerics, Gantt, and value buildup stay deterministic; plan narrative is authored by GPT-5.5.";
+  return "Versant's cross-tower AI plan: in-plan initiatives sequenced across three horizons (P1 immediate / P2 near-term / P3 medium-term), grounded in the deterministic capability map and impact-lever dials. Numerics, Gantt, Tech View, and value buildup are live below — click Generate plan to author the GPT-5.5 narrative for this scenario. Initiatives below the plan threshold are opportunistic and addressed inside the tower roadmaps.";
 }

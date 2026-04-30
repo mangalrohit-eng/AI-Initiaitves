@@ -1,16 +1,12 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { ComingSoonPage } from "@/components/program/ComingSoonPage";
-import { getProductById } from "@/config/products";
+import { OffshorePlanClient } from "@/components/program/offshore/OffshorePlanClient";
 
 export const metadata: Metadata = {
   title: "Offshore Plan — Versant Forge Program",
   description:
-    "Translate the offshore dials from Capability Map into a delivery plan: target locations, role-by-role offshorability with editorial carve-outs, transition runway against the NBCU TSA, and estimated cost-to-serve.",
+    "Step 5 of the program. Translate the offshore dials from Configure Impact Levers into Accenture's committed proposal: an India-anchored managed-service GCC delivered in three TSA-paced waves, with editorial / talent / SOX-year-1 / BB- covenant carve-outs.",
 };
 
 export default function OffshorePlanPage() {
-  const product = getProductById("offshore-plan");
-  if (!product) notFound();
-  return <ComingSoonPage product={product} />;
+  return <OffshorePlanClient />;
 }

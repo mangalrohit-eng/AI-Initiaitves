@@ -34,11 +34,20 @@ export function PlanThresholdInput({
   onChange,
   excludedCount,
   excludedAiUsd,
+  isStale = false,
 }: {
   value: number;
   onChange: (next: number) => void;
   excludedCount: number;
   excludedAiUsd: number;
+  /**
+   * When `true`, the threshold has been changed since the LLM narrative was
+   * last generated. Adds a non-intrusive amber accent on the container plus a
+   * nudge caption directing the user to click Refresh plan. The deterministic
+   * page content (KPI tiles, Gantt, listing, Tech View) already reflects the
+   * new threshold — only the GPT-5.5 narrative is behind.
+   */
+  isStale?: boolean;
 }) {
   // Local draft state for the free-form input. Commits to parent via debounce.
   const [draft, setDraft] = React.useState<string>(formatNumber(value));
@@ -74,13 +83,25 @@ export function PlanThresholdInput({
   };
 
   return (
-    <div className="rounded-xl border border-forge-border bg-forge-surface px-3 py-2.5 shadow-sm">
+    <div
+      className={`rounded-xl border bg-forge-surface px-3 py-2.5 shadow-sm transition ${
+        isStale
+          ? "border-accent-amber/60 ring-1 ring-accent-amber/20"
+          : "border-forge-border"
+      }`}
+    >
       <div className="flex items-center gap-2">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-forge-subtle">
           Plan threshold
         </span>
         <span className="text-[10px] text-forge-hint">·</span>
         <span className="text-[10px] text-forge-hint">in-plan minimum value</span>
+        {isStale ? (
+          <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-accent-amber/50 bg-accent-amber/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-accent-amber">
+            <span className="h-1 w-1 animate-pulse rounded-full bg-accent-amber" />
+            Pending
+          </span>
+        ) : null}
       </div>
 
       <div className="mt-2 flex items-stretch gap-2">
@@ -161,6 +182,13 @@ export function PlanThresholdInput({
           </>
         )}
       </p>
+      {isStale ? (
+        <p className="mt-1.5 max-w-xs text-[10px] leading-snug text-accent-amber">
+          Threshold changed — KPIs and Gantt are live. Click{" "}
+          <span className="font-semibold">Refresh plan</span> to update the
+          GPT-5.5 narrative.
+        </p>
+      ) : null}
     </div>
   );
 }

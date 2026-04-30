@@ -209,6 +209,25 @@ export type L3WorkforceRow = {
   dialsRationaleSource?: "llm" | "heuristic" | "starter";
   /** ISO timestamp the dial rationale pair was last written. */
   dialsRationaleAt?: string;
+  /**
+   * Step-5 strict carve-out flag. Set from the Assumptions tab inside the
+   * Offshore Plan page. When present, the row is force-classified into the
+   * corresponding lane regardless of dial value or LLM judgment.
+   *
+   *   - `Editorial` → forces `EditorialCarveOut` lane.
+   *   - `Talent` / `SOX` / `Sales` → force `OnshoreRetained` lane.
+   *
+   * `setBy === "seed"` means the flag was pre-populated from the keyword
+   * heuristic on first mount (the user has not explicitly confirmed); a user
+   * toggle flips it to `setBy === "user"`. Either way the carve-out is honored
+   * by the selector — the distinction is only used for the "pre-seeded"
+   * indicator in the Assumptions tab.
+   */
+  offshoreStrictCarveOut?: {
+    reason: "Editorial" | "Talent" | "SOX" | "Sales";
+    setAt: string;
+    setBy: "user" | "seed";
+  };
 };
 
 /** Tower-lead anchor dialed once and held steady before stress-test on the summary page. */
@@ -358,6 +377,34 @@ export const defaultGlobalAssessAssumptions: GlobalAssessAssumptions = {
 };
 
 /**
+ * Step-5 (Offshore Plan) editable assumptions.
+ *
+ * Drives every city-name reference on the Offshore Plan page via
+ * `offshoreLocationLabels(program)`. The `chooseDestination()` routing rules
+ * stay deterministic — only the *names* are user-configurable.
+ *
+ * v1 supports primary GCC, secondary GCC (different from primary), and a
+ * contact-center hub (or "None" to fold contact rows into primary). Per-tower
+ * routing override is intentionally out of scope for v1.
+ */
+export type IndianGccCity = "Bangalore" | "Pune" | "Hyderabad" | "Chennai";
+export type ContactCenterHub = "Manila" | "Cebu" | "Krakow" | "None";
+
+export type OffshoreAssumptions = {
+  primaryGccCity: IndianGccCity;
+  secondaryGccCity: IndianGccCity;
+  contactCenterHub: ContactCenterHub;
+  /** ISO timestamp; absent on default state. */
+  setAt?: string;
+};
+
+export const DEFAULT_OFFSHORE_ASSUMPTIONS: OffshoreAssumptions = {
+  primaryGccCity: "Bangalore",
+  secondaryGccCity: "Pune",
+  contactCenterHub: "Manila",
+};
+
+/**
  * V4 program shape — current.
  *
  * V4 collapses the per-L4 workforce footprint into per-L3 rows. The math now
@@ -372,6 +419,12 @@ export type AssessProgramV4 = {
   global: GlobalAssessAssumptions;
   /** Program admin: due-by dates per tower for Steps 1–4 (optional). */
   leadDeadlines?: Partial<Record<TowerId, TowerLeadDeadlines>>;
+  /**
+   * Step-5 (Offshore Plan) editable assumptions. Drives every city-name
+   * reference on the Offshore Plan page via `offshoreLocationLabels(program)`.
+   * Absent on legacy snapshots — readers default to `DEFAULT_OFFSHORE_ASSUMPTIONS`.
+   */
+  offshoreAssumptions?: OffshoreAssumptions;
 };
 
 /** Back-compat alias — every caller importing `AssessProgramV3` gets V4. */

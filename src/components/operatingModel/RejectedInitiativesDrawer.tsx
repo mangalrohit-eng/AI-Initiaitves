@@ -123,7 +123,7 @@ export function RejectedInitiativesDrawer({
             <footer className="border-t border-forge-border bg-forge-well/40 px-5 py-3 text-[11px] text-forge-subtle sm:px-6">
               Decisions persist across sessions and sync to the program
               database. Rejecting hides the idea from the roadmap; per-L3
-              modeled $ stays driven by Step 2 dials.
+              impact stays driven by Step 2 dials.
             </footer>
           </motion.aside>
         </motion.div>

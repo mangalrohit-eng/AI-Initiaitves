@@ -6,7 +6,7 @@ import { ArrowRight, Building2, Calculator, RotateCcw } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PageShell } from "@/components/PageShell";
 import { formatMoney } from "@/components/ui/MoneyCounter";
-import { useToast } from "@/components/feedback/ToastProvider";
+import { useRedactDollars } from "@/lib/clientMode";
 import {
   defaultGlobalAssessAssumptions,
   type AssessProgramV2,
@@ -18,6 +18,7 @@ import {
   setGlobalAssessAssumptions,
   subscribe,
 } from "@/lib/localStore";
+import { clientGetAdminSessionStatus } from "@/lib/assess/assessClientApi";
 
 /**
  * Top-level Assumptions surface — the single place where the four blended
@@ -28,61 +29,99 @@ import {
  * L3 granularity; L4 activity lists below each L3 are display-only.
  */
 export function AssumptionsClient() {
-  const toast = useToast();
   const [program, setProgram] = React.useState<AssessProgramV2>(() => getAssessProgramHydrationSnapshot());
+  const [isProgramAdmin, setIsProgramAdmin] = React.useState(false);
+  const [adminConfigured, setAdminConfigured] = React.useState(false);
 
   React.useEffect(() => {
     setProgram(getAssessProgram());
     return subscribe("assessProgram", () => setProgram(getAssessProgram()));
   }, []);
 
+  React.useEffect(() => {
+    let active = true;
+    void clientGetAdminSessionStatus().then((r) => {
+      if (!active) return;
+      if (r.ok && r.data) {
+        setIsProgramAdmin(r.data.isAdmin);
+        setAdminConfigured(r.data.configured);
+      } else {
+        setIsProgramAdmin(false);
+        setAdminConfigured(false);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const g = program.global;
 
   const onPatch = React.useCallback((patch: Partial<GlobalAssessAssumptions>) => {
+    if (!isProgramAdmin) return;
     setGlobalAssessAssumptions(patch);
-  }, []);
-
-  const onResetAll = () => {
-    setGlobalAssessAssumptions({ ...defaultGlobalAssessAssumptions });
-    toast.success({
-      title: "Defaults restored",
-      description: "All assumptions are back to the seeded illustrative values.",
-    });
-  };
+  }, [isProgramAdmin]);
 
   const fteWageGap = Math.max(0, g.blendedFteOnshore - g.blendedFteOffshore);
   const ctrWageGap = Math.max(0, g.blendedContractorOnshore - g.blendedContractorOffshore);
+  const redact = useRedactDollars();
+
+  if (redact) {
+    return (
+      <PageShell>
+        <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
+          <Breadcrumbs items={[{ label: "Program home", href: "/" }, { label: "Assumptions" }]} />
+          <div className="mt-8 rounded-2xl border border-forge-border bg-forge-surface p-8 text-center">
+            <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-forge-well text-forge-subtle">
+              <Calculator className="h-5 w-5" aria-hidden />
+            </div>
+            <h1 className="mt-4 font-display text-xl font-semibold text-forge-ink">
+              &gt; Assumptions
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-forge-subtle">
+              This section is currently unavailable.
+            </p>
+          </div>
+        </div>
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell>
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
         <Breadcrumbs items={[{ label: "Program home", href: "/" }, { label: "Assumptions" }]} />
 
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">
-              <Calculator className="h-3 w-3" />
-              Global assumptions
-            </div>
-            <h1 className="mt-2 font-display text-2xl font-semibold text-forge-ink sm:text-3xl">
-              &gt; The numbers behind the modeled $
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
-              Four blended rates feed every modeled dollar in the app. Edit them here and
-              every total on the Impact Levers hub, the Impact Estimate, and per-tower pages
-              recomputes on the next render. Illustrative model — not Versant-reported.
-            </p>
+        <div className="mt-3">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">
+            <Calculator className="h-3 w-3" />
+            Global assumptions
           </div>
-          <button
-            type="button"
-            onClick={onResetAll}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-forge-border bg-forge-surface px-3 py-1.5 text-xs font-medium text-forge-body hover:border-accent-purple/40"
-            title="Restore the seeded defaults across all global assumptions"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Restore defaults
-          </button>
+          <h1 className="mt-2 font-display text-2xl font-semibold text-forge-ink sm:text-3xl">
+            &gt; The numbers behind the impact
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
+            Four blended rates feed every estimate in the app. Edit them here and
+            every total on the Impact Levers hub, the Impact Estimate, and per-tower pages
+            recomputes on the next render.
+          </p>
         </div>
+        {!isProgramAdmin ? (
+          <div className="mt-3 rounded-lg border border-accent-amber/30 bg-accent-amber/5 px-3 py-2 text-xs text-forge-body">
+            Global assumptions are admin-only.{" "}
+            {adminConfigured ? (
+              <>
+                Sign in at{" "}
+                <Link href="/login/admin" className="underline underline-offset-2">
+                  /login/admin
+                </Link>{" "}
+                to edit onshore/offshore rates.
+              </>
+            ) : (
+              "Program admin login is not configured on this deployment."
+            )}
+          </div>
+        ) : null}
 
         {/* ============== WORKFORCE BLENDED RATES ============== */}
         <section className="mt-6">
@@ -98,6 +137,7 @@ export function AssumptionsClient() {
               defaultValue={defaultGlobalAssessAssumptions.blendedFteOnshore}
               onChange={(n) => onPatch({ blendedFteOnshore: n })}
               hint="Senior US/UK FTE blended"
+              disabled={!isProgramAdmin}
             />
             <MoneyInput
               label="FTE offshore"
@@ -105,6 +145,7 @@ export function AssumptionsClient() {
               defaultValue={defaultGlobalAssessAssumptions.blendedFteOffshore}
               onChange={(n) => onPatch({ blendedFteOffshore: n })}
               hint="India / Philippines blended"
+              disabled={!isProgramAdmin}
             />
             <MoneyInput
               label="Contractor onshore"
@@ -112,6 +153,7 @@ export function AssumptionsClient() {
               defaultValue={defaultGlobalAssessAssumptions.blendedContractorOnshore}
               onChange={(n) => onPatch({ blendedContractorOnshore: n })}
               hint="Per-FTE-year equivalent"
+              disabled={!isProgramAdmin}
             />
             <MoneyInput
               label="Contractor offshore"
@@ -119,6 +161,7 @@ export function AssumptionsClient() {
               defaultValue={defaultGlobalAssessAssumptions.blendedContractorOffshore}
               onChange={(n) => onPatch({ blendedContractorOffshore: n })}
               hint="Per-FTE-year equivalent"
+              disabled={!isProgramAdmin}
             />
           </div>
           <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-forge-subtle">
@@ -291,8 +334,7 @@ offshore    = fteSavings + ctrSavings`}
         </section>
 
         <p className="mt-6 text-center text-xs text-forge-hint">
-          All values are illustrative model output, not Versant-reported. Roll-ups are
-          illustrative for planning only.
+          All values are illustrative estimates, not Versant-reported.
         </p>
       </div>
     </PageShell>
@@ -343,16 +385,23 @@ function MoneyInput({
   defaultValue,
   onChange,
   hint,
+  disabled = false,
 }: {
   label: string;
   value: number;
   defaultValue: number;
   onChange: (n: number) => void;
   hint?: string;
+  disabled?: boolean;
 }) {
   const isDefault = Math.round(value) === Math.round(defaultValue);
   return (
-    <label className="flex flex-col gap-1 rounded-xl border border-forge-border bg-forge-surface p-3">
+    <label
+      className={
+        "flex flex-col gap-1 rounded-xl border border-forge-border bg-forge-surface p-3 " +
+        (disabled ? "opacity-75" : "")
+      }
+    >
       <span className="text-[11px] font-medium uppercase tracking-wider text-forge-hint">
         {label}
       </span>
@@ -364,6 +413,7 @@ function MoneyInput({
           min={0}
           step={1000}
           value={Number.isFinite(value) ? value : 0}
+          disabled={disabled}
           onChange={(e) => {
             const n = Number(e.target.value);
             if (Number.isFinite(n) && n >= 0) onChange(n);
@@ -376,7 +426,8 @@ function MoneyInput({
           <button
             type="button"
             onClick={() => onChange(defaultValue)}
-            className="inline-flex items-center gap-1 text-forge-subtle hover:text-accent-purple-dark"
+            disabled={disabled}
+            className="inline-flex items-center gap-1 text-forge-subtle hover:text-accent-purple-dark disabled:cursor-not-allowed disabled:opacity-60"
             title="Reset to default"
           >
             <RotateCcw className="h-2.5 w-2.5" />

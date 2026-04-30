@@ -12,6 +12,7 @@ import type { UseInitiativeReviewsResult } from "@/lib/initiatives/useInitiative
 import { cn, slugify } from "@/lib/utils";
 import { TIER_STYLES, priorityTier } from "@/lib/priority";
 import { formatUsdCompact } from "@/lib/format";
+import { useRedactDollars } from "@/lib/clientMode";
 import { getTowerHref } from "@/lib/towerHref";
 import { InitiativeReviewActions } from "./InitiativeReviewActions";
 
@@ -286,6 +287,7 @@ function L3RowCard({
   actions: UseInitiativeReviewsResult["actions"];
   showBreadcrumb?: boolean;
 }) {
+  const redact = useRedactDollars();
   const maxTier = React.useMemo(() => {
     const tiers = l3.l4s.map((l) => priorityTier(l.aiPriority)).filter(Boolean);
     if (tiers.includes("P1")) return "P1" as const;
@@ -351,10 +353,10 @@ function L3RowCard({
         <div className="flex shrink-0 items-center gap-3 text-right">
           <div>
             <div className="font-mono text-base font-semibold tabular-nums text-forge-ink">
-              {formatUsdCompact(l3.aiUsd)}
+              {redact ? "—" : formatUsdCompact(l3.aiUsd)}
             </div>
             <div className="text-[10px] uppercase tracking-wider text-forge-hint">
-              modeled AI · {Math.round(l3.aiPct)}%
+              AI dial · {Math.round(l3.aiPct)}%
             </div>
           </div>
           <Icons.ChevronDown
@@ -436,6 +438,7 @@ export function ProcessLandscape({
   reviews: Record<string, InitiativeReview>;
   actions: UseInitiativeReviewsResult["actions"];
 }) {
+  const redact = useRedactDollars();
   const [expandedL3Keys, setExpandedL3Keys] = React.useState<Set<string>>(
     () => new Set(),
   );
@@ -526,14 +529,16 @@ export function ProcessLandscape({
                     ) : null}
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-[10px] uppercase tracking-wider text-forge-hint">
-                    Modeled AI $
+                {!redact ? (
+                  <div className="text-right">
+                    <div className="text-[10px] uppercase tracking-wider text-forge-hint">
+                      AI impact
+                    </div>
+                    <div className="font-mono text-lg font-semibold tabular-nums text-forge-ink">
+                      {formatUsdCompact(l2.totalAiUsd)}
+                    </div>
                   </div>
-                  <div className="font-mono text-lg font-semibold tabular-nums text-forge-ink">
-                    {formatUsdCompact(l2.totalAiUsd)}
-                  </div>
-                </div>
+                ) : null}
               </div>
             </header>
 

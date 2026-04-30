@@ -5,7 +5,7 @@ import { AssumptionsClient } from "@/components/assess/AssumptionsClient";
 export const metadata: Metadata = {
   title: "Assumptions — Versant Forge Program",
   description:
-    "Program-level globals — blended FTE rates, contractor rates, lever weights, combine mode, and cap — that drive every modeled dollar in Configure Impact Levers and the Impact Estimate.",
+    "Program-level globals — blended FTE rates, contractor rates, lever weights, combine mode, and cap — that drive every estimate in Configure Impact Levers and the Impact Estimate.",
 };
 
 export default function AssumptionsPage() {

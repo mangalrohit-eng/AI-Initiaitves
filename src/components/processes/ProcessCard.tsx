@@ -25,7 +25,7 @@ export function ProcessCard({ towerSlug, process }: { towerSlug: string; process
         </div>
         <div className="text-right">
           <div className="font-mono text-sm text-forge-ink">{process.impactTier}</div>
-          <div className="text-[11px] text-forge-hint">modeled impact</div>
+          <div className="text-[11px] text-forge-hint">impact</div>
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between text-xs text-forge-subtle">

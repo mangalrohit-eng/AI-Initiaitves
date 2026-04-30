@@ -46,9 +46,9 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     id: "impact-levers",
     name: "Configure Impact Levers",
     navLabel: "Impact Levers",
-    tagline: "Per tower: dial offshore and AI per L3 to see where modeled OpEx reduction lands.",
+    tagline: "Per tower: dial offshore and AI per L3 to see where OpEx reduction lands.",
     shortDescription:
-      "Set offshore and AI dials per L3 against the confirmed capability map. The tool weights the dials by pool $ and rolls up to a live program-wide modeled impact with sensitivity bands.",
+      "Set offshore and AI dials per L3 against the confirmed capability map. The tool weights the dials by pool $ and rolls up to a live program-wide impact with sensitivity bands.",
     path: "/impact-levers",
     iconId: "sliders",
     order: 15,
@@ -88,7 +88,7 @@ const ALL_PRODUCTS: ForgeProduct[] = [
       "Recommended locations by tower (India / Philippines / nearshore) keyed off task complexity and editorial sensitivity.",
       "Role-level offshorability with the editorial / news / political-brand carve-outs the BB- credit story demands.",
       "Wave-by-wave transition runway against the NBCU TSA expiration.",
-      "Modeled cost-to-serve before / after, declared in the same tier framework as Capability Map.",
+      "Cost-to-serve estimates before / after, declared in the same tier framework as Capability Map.",
     ],
   },
   {
@@ -116,7 +116,7 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     id: "delivery-plan",
     name: "Effort Estimate",
     navLabel: "Effort Estimate",
-    tagline: "Translate the modeled levers into Accenture delivery effort, run-rate cost, and a value plan.",
+    tagline: "Translate the impact levers into Accenture delivery effort, run-rate cost, and a value plan.",
     shortDescription:
       "Effort estimate, sequencing, and the investment case Accenture brings to Versant leadership: scope per tower, run-rate cost, value tracking against $2.43B adj. EBITDA and $0.375 quarterly dividend, and the governance (Steering, Tower Leads, Editorial Standards) that keeps the brand intact.",
     path: "/delivery-plan",
@@ -249,6 +249,13 @@ const FOOTER_LINKS: FooterNavLink[] = [
     path: "/changelog",
     order: 30,
     audience: "internal",
+  },
+  {
+    id: "program-admin",
+    name: "Program admin",
+    path: "/program/admin",
+    order: 40,
+    audience: "both",
   },
 ];
 

@@ -132,7 +132,7 @@ export function resolveAiInitiativesGuidance(
   return {
     tier: 3,
     title:
-      "Spot-check roadmap rows against your Step 2 dials; change a dial on Configure Impact Levers and reload this view to refresh modeled savings.",
+      "Spot-check roadmap rows against your Step 2 dials; change a dial on Configure Impact Levers and reload this view to refresh impact.",
     staleKind: null,
   };
 }

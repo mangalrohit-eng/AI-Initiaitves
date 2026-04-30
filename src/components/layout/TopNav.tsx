@@ -5,6 +5,7 @@ import { getPortalAudience, isInternalSurfaceAllowed } from "@/lib/portalAudienc
 import { SignOutButton } from "./SignOutButton";
 import { NavActions } from "./NavActions";
 import { HelpMenu } from "./HelpMenu";
+import { ClientModeToggle } from "./ClientModeToggle";
 
 function renderNavItem(item: NavItem) {
   if (item.kind === "product") {
@@ -60,6 +61,7 @@ export function TopNav() {
             </>
           ) : null}
           <div className="h-5 w-px bg-forge-border" aria-hidden />
+          <ClientModeToggle />
           <HelpMenu />
           <SignOutButton />
         </nav>

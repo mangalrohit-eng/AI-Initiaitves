@@ -16,6 +16,7 @@ import {
 import { useToast } from "@/components/feedback/ToastProvider";
 import { cn } from "@/lib/utils";
 import { getCapabilityMapForTower } from "@/data/capabilityMap/maps";
+import { useRedactDollars } from "@/lib/clientMode";
 
 const MENU: ReadonlyArray<{
   id: TowerExportArtifact;
@@ -53,6 +54,7 @@ export function TowerDataExports({
   const toast = useToast();
   const [open, setOpen] = React.useState(false);
   const wrapRef = React.useRef<HTMLDivElement | null>(null);
+  const redact = useRedactDollars();
 
   React.useEffect(() => {
     if (!open) return;
@@ -78,6 +80,8 @@ export function TowerDataExports({
   const canMap = hasMap || rowCount > 0;
   const canDials = rowCount > 0;
   const canInitiatives = tower.processes.length > 0;
+
+  if (redact) return null;
 
   const disabledReason = (id: TowerExportArtifact): string | undefined => {
     if (id === "capability-map" && !canMap) {

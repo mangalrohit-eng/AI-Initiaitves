@@ -1,7 +1,12 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { buildSeededAssessProgramV2 } from "@/data/assess/seedAssessProgram";
-import { AUTH_COOKIE_NAME, isValidSessionToken } from "@/lib/auth";
+import {
+  ADMIN_AUTH_COOKIE_NAME,
+  AUTH_COOKIE_NAME,
+  isValidAdminSessionToken,
+  isValidSessionToken,
+} from "@/lib/auth";
 import { ASSESS_WORKSHOP_ID, getDb, isDatabaseUrlConfigured } from "@/lib/db";
 import { getPortalAudience, isInternalSurfaceAllowed } from "@/lib/portalAudience";
 
@@ -19,8 +24,14 @@ export const dynamic = "force-dynamic";
  * audience (so client-only deployments can't wipe the database).
  */
 export async function POST() {
-  if (!(await isAuthed())) {
+  if (!(await isWorkshopAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await isProgramAdminAuthed())) {
+    return NextResponse.json(
+      { error: "Program admin login required. Sign in at /login/admin and retry." },
+      { status: 403 },
+    );
   }
   if (!isInternalSurfaceAllowed(getPortalAudience())) {
     return NextResponse.json(
@@ -60,7 +71,12 @@ export async function POST() {
   }
 }
 
-async function isAuthed(): Promise<boolean> {
+async function isWorkshopAuthed(): Promise<boolean> {
   const token = cookies().get(AUTH_COOKIE_NAME)?.value;
   return isValidSessionToken(token);
+}
+
+async function isProgramAdminAuthed(): Promise<boolean> {
+  const token = cookies().get(ADMIN_AUTH_COOKIE_NAME)?.value;
+  return isValidAdminSessionToken(token);
 }

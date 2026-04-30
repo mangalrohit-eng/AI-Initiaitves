@@ -11,7 +11,6 @@ import {
   Download,
   FileSpreadsheet,
 } from "lucide-react";
-import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import { CapabilityScoreboard } from "@/components/assess/CapabilityScoreboard";
 import { ProgramToolsDrawer } from "@/components/assess/ProgramToolsDrawer";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
@@ -20,15 +19,12 @@ import { ScreenGuidanceBar } from "@/components/guidance/ScreenGuidanceBar";
 import { useGuidanceCapabilityMapHub } from "@/lib/guidance/useJourneyGuidance";
 import { Term } from "@/components/help/Term";
 import { useToast } from "@/components/feedback/ToastProvider";
-import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
-import { buildSeededAssessProgramV2 } from "@/data/assess/seedAssessProgram";
 import { towers } from "@/data/towers";
 import { downloadSingleTowerSampleCsv } from "@/lib/assess/downloadAssessSamples";
 import {
   getAssessProgram,
   getAssessProgramHydrationSnapshot,
   getMyTowers,
-  setAssessProgram,
   subscribe,
 } from "@/lib/localStore";
 import type { AssessProgramV2, TowerId } from "@/data/assess/types";
@@ -65,7 +61,6 @@ function statusCopy(s: RowStatus): { label: string; className: string } {
  * focused on the assessment loop.
  */
 export function CapabilityMapHubClient() {
-  const sync = useAssessSync();
   const toast = useToast();
   const capGuidance = useGuidanceCapabilityMapHub();
   const [program, setProgram] = React.useState<AssessProgramV2>(() => getAssessProgramHydrationSnapshot());
@@ -79,20 +74,6 @@ export function CapabilityMapHubClient() {
     setMine(getMyTowers());
     return subscribe("myTowers", () => setMine(getMyTowers()));
   }, []);
-
-  const sampleLoadOp = useAsyncOp<void, []>({
-    run: async () => {
-      setAssessProgram(buildSeededAssessProgramV2());
-      if (sync?.canSync) await sync.flushSave();
-    },
-    messages: {
-      loadingTitle: "Loading sample program across 13 towers",
-      successTitle: "Sample program loaded",
-      successDescription:
-        "All 13 towers seeded with capability maps, headcount, and starter dials.",
-      errorTitle: "Couldn't load sample",
-    },
-  });
 
   const minePicked = mine.length > 0;
   const orderedTowers = React.useMemo(() => {
@@ -144,12 +125,6 @@ export function CapabilityMapHubClient() {
               lights up.
             </p>
           </div>
-          <span
-            className="rounded-full border border-forge-hint/40 bg-forge-well/50 px-3 py-1 text-[11px] font-medium text-forge-subtle"
-            title="Illustrative model — figures are not Versant-reported and not a system of record."
-          >
-            Illustrative — not Versant-reported
-          </span>
         </div>
 
         {/* KEY METRICS — top of page */}
@@ -167,28 +142,19 @@ export function CapabilityMapHubClient() {
                   Start here
                 </div>
                 <h2 className="mt-2 font-display text-lg font-semibold text-forge-ink">
-                  See the assessment in action
+                  Start with any tower
                 </h2>
                 <p className="mt-1 text-sm text-forge-body">
-                  Load the illustrative sample across all 13 towers, then jump to any tower
-                  to confirm its capability map.
+                  Pick a tower below to confirm its capability map and headcount. Once
+                  your first tower is in, Step 2 — Configure Impact Levers lights up.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void sampleLoadOp.fire()}
-                  disabled={sampleLoadOp.state === "loading"}
-                  className="inline-flex items-center gap-2 rounded-lg bg-accent-purple px-4 py-2 text-sm font-medium text-white hover:bg-accent-purple-dark disabled:opacity-60"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  {sampleLoadOp.state === "loading" ? "Loading..." : "Load sample program"}
-                </button>
                 <a
                   href="#tower-list"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-forge-border bg-forge-surface px-3 py-2 text-sm text-forge-body hover:border-accent-purple/30"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-accent-purple/40 bg-accent-purple/10 px-3 py-2 text-sm font-medium text-accent-purple-dark hover:bg-accent-purple/20"
                 >
-                  I have my own data
+                  Pick a tower
                   <ArrowRight className="h-4 w-4" />
                 </a>
               </div>

@@ -85,13 +85,6 @@ export const glossary: GlossaryEntry[] = [
     long: "Combines task structuredness, data availability, and review burden. Defaults seeded from heuristics; tower leads override per L3 capability. Read alongside the AI Initiatives module for the agents that realise this headroom.",
   },
   {
-    id: "modeled-value",
-    category: "Prioritisation & delivery",
-    term: "Modeled value",
-    short: "Illustrative model output. Not Versant-reported.",
-    long: "All $ figures in this portal are illustrative model output, not a system of record. They use the user-entered blended rates and the per-L3 dials. Use them to compare towers and prioritise, not to commit.",
-  },
-  {
     id: "baseline",
     category: "Prioritisation & delivery",
     term: "Baseline",
@@ -117,7 +110,7 @@ export const glossary: GlossaryEntry[] = [
     category: "Prioritisation & delivery",
     term: "Impact tier",
     short: "Qualitative size of opportunity — High / Medium / Low.",
-    long: "We use tiers, not point estimates. High = ≥ $20M annualised modelled impact for an initiative; ≥ $200M for a tower. Medium = $5-20M / $50-200M. Low = below those bands. Discovery refines specific numbers.",
+    long: "We use tiers, not point estimates. High / Medium / Low capture the qualitative size of the opportunity. Discovery refines specific numbers.",
   },
 
   // ---- Agents & architecture ------------------------------------------

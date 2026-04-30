@@ -10,6 +10,7 @@ import {
 } from "@/lib/assess/scenarioModel";
 import { towers } from "@/data/towers";
 import { cn } from "@/lib/utils";
+import { useRedactDollars, RedactedAmount } from "@/lib/clientMode";
 
 type Variant = "hero" | "compact";
 
@@ -18,13 +19,13 @@ type Props = {
   variant?: Variant;
   /** Show "+10pts offshore = $YM | +10pts AI = $ZM" sensitivity ribbon. */
   showSensitivity?: boolean;
-  /** Override the headline label. Defaults to "Modeled annual OpEx reduction". */
+  /** Override the headline label. Defaults to "Annual impact estimate". */
   label?: string;
   className?: string;
 };
 
 /**
- * Live program-wide modeled impact in dollar terms — the hero on Program Home
+ * Live program-wide impact in dollar terms — the hero on Program Home
  * and the Impact Estimate page, and a compact variant inside the Configure
  * Impact Levers hub.
  *
@@ -37,11 +38,12 @@ export function ImpactHero({
   program,
   variant = "hero",
   showSensitivity = true,
-  label = "Modeled annual OpEx reduction",
+  label = "Annual impact estimate",
   className,
 }: Props) {
   const summary = React.useMemo(() => programImpactSummary(program), [program]);
   const sens = React.useMemo(() => programSensitivityDeltas(program), [program]);
+  const redact = useRedactDollars();
 
   const noData = summary.contributingTowers.length === 0;
 
@@ -64,13 +66,15 @@ export function ImpactHero({
             <div className="font-display text-xl font-semibold text-forge-ink">
               {noData ? (
                 <span className="text-forge-subtle">$—</span>
+              ) : redact ? (
+                <RedactedAmount className="text-forge-subtle" />
               ) : (
                 <MoneyCounter value={summary.combined} />
               )}
             </div>
           </div>
         </div>
-        {!noData && showSensitivity ? (
+        {!noData && showSensitivity && !redact ? (
           <div className="flex items-center gap-3 text-[11px] font-mono text-forge-subtle">
             <SensitivityChip label="+10pts off" delta={sens.dOff10} />
             <SensitivityChip label="+10pts AI" delta={sens.dAi10} />
@@ -97,48 +101,65 @@ export function ImpactHero({
             <div className="font-display text-5xl font-semibold tracking-tight text-forge-ink sm:text-6xl">
               {noData ? (
                 <span className="text-forge-subtle">$—</span>
+              ) : redact ? (
+                <RedactedAmount className="text-forge-subtle" />
               ) : (
                 <MoneyCounter value={summary.combined} decimals={2} />
               )}
             </div>
             {!noData ? (
               <div className="font-mono text-xs text-forge-subtle">
-                pool {formatMoney(summary.totalPool, { decimals: 1 })} ·{" "}
-                {summary.contributingTowers.length}/{towers.length} towers
+                {redact ? (
+                  <>pool — · {summary.contributingTowers.length}/{towers.length} towers</>
+                ) : (
+                  <>
+                    pool {formatMoney(summary.totalPool, { decimals: 1 })} ·{" "}
+                    {summary.contributingTowers.length}/{towers.length} towers
+                  </>
+                )}
               </div>
             ) : null}
           </div>
           {!noData ? (
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-              <SplitChip
-                label="Offshore"
-                value={summary.offshore}
-                pct={
-                  summary.offshore + summary.ai > 0
-                    ? (summary.offshore / (summary.offshore + summary.ai)) * 100
-                    : 0
-                }
-                hue="purple"
-              />
-              <SplitChip
-                label="AI"
-                value={summary.ai}
-                pct={
-                  summary.offshore + summary.ai > 0
-                    ? (summary.ai / (summary.offshore + summary.ai)) * 100
-                    : 0
-                }
-                hue="teal"
-              />
-              <span className="font-mono text-[11px] text-forge-hint">
-                wt avg {summary.weightedOffshorePct.toFixed(0)}% off ·{" "}
-                {summary.weightedAiPct.toFixed(0)}% AI
-              </span>
-            </div>
+            redact ? (
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                <span className="font-mono text-[11px] text-forge-hint">
+                  wt avg {summary.weightedOffshorePct.toFixed(0)}% off ·{" "}
+                  {summary.weightedAiPct.toFixed(0)}% AI
+                </span>
+              </div>
+            ) : (
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                <SplitChip
+                  label="Offshore"
+                  value={summary.offshore}
+                  pct={
+                    summary.offshore + summary.ai > 0
+                      ? (summary.offshore / (summary.offshore + summary.ai)) * 100
+                      : 0
+                  }
+                  hue="purple"
+                />
+                <SplitChip
+                  label="AI"
+                  value={summary.ai}
+                  pct={
+                    summary.offshore + summary.ai > 0
+                      ? (summary.ai / (summary.offshore + summary.ai)) * 100
+                      : 0
+                  }
+                  hue="teal"
+                />
+                <span className="font-mono text-[11px] text-forge-hint">
+                  wt avg {summary.weightedOffshorePct.toFixed(0)}% off ·{" "}
+                  {summary.weightedAiPct.toFixed(0)}% AI
+                </span>
+              </div>
+            )
           ) : (
             <p className="mt-2 max-w-md text-sm text-forge-subtle">
               Confirm the capability map, set headcount, and dial offshore + AI per L3 — the
-              modeled value lights up here as you go.
+              impact lights up here as you go.
             </p>
           )}
         </div>
@@ -149,7 +170,7 @@ export function ImpactHero({
           <Building2 className="h-7 w-7" />
         </div>
       </div>
-      {!noData && showSensitivity ? (
+      {!noData && showSensitivity && !redact ? (
         <div className="mt-5 flex flex-wrap gap-3 border-t border-forge-border pt-4 text-xs">
           <span className="font-mono uppercase tracking-wider text-forge-hint">
             Sensitivity

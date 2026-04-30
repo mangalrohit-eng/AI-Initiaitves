@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { ProgramJourneyGuidance } from "@/components/program/ProgramJourneyGuidance";
 import { PageShell } from "@/components/PageShell";
+import { useRedactDollars } from "@/lib/clientMode";
 
 type StepStatus = "active" | "coming-soon";
 
@@ -59,7 +60,7 @@ const FLOW: ReadonlyArray<FlowStep> = [
     step: 3,
     title: "Review impact estimate",
     description:
-      "See the modeled program $ — by tower, by lever, with sensitivity bands.",
+      "Roll-up of the program impact lens — by tower, by lever, with sensitivity bands.",
     href: "/impact-levers/summary",
     icon: <TrendingUp className="h-6 w-6" />,
     status: "active",
@@ -88,6 +89,15 @@ const FLOW: ReadonlyArray<FlowStep> = [
 ];
 
 export function ProgramHome() {
+  const redact = useRedactDollars();
+  // Step 3 (Review impact estimate) is the program's modeled-$ roll-up; it's
+  // hidden in protected mode so the card itself doesn't draw the client's
+  // attention to a hidden surface. The grid collapses from 5 cols to 4.
+  const flow = React.useMemo(
+    () => (redact ? FLOW.filter((s) => s.step !== 3) : FLOW),
+    [redact],
+  );
+  const stepCount = flow.length;
   return (
     <PageShell>
       <div className="mx-auto max-w-6xl px-4 pb-10 pt-4 sm:px-6 lg:px-8">
@@ -108,7 +118,9 @@ export function ProgramHome() {
             workflow
           </h1>
           <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-forge-subtle">
-            Five steps to take a tower from raw capability map to a defended impact case.
+            {stepCount === 5
+              ? "Five steps to take a tower from raw capability map to a defended impact case."
+              : `${stepCount} steps to take a tower from raw capability map through to AI initiative design.`}{" "}
             Pick up wherever you left off.
           </p>
           <p className="mt-2">
@@ -122,13 +134,16 @@ export function ProgramHome() {
           </p>
         </section>
 
-        {/* ========== 5-STEP FLOW ========== */}
+        {/* ========== STEP FLOW ========== */}
         <ol
           aria-label="Tower-lead workflow"
-          className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:gap-2.5"
+          className={
+            "mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:gap-2.5 " +
+            (stepCount === 5 ? "lg:grid-cols-5" : "lg:grid-cols-4")
+          }
         >
-          {FLOW.map((s, idx) => (
-            <FlowStepCard key={s.step} step={s} isLast={idx === FLOW.length - 1} />
+          {flow.map((s, idx) => (
+            <FlowStepCard key={s.step} step={s} isLast={idx === flow.length - 1} />
           ))}
         </ol>
 
@@ -147,9 +162,6 @@ export function ProgramHome() {
               className="inline-block h-1.5 w-1.5 rounded-full bg-accent-teal"
             />
             Design initiatives — steps 4–5
-          </span>
-          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-forge-border bg-forge-surface px-2 py-0.5">
-            Illustrative model — not Versant-reported
           </span>
         </div>
       </div>

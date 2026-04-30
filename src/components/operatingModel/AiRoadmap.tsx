@@ -11,6 +11,7 @@ import type { InitiativeL3, InitiativeL4 } from "@/lib/initiatives/select";
 import type { UseInitiativeReviewsResult } from "@/lib/initiatives/useInitiativeReviews";
 import type { InitiativeReview } from "@/data/assess/types";
 import { formatUsdCompact } from "@/lib/format";
+import { useRedactDollars } from "@/lib/clientMode";
 import { InitiativeReviewActions } from "./InitiativeReviewActions";
 
 type RoadmapItem = {
@@ -31,6 +32,7 @@ function RoadmapCard({
   review: InitiativeReview | undefined;
   actions: UseInitiativeReviewsResult["actions"];
 }) {
+  const redact = useRedactDollars();
   const { l4, l3 } = item;
   const initiative = l4.initiativeId
     ? tower.processes.find((p) => p.id === l4.initiativeId)
@@ -85,9 +87,11 @@ function RoadmapCard({
       ) : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-forge-subtle">
-        <span className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5 font-mono tabular-nums text-forge-ink">
-          {formatUsdCompact(l3.aiUsd)} AI $
-        </span>
+        {!redact ? (
+          <span className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5 font-mono tabular-nums text-forge-ink">
+            {formatUsdCompact(l3.aiUsd)} AI $
+          </span>
+        ) : null}
         {initiative ? (
           <span className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5">
             {initiative.agents.length} agents

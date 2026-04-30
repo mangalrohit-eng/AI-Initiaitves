@@ -34,6 +34,7 @@ import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
 import { TowerDataExports } from "@/components/assess/TowerDataExports";
 import { towers } from "@/data/towers";
+import { useRedactDollars } from "@/lib/clientMode";
 
 type Props = { towerId: TowerId; towerName: string };
 
@@ -52,6 +53,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
   const sync = useAssessSync();
   const toast = useToast();
   const ops = useTowerAssessOps(towerId, towerName);
+  const redact = useRedactDollars();
   const {
     program,
     tState,
@@ -311,7 +313,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-forge-body">
               Dial <Term termKey="offshore dial">offshore</Term> and{" "}
               <Term termKey="ai impact dial">AI impact</Term> per L3 capability. The
-              modeled saving updates live against each capability&apos;s annual pool $.
+              impact updates live against each capability&apos;s annual pool.
             </p>
           </div>
           <Link
@@ -421,7 +423,11 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
                 to change pool math across all towers.
               </span>
               <span className="font-mono">
-                tower pool ${totalPool.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                {redact ? (
+                  <>tower pool —</>
+                ) : (
+                  <>tower pool ${totalPool.toLocaleString("en-US", { maximumFractionDigits: 0 })}</>
+                )}
               </span>
             </div>
 

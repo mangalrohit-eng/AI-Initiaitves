@@ -1,3 +1,5 @@
+"use client";
+
 import {
   AlertTriangle,
   CalendarClock,
@@ -9,6 +11,7 @@ import {
   Users,
 } from "lucide-react";
 import type { Process } from "@/data/types";
+import { useRedactDollars } from "@/lib/clientMode";
 
 function ConfidenceBadge({ c }: { c: Process["confidence"] }) {
   if (c === "Validated") {
@@ -48,6 +51,7 @@ function BulletList({ items, tone = "neutral" }: { items?: string[]; tone?: "neu
 
 export function BusinessCase({ process }: { process: Process }) {
   const bc = process.businessCase;
+  const redact = useRedactDollars();
   const hasAny = Boolean(
     bc &&
       (bc.investmentEstimate ||
@@ -106,7 +110,9 @@ export function BusinessCase({ process }: { process: Process }) {
               <CircleDollarSign className="h-3.5 w-3.5 text-accent-purple" />
               Investment estimate
             </div>
-            <div className="mt-2 text-sm font-medium text-forge-ink">{bc.investmentEstimate}</div>
+            <div className="mt-2 text-sm font-medium text-forge-ink">
+              {redact ? <span className="text-forge-subtle">—</span> : bc.investmentEstimate}
+            </div>
           </div>
         ) : null}
 
@@ -116,7 +122,9 @@ export function BusinessCase({ process }: { process: Process }) {
               <Gauge className="h-3.5 w-3.5 text-accent-purple" />
               Payback period
             </div>
-            <div className="mt-2 text-sm font-medium text-forge-ink">{bc.paybackPeriod}</div>
+            <div className="mt-2 text-sm font-medium text-forge-ink">
+              {redact ? <span className="text-forge-subtle">—</span> : bc.paybackPeriod}
+            </div>
           </div>
         ) : null}
 

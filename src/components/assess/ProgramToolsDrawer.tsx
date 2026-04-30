@@ -3,64 +3,33 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  AlertTriangle,
   ChevronDown,
   Download,
   FileJson,
   FileSpreadsheet,
-  FileUp,
   HardDrive,
-  RefreshCw,
-  Sparkles,
   Table2,
   Wrench,
 } from "lucide-react";
-import { useAssessSync } from "@/components/assess/AssessSyncProvider";
-import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
-import { useToast } from "@/components/feedback/ToastProvider";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
-import { buildSeededAssessProgramV2 } from "@/data/assess/seedAssessProgram";
 import { downloadAllTowersSampleWorkbook, downloadBlob } from "@/lib/assess/downloadAssessSamples";
-import {
-  readAssessProgramFile,
-  serializeAssessProgramForDownload,
-} from "@/lib/assess/assessProgramIO";
-import { getAssessProgram, setAssessProgram } from "@/lib/localStore";
-import { getPortalAudience, isInternalSurfaceAllowed } from "@/lib/portalAudience";
+import { serializeAssessProgramForDownload } from "@/lib/assess/assessProgramIO";
+import { getAssessProgram } from "@/lib/localStore";
 
-type Section = "samples" | "backup" | "reseed";
+type Section = "samples" | "backup";
 
 /**
- * Single quiet drawer that consolidates all three secondary surfaces — Templates
- * and samples, Backup and restore, and Admin re-seed.
+ * Quiet drawer with non-destructive program tools — empty templates, sample
+ * workbook, JSON export, status links. Every program-wide destructive action
+ * (load sample, import, re-seed, restore assumptions) is reached through the
+ * `Program admin` link in the global footer, never from working surfaces.
  *
- * Renders at the bottom of the Capability Map and Configure Impact Levers hubs,
- * collapsed by default so the page stays focused on the live program. Internal-only
- * facilities (Re-seed) are hidden when the portal audience is external.
+ * Renders at the bottom of the Capability Map and Configure Impact Levers
+ * hubs, collapsed by default.
  */
 export function ProgramToolsDrawer() {
-  const sync = useAssessSync();
-  const toast = useToast();
-  const allowedInternal = isInternalSurfaceAllowed(getPortalAudience());
   const [open, setOpen] = React.useState(false);
   const [section, setSection] = React.useState<Section>("samples");
-  const fileRef = React.useRef<HTMLInputElement>(null);
-  const [confirmImportOpen, setConfirmImportOpen] = React.useState(false);
-  const [pendingFile, setPendingFile] = React.useState<File | null>(null);
-  const [confirmReseedOpen, setConfirmReseedOpen] = React.useState(false);
-
-  const sampleLoadOp = useAsyncOp<void, []>({
-    run: async () => {
-      setAssessProgram(buildSeededAssessProgramV2());
-      if (sync?.canSync) await sync.flushSave();
-    },
-    messages: {
-      loadingTitle: "Loading sample program across 13 towers",
-      successTitle: "Sample program loaded",
-      successDescription: "All 13 towers seeded with capability maps, headcount, and starter dials.",
-      errorTitle: "Couldn't load sample",
-    },
-  });
 
   const sampleWorkbookOp = useAsyncOp<void, []>({
     run: async () => {
@@ -90,61 +59,6 @@ export function ProgramToolsDrawer() {
     },
   });
 
-  const importOp = useAsyncOp<void, [File]>({
-    run: async (f) => {
-      const cur = getAssessProgram();
-      const r = await readAssessProgramFile(f, { mergeLeadDeadlinesFrom: cur });
-      if (!r.ok) throw new Error(r.error);
-      setAssessProgram(r.program);
-      if (sync?.canSync) await sync.flushSave();
-    },
-    messages: {
-      loadingTitle: "Importing JSON backup",
-      loadingDescription: "Replacing the program state with the file's contents...",
-      successTitle: "Backup imported",
-      successDescription: () =>
-        sync?.canSync
-          ? "Loaded and saved to the database. The file is still useful as a snapshot."
-          : "Loaded into this browser. Set DATABASE_URL to sync to other devices.",
-      errorTitle: "Couldn't import backup",
-    },
-  });
-
-  const reseedOp = useAsyncOp<{ towers: number }, []>({
-    run: async () => {
-      const r = await fetch("/api/assess/seed", { method: "POST", credentials: "include" });
-      const data = (await r.json().catch(() => ({}))) as {
-        ok?: boolean;
-        towers?: number;
-        error?: string;
-      };
-      if (!r.ok || !data.ok) {
-        throw new Error(data.error ?? `Re-seed failed (HTTP ${r.status})`);
-      }
-      if (sync) await sync.refetch();
-      return { towers: data.towers ?? 0 };
-    },
-    messages: {
-      loadingTitle: "Re-seeding program from latest defaults",
-      loadingDescription: "Rebuilding L1-L4 maps and starter heuristic for all 13 towers...",
-      successTitle: ({ towers }) => `Re-seeded ${towers} towers from latest defaults`,
-      successDescription:
-        "All headcount, dials, and scenario state were replaced. Cost-weighted baselines recomputed.",
-      errorTitle: "Re-seed failed",
-    },
-    retryable: true,
-  });
-
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (!f) return;
-    setPendingFile(f);
-    setConfirmImportOpen(true);
-  };
-
-  const dbReady = sync?.canSync ?? false;
-
   return (
     <section
       id="program-tools"
@@ -162,7 +76,7 @@ export function ProgramToolsDrawer() {
             Program tools
           </span>
           <span className="text-xs text-forge-hint">
-            templates, backup, {allowedInternal ? "admin · " : ""}rarely needed
+            templates, backup, status
           </span>
         </span>
         <ChevronDown
@@ -186,24 +100,16 @@ export function ProgramToolsDrawer() {
               onClick={() => setSection("backup")}
               icon={<HardDrive className="h-3 w-3" />}
             >
-              Backup &amp; restore
+              Backup &amp; status
             </SectionTab>
-            {allowedInternal ? (
-              <SectionTab
-                active={section === "reseed"}
-                onClick={() => setSection("reseed")}
-                icon={<Sparkles className="h-3 w-3" />}
-              >
-                Admin · Re-seed
-              </SectionTab>
-            ) : null}
           </div>
 
           <div className="px-4 py-4">
             {section === "samples" ? (
               <div className="space-y-3">
                 <p className="text-xs text-forge-subtle">
-                  Empty templates and the 13-tower sample workbook for handoff outside the portal.
+                  Empty templates and the 13-tower sample workbook for handoff outside
+                  the portal.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <a
@@ -232,15 +138,6 @@ export function ProgramToolsDrawer() {
                       ? "Building..."
                       : "13-tower sample workbook"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void sampleLoadOp.fire()}
-                    disabled={sampleLoadOp.state === "loading"}
-                    className="inline-flex items-center gap-2 rounded-lg border border-accent-purple/30 bg-accent-purple/10 px-3 py-2 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/20 disabled:opacity-60"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    {sampleLoadOp.state === "loading" ? "Loading..." : "Load sample program"}
-                  </button>
                 </div>
               </div>
             ) : null}
@@ -248,9 +145,7 @@ export function ProgramToolsDrawer() {
             {section === "backup" ? (
               <div className="space-y-3">
                 <p className="text-xs text-forge-subtle">
-                  {dbReady
-                    ? "Program state syncs to Postgres on every change. Use JSON export to snapshot for SharePoint, Teams, or email."
-                    : "Without DATABASE_URL, assess data stays in this browser only. JSON export still backs up everything for handoff."}
+                  Take a JSON snapshot of current program state any time — non-destructive.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -262,15 +157,6 @@ export function ProgramToolsDrawer() {
                     <FileJson className="h-3.5 w-3.5 text-accent-purple" />
                     {exportOp.state === "loading" ? "Exporting..." : "Export JSON backup"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => fileRef.current?.click()}
-                    disabled={importOp.state === "loading"}
-                    className="inline-flex items-center gap-2 rounded-lg border border-forge-border bg-forge-surface px-3 py-2 text-xs text-forge-body hover:border-accent-purple/30 disabled:opacity-60"
-                  >
-                    <FileUp className="h-3.5 w-3.5 text-accent-teal" />
-                    {importOp.state === "loading" ? "Importing..." : "Import JSON"}
-                  </button>
                   <Link
                     href="/program/tower-status"
                     className="inline-flex items-center gap-2 rounded-lg border border-forge-border bg-forge-surface px-3 py-2 text-xs text-forge-body hover:border-accent-teal/35"
@@ -278,113 +164,12 @@ export function ProgramToolsDrawer() {
                     <Table2 className="h-3.5 w-3.5 text-accent-teal" />
                     Tower step status
                   </Link>
-                  {allowedInternal ? (
-                    <Link
-                      href="/program/lead-deadlines"
-                      className="inline-flex items-center gap-2 rounded-lg border border-accent-purple/35 bg-accent-purple/5 px-3 py-2 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/15"
-                    >
-                      Lead deadlines (admin)
-                    </Link>
-                  ) : null}
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="application/json,.json"
-                    className="hidden"
-                    onChange={onFile}
-                  />
                 </div>
-              </div>
-            ) : null}
-
-            {section === "reseed" && allowedInternal ? (
-              <div className="space-y-3">
-                <div className="flex items-start gap-2 rounded-lg border border-accent-amber/30 bg-accent-amber/5 p-3 text-xs text-forge-body">
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-amber" aria-hidden />
-                  <div>
-                    Overwrites every tower&apos;s capability map &amp; headcount, dials, and scenario with the latest
-                    L1-L4 maps + starter heuristic. Use after editing the seed files.
-                  </div>
-                </div>
-                {!dbReady ? (
-                  <p className="text-xs text-accent-amber">
-                    Database not configured. Set <code className="font-mono">DATABASE_URL</code>{" "}
-                    and run the migration first.
-                  </p>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setConfirmReseedOpen(true)}
-                  disabled={!dbReady || reseedOp.state === "loading"}
-                  className="inline-flex items-center gap-2 rounded-lg border border-accent-purple/40 bg-accent-purple/10 px-3 py-2 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/20 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {reseedOp.state === "loading"
-                    ? "Re-seeding..."
-                    : "Re-seed all towers from latest defaults"}
-                </button>
               </div>
             ) : null}
           </div>
         </div>
       ) : null}
-
-      <ConfirmDialog
-        open={confirmImportOpen}
-        onClose={() => {
-          setConfirmImportOpen(false);
-          setPendingFile(null);
-        }}
-        onConfirm={async () => {
-          if (!pendingFile) {
-            setConfirmImportOpen(false);
-            return;
-          }
-          const f = pendingFile;
-          setConfirmImportOpen(false);
-          setPendingFile(null);
-          const ok = await importOp.fire(f);
-          if (ok !== undefined) {
-            toast.info({
-              title: "Program state replaced",
-              description: f.name,
-            });
-          }
-        }}
-        title="Replace the current program with this file?"
-        description={
-          <>
-            All current program state (capability map, headcount, dials, scenarios) will be replaced by
-            the contents of <span className="font-mono">{pendingFile?.name ?? "this file"}</span>.
-            Use Export first if you want to keep the current state as a backup.
-          </>
-        }
-        confirmLabel="Yes, replace"
-        cancelLabel="Cancel"
-        variant="destructive"
-        busy={importOp.state === "loading"}
-      />
-
-      <ConfirmDialog
-        open={confirmReseedOpen}
-        onClose={() => setConfirmReseedOpen(false)}
-        onConfirm={async () => {
-          setConfirmReseedOpen(false);
-          await reseedOp.fire();
-        }}
-        title="Replace the program with the latest seed?"
-        description={
-          <>
-            All 13 towers will be rebuilt from the latest L1-L4 maps and starter heuristic.
-            Any edits made in the UI will be replaced. This cannot be undone.
-          </>
-        }
-        confirmLabel="Yes, replace"
-        cancelLabel="Cancel"
-        variant="destructive"
-        confirmPhrase="re-seed"
-        busy={reseedOp.state === "loading"}
-      />
     </section>
   );
 }

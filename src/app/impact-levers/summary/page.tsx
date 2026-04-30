@@ -5,7 +5,7 @@ import { AssessmentSummaryClient } from "@/components/assess/AssessmentSummaryCl
 export const metadata: Metadata = {
   title: "Impact Estimate — Versant Forge Program",
   description:
-    "Live program-wide modeled impact, scenario presets, per-tower lever cards, and a print-ready snapshot for leadership decks.",
+    "Live program-wide impact, scenario presets, per-tower lever cards, and a print-ready snapshot for leadership decks.",
 };
 
 export default function ImpactEstimateSummaryPage() {

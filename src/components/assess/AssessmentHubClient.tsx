@@ -32,6 +32,7 @@ import {
 } from "@/lib/assess/scenarioModel";
 import { getTowerHref } from "@/lib/towerHref";
 import { formatMoney } from "@/components/ui/MoneyCounter";
+import { useRedactDollars } from "@/lib/clientMode";
 import { LeadDeadlineChip } from "@/components/program/LeadDeadlineChip";
 
 type DialStatus = "no-footprint" | "default-only" | "dialed";
@@ -62,6 +63,7 @@ export function AssessmentHubClient() {
   const [program, setProgram] = React.useState<AssessProgramV2>(() => getAssessProgramHydrationSnapshot());
   const [mine, setMine] = React.useState<TowerId[]>([]);
   const impactHubGuidance = useGuidanceImpactHub();
+  const redact = useRedactDollars();
 
   React.useEffect(() => {
     setProgram(getAssessProgram());
@@ -144,15 +146,17 @@ export function AssessmentHubClient() {
         </div>
 
         {/* Quick link to impact estimate */}
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-forge-border bg-forge-surface/60 p-3">
-          <Link
-            href="/impact-levers/summary"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-accent-purple/40 bg-accent-purple/10 px-3 py-1.5 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/20"
-          >
-            Open impact estimate
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
+        {!redact ? (
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-forge-border bg-forge-surface/60 p-3">
+            <Link
+              href="/impact-levers/summary"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-accent-purple/40 bg-accent-purple/10 px-3 py-1.5 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/20"
+            >
+              Open impact estimate
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        ) : null}
 
         {/* Empty state — encourage Capability Map first */}
         {!ready ? (
@@ -192,7 +196,7 @@ export function AssessmentHubClient() {
               <div className="text-xs text-forge-subtle">
                 {dialStatus(program, nextRecommended.id as TowerId) === "default-only"
                   ? "Defaults are seeded — review and override per L3 to make the impact yours."
-                  : "Tweak the dials to fine-tune the modeled value."}
+                  : "Tweak the dials to fine-tune the impact."}
               </div>
             </div>
             <Link
@@ -287,7 +291,11 @@ export function AssessmentHubClient() {
                   <div className="rounded-lg border border-forge-border bg-forge-page/40 px-2 py-1">
                     <div className="font-mono text-[9px] uppercase tracking-wider text-forge-hint">Pool</div>
                     <div className="font-mono text-[12px] tabular-nums text-forge-body">
-                      {pool > 0 ? formatMoney(pool, { decimals: pool >= 1_000_000 ? 1 : 0 }) : "$—"}
+                      {redact
+                        ? "—"
+                        : pool > 0
+                          ? formatMoney(pool, { decimals: pool >= 1_000_000 ? 1 : 0 })
+                          : "$—"}
                     </div>
                   </div>
                   <div className="rounded-lg border border-forge-border bg-forge-page/40 px-2 py-1">
@@ -301,11 +309,13 @@ export function AssessmentHubClient() {
                   <div className="rounded-lg border border-forge-border bg-forge-page/40 px-2 py-1">
                     <div className="font-mono text-[9px] uppercase tracking-wider text-forge-hint">Modeled</div>
                     <div className="font-mono text-[12px] tabular-nums text-accent-green">
-                      {outcome
-                        ? formatMoney(outcome.combined, {
-                            decimals: outcome.combined >= 1_000_000 ? 1 : 0,
-                          })
-                        : "$—"}
+                      {redact
+                        ? "—"
+                        : outcome
+                          ? formatMoney(outcome.combined, {
+                              decimals: outcome.combined >= 1_000_000 ? 1 : 0,
+                            })
+                          : "$—"}
                     </div>
                   </div>
                 </div>

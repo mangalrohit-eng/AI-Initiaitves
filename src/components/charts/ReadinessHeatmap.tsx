@@ -18,7 +18,7 @@ export function ReadinessHeatmap({
         <div className="grid grid-cols-[220px_1fr] gap-3 text-xs text-forge-hint">
           <div>Process</div>
           <div className="grid grid-cols-2 gap-3">
-            <div>Modeled impact (H / M / L)</div>
+            <div>Impact (H / M / L)</div>
             <div>Complexity vs impact tier</div>
           </div>
         </div>

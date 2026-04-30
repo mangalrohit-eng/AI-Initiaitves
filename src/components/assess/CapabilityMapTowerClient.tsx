@@ -44,6 +44,7 @@ import {
 } from "@/lib/assess/capabilityMapStepStatus";
 import { TowerDataExports } from "@/components/assess/TowerDataExports";
 import { towers } from "@/data/towers";
+import { useRedactDollars } from "@/lib/clientMode";
 import { cn } from "@/lib/utils";
 import {
   ReplaceUploadConfirmDialog,
@@ -866,6 +867,7 @@ function HeadcountTable({
   onPatch: (id: string, patch: Partial<L3WorkforceRow>) => void;
   readOnly?: boolean;
 }) {
+  const redact = useRedactDollars();
   return (
     <div className="overflow-x-auto border-t border-forge-border">
       <table className="w-full min-w-[760px] border-collapse text-left text-sm">
@@ -914,24 +916,33 @@ function HeadcountTable({
                 ),
               )}
               <td className="px-1 py-1">
-                <input
-                  className="w-24 rounded border border-forge-border bg-forge-page px-1 py-0.5 text-right font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
-                  type="number"
-                  min={0}
-                  step={1000}
-                  disabled={readOnly}
-                  value={r.annualSpendUsd ?? ""}
-                  placeholder="optional"
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    if (raw === "") {
-                      onPatch(r.id, { annualSpendUsd: undefined });
-                      return;
-                    }
-                    const n = Math.max(0, Number(raw));
-                    if (Number.isFinite(n)) onPatch(r.id, { annualSpendUsd: n });
-                  }}
-                />
+                {redact ? (
+                  <span
+                    className="inline-block w-24 rounded border border-forge-border bg-forge-page px-1 py-0.5 text-right font-mono text-xs text-forge-subtle"
+                    aria-label="Annual spend not available"
+                  >
+                    —
+                  </span>
+                ) : (
+                  <input
+                    className="w-24 rounded border border-forge-border bg-forge-page px-1 py-0.5 text-right font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                    type="number"
+                    min={0}
+                    step={1000}
+                    disabled={readOnly}
+                    value={r.annualSpendUsd ?? ""}
+                    placeholder="optional"
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === "") {
+                        onPatch(r.id, { annualSpendUsd: undefined });
+                        return;
+                      }
+                      const n = Math.max(0, Number(raw));
+                      if (Number.isFinite(n)) onPatch(r.id, { annualSpendUsd: n });
+                    }}
+                  />
+                )}
               </td>
             </tr>
           ))}

@@ -53,7 +53,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (path === "/program/lead-deadlines") {
+  if (path === "/program/lead-deadlines" || path === "/program/admin") {
     const adminTok = req.cookies.get(ADMIN_AUTH_COOKIE_NAME)?.value;
     const adminOk = await isValidAdminSessionToken(adminTok);
     if (!adminOk) {

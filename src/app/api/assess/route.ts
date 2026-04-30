@@ -2,7 +2,12 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { AssessProgramV2 } from "@/data/assess/types";
 import { importAssessProgramFromJsonText } from "@/lib/assess/assessProgramIO";
-import { AUTH_COOKIE_NAME, isValidSessionToken } from "@/lib/auth";
+import {
+  ADMIN_AUTH_COOKIE_NAME,
+  AUTH_COOKIE_NAME,
+  isValidAdminSessionToken,
+  isValidSessionToken,
+} from "@/lib/auth";
 import { ASSESS_WORKSHOP_ID, getDb, isDatabaseUrlConfigured } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -41,7 +46,7 @@ function isDatabaseConnectionFailure(e: unknown): boolean {
  * PUT — validate body as AssessProgramV2 and upsert one row in Postgres.
  */
 export async function GET() {
-  if (!(await isAuthed())) {
+  if (!(await isWorkshopAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   if (!isDatabaseUrlConfigured() || getDb() === null) {
@@ -89,7 +94,7 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  if (!(await isAuthed())) {
+  if (!(await isWorkshopAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   if (!isDatabaseUrlConfigured() || getDb() === null) {
@@ -117,6 +122,24 @@ export async function PUT(req: Request) {
   }
 
   const sql = getDb()!;
+  const isAdmin = await isProgramAdminAuthed();
+  if (!isAdmin) {
+    const current = await readCurrentProgram(sql);
+    if (!current) {
+      return NextResponse.json(
+        {
+          error:
+            "Program admin required to initialize or replace full workshop state. Use /login/admin and retry.",
+        },
+        { status: 403 },
+      );
+    }
+    const scope = validateTowerScopedMutation(current, program);
+    if (!scope.ok) {
+      return NextResponse.json({ error: scope.error }, { status: 403 });
+    }
+  }
+
   try {
     // postgres-js's `sql.json` is typed against its private `JSONValue`; we
     // already round-tripped through `JSON.parse(JSON.stringify(...))` so the
@@ -143,7 +166,87 @@ export async function PUT(req: Request) {
   }
 }
 
-async function isAuthed(): Promise<boolean> {
+async function isWorkshopAuthed(): Promise<boolean> {
   const token = cookies().get(AUTH_COOKIE_NAME)?.value;
   return isValidSessionToken(token);
+}
+
+async function isProgramAdminAuthed(): Promise<boolean> {
+  const token = cookies().get(ADMIN_AUTH_COOKIE_NAME)?.value;
+  return isValidAdminSessionToken(token);
+}
+
+async function readCurrentProgram(sql: NonNullable<ReturnType<typeof getDb>>): Promise<AssessProgramV2 | null> {
+  const rows = await sql<{ program: unknown }[]>`
+    SELECT program
+    FROM assess_workshop
+    WHERE id = ${ASSESS_WORKSHOP_ID}
+  `;
+  if (!rows.length) return null;
+  const asJson = JSON.stringify(rows[0].program);
+  const parsed = importAssessProgramFromJsonText(asJson);
+  if (!parsed.ok) {
+    throw new Error("Stored program failed validation. Fix or clear `assess_workshop`.");
+  }
+  return parsed.program;
+}
+
+function validateTowerScopedMutation(
+  current: AssessProgramV2,
+  next: AssessProgramV2,
+): { ok: true; towerId: string | null } | { ok: false; error: string } {
+  if (!jsonEqual(current.global, next.global)) {
+    return {
+      ok: false,
+      error:
+        "Program admin required: global assumptions changes are not allowed for non-admin users.",
+    };
+  }
+  if (!jsonEqual(current.leadDeadlines ?? null, next.leadDeadlines ?? null)) {
+    return {
+      ok: false,
+      error: "Program admin required: lead-deadlines updates are admin-only.",
+    };
+  }
+
+  const changedTowers = changedTowerIds(current, next);
+  if (changedTowers.length > 1) {
+    return {
+      ok: false,
+      error:
+        "Only one tower can be updated per save for non-admin users. Split the change by tower and retry.",
+    };
+  }
+  return { ok: true, towerId: changedTowers[0] ?? null };
+}
+
+function changedTowerIds(current: AssessProgramV2, next: AssessProgramV2): string[] {
+  const ids = new Set<string>([
+    ...Object.keys(current.towers ?? {}),
+    ...Object.keys(next.towers ?? {}),
+  ]);
+  const out: string[] = [];
+  for (const id of Array.from(ids)) {
+    const a = current.towers?.[id as keyof typeof current.towers] ?? null;
+    const b = next.towers?.[id as keyof typeof next.towers] ?? null;
+    if (!jsonEqual(a, b)) out.push(id);
+  }
+  return out;
+}
+
+function jsonEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(normalizeJson(a)) === JSON.stringify(normalizeJson(b));
+}
+
+function normalizeJson(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(normalizeJson);
+  if (v && typeof v === "object") {
+    const rec = v as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(rec).sort()) {
+      out[key] = normalizeJson(rec[key]);
+    }
+    return out;
+  }
+  return v;
 }

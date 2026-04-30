@@ -36,7 +36,7 @@ const ITEMS: HelpItem[] = [
   {
     id: "glossary",
     label: "Glossary",
-    description: "L2 / L3 / L4, offshore dial, AI dial, modeled value — the program vocabulary.",
+    description: "L2 / L3 / L4, offshore dial, AI dial, impact tier — the program vocabulary.",
     href: "/glossary",
     Icon: BookOpen,
   },

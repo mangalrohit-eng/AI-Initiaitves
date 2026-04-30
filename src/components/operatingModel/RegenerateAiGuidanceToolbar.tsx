@@ -174,7 +174,7 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
             <p>
               This re-runs Versant-grounded AI eligibility and priority scoring for{" "}
               <span className="font-mono text-accent-purple-dark">{rowIds.length}</span>{" "}
-              capabilities where the modeled AI dial is above zero and L4 activities
+              capabilities where the AI dial is above zero and L4 activities
               exist. Cached L4 verdicts for those rows are replaced.
             </p>
             <p>

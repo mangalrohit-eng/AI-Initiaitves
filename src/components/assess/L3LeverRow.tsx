@@ -14,6 +14,7 @@ import { MoneyCounter, formatMoney } from "@/components/ui/MoneyCounter";
 import { PercentSlider } from "@/components/ui/PercentSlider";
 import { RationalePopover } from "@/components/ui/RationalePopover";
 import { cn } from "@/lib/utils";
+import { useRedactDollars, RedactedAmount } from "@/lib/clientMode";
 
 type Props = {
   /** The L3 capability row — one slider card per row. */
@@ -39,6 +40,7 @@ type Props = {
  *     `rowModeledSaving` in `scenarioModel.ts` exactly.
  */
 export function L3LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
+  const redact = useRedactDollars();
   const saving = React.useMemo(
     () => rowModeledSaving(row, baseline, global),
     [row, baseline, global],
@@ -94,9 +96,13 @@ export function L3LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
             <span className="text-forge-hint">·</span>
             <span className="font-mono tabular-nums">
               pool{" "}
-              {saving.pool > 0
-                ? formatMoney(saving.pool, { decimals: saving.pool >= 1_000_000 ? 1 : 0 })
-                : "$—"}
+              {redact ? (
+                <RedactedAmount />
+              ) : saving.pool > 0 ? (
+                formatMoney(saving.pool, { decimals: saving.pool >= 1_000_000 ? 1 : 0 })
+              ) : (
+                "$—"
+              )}
             </span>
           </div>
           {visibleActivities.length > 0 ? (
@@ -151,10 +157,12 @@ export function L3LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
 
         <div className="flex flex-col items-end justify-between gap-1 text-right">
           <div className="text-[10px] font-medium uppercase tracking-wider text-forge-hint">
-            Modeled saving
+            Impact
           </div>
           <div className="font-display text-base font-semibold text-accent-green tabular-nums">
-            {saving.combined > 0 ? (
+            {redact ? (
+              <RedactedAmount className="text-forge-subtle" />
+            ) : saving.combined > 0 ? (
               <MoneyCounter
                 value={saving.combined}
                 decimals={saving.combined >= 1_000_000 ? 1 : 0}
@@ -164,8 +172,14 @@ export function L3LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
             )}
           </div>
           <div className="font-mono text-[10px] text-forge-hint">
-            off {formatMoney(saving.offshore, { decimals: 0 })} · AI{" "}
-            {formatMoney(saving.ai, { decimals: 0 })}
+            {redact ? (
+              <>off — · AI —</>
+            ) : (
+              <>
+                off {formatMoney(saving.offshore, { decimals: 0 })} · AI{" "}
+                {formatMoney(saving.ai, { decimals: 0 })}
+              </>
+            )}
           </div>
         </div>
       </div>

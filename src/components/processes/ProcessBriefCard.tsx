@@ -94,7 +94,7 @@ export function ProcessBriefCard({
 
       {/* Headline metrics */}
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <MetricPill label="Modeled impact" value={brief.impactTier} />
+        <MetricPill label="Impact" value={brief.impactTier} />
         <MetricPill label="Cycle today" value={brief.preState.typicalCycleTime || "—"} />
         <MetricPill label="Cycle with agentic AI" value={brief.postState.newCycleTime || "—"} />
       </section>

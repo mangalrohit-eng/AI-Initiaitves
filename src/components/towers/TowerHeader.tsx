@@ -26,7 +26,7 @@ export function TowerHeader({ tower }: { tower: Tower }) {
           value={`${om.aiEligibleCount} / ${om.processCount}`}
         />
         <MetricPill label="Agents modeled" value={`${agentsModeled}`} />
-        <MetricPill label="Modeled impact (tower)" value={tower.impactTier} />
+        <MetricPill label="Impact (tower)" value={tower.impactTier} />
         <MetricPill label="Top opportunity" value={tower.topOpportunityHeadline} className="sm:col-span-2 lg:col-span-1" />
       </div>
       <details className="rounded-xl border border-forge-border bg-forge-well/80 p-4 text-sm text-forge-body shadow-sm">

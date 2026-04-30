@@ -102,7 +102,7 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
 
         <section className="mt-14 space-y-3">
           <h2 className="font-display text-lg font-semibold text-forge-ink">
-            Modeled impact by AI initiative
+            Impact by AI initiative
           </h2>
           <p className="text-sm text-forge-subtle">
             Qualitative High / Medium / Low tiers per initiative (not financial, hours, or FTE precision).

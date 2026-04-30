@@ -209,7 +209,7 @@ export function deriveTopOpportunities(tower: Tower, limit = 3): TopOpportunity[
     .slice(0, limit);
   return ranked.map((p) => ({
     headline: p.name,
-    impact: `Modeled impact: ${p.impactTier}`,
+    impact: `Impact: ${p.impactTier}`,
     processId: p.id,
   }));
 }

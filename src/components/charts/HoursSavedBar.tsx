@@ -59,7 +59,7 @@ export function HoursSavedBar({
             formatter={(value, _name, item) => {
               const tier = (item?.payload as { tier?: string } | undefined)?.tier;
               const label = tier ? `${tier} (qualitative)` : String(value);
-              return [label, "Modeled impact"];
+              return [label, "Impact"];
             }}
           />
           <Bar dataKey="score" fill="#A100FF" radius={[0, 8, 8, 0]} />

@@ -5,6 +5,7 @@ import { TopNav } from "@/components/layout/TopNav";
 import { Footer } from "@/components/layout/Footer";
 import { ChromeGate } from "@/components/layout/ChromeGate";
 import { ToastProvider } from "@/components/feedback/ToastProvider";
+import { ClientModeProvider } from "@/lib/clientMode";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -41,17 +42,19 @@ export default function RootLayout({
       <body
         className={`${dmSans.variable} ${ibmPlex.variable} ${jetbrains.variable} min-h-screen bg-forge-page font-sans text-forge-ink antialiased`}
       >
-        <ToastProvider>
-          <div className="relative z-10 flex min-h-screen flex-col">
-            <ChromeGate>
-              <TopNav />
-            </ChromeGate>
-            <main className="flex-1">{children}</main>
-            <ChromeGate>
-              <Footer />
-            </ChromeGate>
-          </div>
-        </ToastProvider>
+        <ClientModeProvider>
+          <ToastProvider>
+            <div className="relative z-10 flex min-h-screen flex-col">
+              <ChromeGate>
+                <TopNav />
+              </ChromeGate>
+              <main className="flex-1">{children}</main>
+              <ChromeGate>
+                <Footer />
+              </ChromeGate>
+            </div>
+          </ToastProvider>
+        </ClientModeProvider>
       </body>
     </html>
   );

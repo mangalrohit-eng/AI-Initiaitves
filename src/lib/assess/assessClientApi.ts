@@ -31,6 +31,12 @@ export type GetAssessResponse =
   /** DATABASE_URL is set but Postgres could not be reached (timeout, DNS, refused, etc.). */
   | { ok: true; program: null; db: "unavailable" };
 
+export type AdminSessionStatusResponse = {
+  ok: true;
+  isAdmin: boolean;
+  configured: boolean;
+};
+
 export async function clientGetAssess(): Promise<{
   ok: boolean;
   data?: GetAssessResponse;
@@ -94,6 +100,44 @@ export async function clientPutAssess(program: AssessProgramV2): Promise<{
     return { ok: false, error: body.error ?? res.statusText, status: res.status };
   }
   return { ok: true, status: res.status };
+}
+
+export async function clientGetAdminSessionStatus(): Promise<{
+  ok: boolean;
+  data?: AdminSessionStatusResponse;
+  error?: string;
+  status: number;
+}> {
+  let res: Response;
+  try {
+    res = await fetch("/api/login/admin/session", {
+      method: "GET",
+      credentials: "same-origin",
+    });
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: raw, status: 0 };
+  }
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    return { ok: false, error: "Invalid response", status: res.status };
+  }
+  if (!res.ok) {
+    const err = (body as { error?: string })?.error ?? res.statusText;
+    return { ok: false, error: err, status: res.status };
+  }
+  const data = body as { ok?: boolean; isAdmin?: boolean; configured?: boolean };
+  if (!data.ok || typeof data.isAdmin !== "boolean" || typeof data.configured !== "boolean") {
+    return { ok: false, error: "Malformed admin session response", status: res.status };
+  }
+  return {
+    ok: true,
+    data: { ok: true, isAdmin: data.isAdmin, configured: data.configured },
+    status: res.status,
+  };
 }
 
 /**

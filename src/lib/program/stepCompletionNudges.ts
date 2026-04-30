@@ -17,21 +17,21 @@ export function stepCompletionNudge(
     return {
       title: `L1–L3 confirmed for ${towerName}`,
       description:
-        `Capability map and headcount for ${towerName} are locked in. Open Configure Impact Levers to dial offshore and AI impact per L3 — MS NOW, CNBC, and Golf Channel towers use the same lever pattern so the modeled $ rolls up consistently across the program.`,
+        `Capability map and headcount for ${towerName} are locked in. Open Configure Impact Levers to dial offshore and AI impact per L3 — MS NOW, CNBC, and Golf Channel towers use the same lever pattern so the impact rolls up consistently across the program.`,
     };
   }
   if (completedStep === 2) {
     return {
       title: `${towerName} signed off on impact levers`,
       description:
-        `Dial positions for ${towerName} now anchor the program impact estimate. Open Review impact estimate to see modeled savings by tower, then Design AI initiatives on ${towerName} to turn the AI dial into sequenced four-lens initiatives for client discussion.`,
+        `Dial positions for ${towerName} now anchor the program impact estimate. Open Review impact estimate to see the impact roll-up by tower, then Design AI initiatives on ${towerName} to turn the AI dial into sequenced four-lens initiatives for client discussion.`,
     };
   }
   if (completedStep === 3) {
     return {
       title: `Impact estimate reviewed for ${towerName}`,
       description:
-        `You have validated the modeled view for ${towerName}. Open Design AI initiatives for that tower to sequence roadmap items and four-lens process detail — the numbers here stay tied to the dial set on Configure Impact Levers.`,
+        `You have validated the impact view for ${towerName}. Open Design AI initiatives for that tower to sequence roadmap items and four-lens process detail — the numbers here stay tied to the dial set on Configure Impact Levers.`,
     };
   }
   return {

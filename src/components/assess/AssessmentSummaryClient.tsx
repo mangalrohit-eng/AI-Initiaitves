@@ -41,6 +41,7 @@ import {
   towerPoolUsd,
 } from "@/lib/assess/scenarioModel";
 import { getPortalAudience, isInternalSurfaceAllowed } from "@/lib/portalAudience";
+import { useRedactDollars, RedactedAmount } from "@/lib/clientMode";
 import { cn } from "@/lib/utils";
 
 /**
@@ -57,6 +58,7 @@ export function AssessmentSummaryClient() {
   const [chartReady, setChartReady] = React.useState(false);
   const [presentMode, setPresentMode] = React.useState(false);
   const showExport = isInternalSurfaceAllowed(getPortalAudience());
+  const redact = useRedactDollars();
   const snapshotRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -156,7 +158,7 @@ export function AssessmentSummaryClient() {
               Step 3 — Impact Estimate
             </div>
             <h1 className="mt-2 font-display text-2xl font-semibold text-forge-ink">
-              &gt; Where the modeled value lands
+              &gt; Impact roll-up by tower
             </h1>
             {!presentMode ? (
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
@@ -195,7 +197,7 @@ export function AssessmentSummaryClient() {
                 </>
               )}
             </button>
-            {showExport && !presentMode ? (
+            {showExport && !presentMode && !redact ? (
               <button
                 type="button"
                 onClick={onExportCsv}
@@ -211,11 +213,11 @@ export function AssessmentSummaryClient() {
         <div ref={snapshotRef} className="mt-5 rounded-3xl bg-forge-page/30 p-1">
           <ImpactHero program={program} variant="hero" />
 
-          {chartReady && chartData.length > 0 ? (
+          {redact ? null : chartReady && chartData.length > 0 ? (
             <div className="mt-4 rounded-2xl border border-forge-border bg-forge-surface/60 p-4">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="font-display text-sm font-semibold text-forge-ink">
-                  Modeled $ by tower
+                  Impact by tower
                 </h2>
                 <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
                   offshore (purple) + AI (teal)
@@ -260,7 +262,7 @@ export function AssessmentSummaryClient() {
           ) : null}
         </div>
 
-        {!presentMode ? (
+        {!presentMode && !redact ? (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-forge-border bg-forge-surface/60 p-3">
             <div className="text-xs text-forge-body">
               <span className="font-mono uppercase tracking-wider text-forge-hint">
@@ -312,6 +314,7 @@ export function AssessmentSummaryClient() {
                 towerName={t.name}
                 program={program}
                 presentMode={presentMode}
+                redact={redact}
               />
             ))}
           </ul>
@@ -337,11 +340,13 @@ function ImpactSummaryTowerRow({
   towerName,
   program,
   presentMode,
+  redact,
 }: {
   towerId: TowerId;
   towerName: string;
   program: AssessProgramV2;
   presentMode: boolean;
+  redact: boolean;
 }) {
   const router = useRouter();
   const sync = useAssessSync();
@@ -389,7 +394,7 @@ function ImpactSummaryTowerRow({
               title={
                 isComplete
                   ? "Tower lead has reviewed and locked the baseline."
-                  : "Awaiting tower lead review — figures shown are illustrative defaults."
+                  : "Awaiting tower lead review — defaults shown."
               }
             >
               {isComplete ? "Reviewed by Tower Lead" : "Pending Tower Lead review"}
@@ -399,7 +404,7 @@ function ImpactSummaryTowerRow({
           <p className="mt-1 text-xs text-forge-subtle">
             Pool{" "}
             <span className="font-mono text-forge-body">
-              {formatMoney(pool, { decimals: 1 })}
+              {redact ? <RedactedAmount /> : formatMoney(pool, { decimals: 1 })}
             </span>{" "}
             · weighted {o.offshorePct.toFixed(0)}% offshore · {o.aiPct.toFixed(0)}% AI
           </p>
@@ -416,14 +421,24 @@ function ImpactSummaryTowerRow({
             Modeled
           </div>
           <div className="font-display text-2xl font-semibold text-accent-green tabular-nums">
-            <MoneyCounter
-              value={o.combined}
-              decimals={o.combined >= 1_000_000 ? 1 : 0}
-            />
+            {redact ? (
+              <RedactedAmount className="text-forge-subtle" />
+            ) : (
+              <MoneyCounter
+                value={o.combined}
+                decimals={o.combined >= 1_000_000 ? 1 : 0}
+              />
+            )}
           </div>
           <div className="font-mono text-[10px] text-forge-hint">
-            off {formatMoney(o.offshore, { decimals: 0 })} · AI{" "}
-            {formatMoney(o.ai, { decimals: 0 })}
+            {redact ? (
+              <>off — · AI —</>
+            ) : (
+              <>
+                off {formatMoney(o.offshore, { decimals: 0 })} · AI{" "}
+                {formatMoney(o.ai, { decimals: 0 })}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -444,11 +459,13 @@ function ImpactSummaryTowerRow({
         <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-[10px] text-forge-hint">
           <span>
             Offshore {offSharePct.toFixed(0)}% · AI {aiSharePct.toFixed(0)}% of pre-overlap
-            modeled $
+            impact
           </span>
-          <span className="font-mono">
-            combined / pool = {pool > 0 ? ((o.combined / pool) * 100).toFixed(0) : 0}%
-          </span>
+          {!redact ? (
+            <span className="font-mono">
+              combined / pool = {pool > 0 ? ((o.combined / pool) * 100).toFixed(0) : 0}%
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -475,7 +492,7 @@ function ImpactSummaryTowerRow({
               onClick={() => void onMarkStep3()}
               className="inline-flex shrink-0 items-center rounded-lg border border-accent-purple/40 bg-accent-purple/10 px-3 py-1.5 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/20 disabled:opacity-50"
             >
-              {busy ? "Saving…" : "Mark Step 3 reviewed"}
+              {busy ? "Saving…" : "Mark reviewed"}
             </button>
           )}
         </div>

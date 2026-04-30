@@ -12,6 +12,7 @@ import {
 } from "@/lib/assess/scenarioModel";
 import { towers } from "@/data/towers";
 import { cn } from "@/lib/utils";
+import { useRedactDollars, RedactedAmount } from "@/lib/clientMode";
 
 type Props =
   | {
@@ -37,6 +38,7 @@ type Props =
  * the single tower at its current scenario dials.
  */
 export function AssessmentScoreboard(props: Props) {
+  const redact = useRedactDollars();
   // useMemo must be called unconditionally; pass null when not the program
   // variant so the hook order is stable across renders.
   const programForSummary = props.variant === "program" ? props.program : null;
@@ -79,15 +81,23 @@ export function AssessmentScoreboard(props: Props) {
         />
         <Tile
           icon={<TrendingUp className="h-3.5 w-3.5" />}
-          label="Modeled $"
+          label="Impact"
           subtle={
-            s.totalPool > 0 ? `pool ${formatMoney(s.totalPool, { decimals: 1 })}` : "no data"
+            redact
+              ? "no data"
+              : s.totalPool > 0
+                ? `pool ${formatMoney(s.totalPool, { decimals: 1 })}`
+                : "no data"
           }
           counter={
-            <MoneyCounter
-              value={s.combined}
-              decimals={s.combined >= 1_000_000_000 ? 2 : 1}
-            />
+            redact ? (
+              <RedactedAmount className="text-forge-subtle" />
+            ) : (
+              <MoneyCounter
+                value={s.combined}
+                decimals={s.combined >= 1_000_000_000 ? 2 : 1}
+              />
+            )
           }
           accent="green"
         />
@@ -111,8 +121,16 @@ export function AssessmentScoreboard(props: Props) {
       <Tile
         icon={<TrendingUp className="h-3.5 w-3.5" />}
         label="Tower pool"
-        subtle="annual $"
-        counter={pool > 0 ? <MoneyCounter value={pool} decimals={1} /> : <span>$—</span>}
+        subtle="annual"
+        counter={
+          redact ? (
+            <RedactedAmount className="text-forge-subtle" />
+          ) : pool > 0 ? (
+            <MoneyCounter value={pool} decimals={1} />
+          ) : (
+            <span>$—</span>
+          )
+        }
       />
       <Tile
         icon={<Globe2 className="h-3.5 w-3.5" />}
@@ -130,10 +148,12 @@ export function AssessmentScoreboard(props: Props) {
       />
       <Tile
         icon={<TrendingUp className="h-3.5 w-3.5" />}
-        label="Modeled $"
+        label="Impact"
         subtle="at L3 dial settings"
         counter={
-          outcome ? (
+          redact ? (
+            <RedactedAmount className="text-forge-subtle" />
+          ) : outcome ? (
             <MoneyCounter
               value={outcome.combined}
               decimals={outcome.combined >= 1_000_000 ? 1 : 0}

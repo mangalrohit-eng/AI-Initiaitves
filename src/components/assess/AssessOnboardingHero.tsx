@@ -47,7 +47,7 @@ const STEPS: Step[] = [
       <>
         Per <Term termKey="l3">L3 capability</Term>, dial in the{" "}
         <Term termKey="offshore dial">offshore %</Term> and{" "}
-        <Term termKey="ai impact dial">AI impact %</Term>. Modeled value rolls up automatically.
+        <Term termKey="ai impact dial">AI impact %</Term>. Impact rolls up automatically.
       </>
     ),
   },
@@ -167,7 +167,7 @@ export function AssessOnboardingHero({
 
           <div className="mt-5 flex flex-wrap items-center gap-2 text-[11px] text-forge-hint">
             <CheckCircle2 className="h-3 w-3 text-accent-green" />
-            Saves automatically · illustrative model — not a system of record.
+            Saves automatically.
           </div>
         </div>
 

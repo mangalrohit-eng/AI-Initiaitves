@@ -38,11 +38,13 @@ import type {
 import { getAssessProgram, setTowerAssess } from "@/lib/localStore";
 import {
   computeCurationContentHash,
+  hasInFlightRows,
   rowCurrentHash,
 } from "@/lib/initiatives/curationHash";
 import { aiCurationOverlay } from "@/data/capabilityMap/aiCurationOverlay";
 import {
   clientCurateInitiatives,
+  clientGenerateL4Activities,
   type CuratedRow,
 } from "@/lib/assess/assessClientApi";
 
@@ -327,3 +329,299 @@ export function queuedRowIdsForTower(
  * symmetry — pipeline writes the hash that selector compares.
  */
 export { rowCurrentHash };
+
+// ===========================================================================
+//   Single-row regenerate (per-L3 "Refine + regenerate" affordance)
+// ===========================================================================
+
+export type RegenerateRowOptions = {
+  towerId: TowerId;
+  rowId: string;
+  /** Optional qualitative feedback (≤600 chars). Forwarded to both stages. */
+  feedback?: string;
+  signal?: AbortSignal;
+};
+
+export type RegenerateRowSummary = {
+  rowId: string;
+  /** True iff Stage 1 (L4 generation) AND Stage 2 (curation) both succeeded. */
+  ok: boolean;
+  /** Provenance of the verdict path that won — "llm" or "fallback". */
+  source?: "llm" | "fallback";
+  /** Number of curated L4Items written back to this row. */
+  l4Count: number;
+  /** Of those, how many came back aiEligible. */
+  eligibleL4Count: number;
+  /** ≤25-word warning surfaced from either API (e.g. "OPENAI_API_KEY not set"). */
+  warning?: string;
+  /** Populated when ok === false. */
+  error?: string;
+};
+
+/**
+ * Re-generate the L4 activity list AND re-curate ONE L3 row, optionally with
+ * qualitative user feedback to steer the result. The function operates on
+ * EXACTLY ONE rowId — never an array — and patches only that row inside
+ * `program.towers[towerId].l3Rows`. Other rows in the tower (and every other
+ * tower) pass through `l3Rows.map(...)` by reference and are byte-identical
+ * before vs after. The dial values, modeled $ pool, and `aiImpactAssessmentPct`
+ * for the regenerated row are NEVER touched — only the L4 list and curation.
+ *
+ * No-nudge invariant. Every patch in this helper writes a `curationContentHash`
+ * that matches the row's current `l4Activities` at write time, so the
+ * `markRowsStaleByHash` pass inside `setTowerAssess` is a no-op for our row
+ * and never auto-flips it to `curationStage: "queued"`. Other rows pass
+ * through unchanged so `markRowsStaleByHash` is a no-op for them too. Net
+ * result: `hasQueuedRows` does not flip false→true on account of this
+ * regenerate, the StaleCurationBanner stays hidden, and the tower-wide
+ * "Regenerate AI guidance for N capabilities" toolbar count is unchanged.
+ *
+ * Failure rollback. If any stage fails (network error, malformed LLM
+ * response, server 5xx), the row is restored to its pre-regen snapshot
+ * byte-identical (l4Activities, l4Items, curationContentHash, curationStage,
+ * curationGeneratedAt, curationError) and then re-stamped with
+ * `curationStage: "failed"` + the error message. No partial "Stage 1
+ * succeeded, Stage 2 failed" states leak.
+ *
+ * Concurrency. The helper refuses (returns `{ ok: false, error: "in flight" }`)
+ * when any row in the tower is already in flight (`running-l4` /
+ * `running-curate`) — protects against a parallel tower-wide `runForRows`
+ * call or a parallel single-row regenerate clobbering this row.
+ */
+export async function regenerateRowWithFeedback(
+  opts: RegenerateRowOptions,
+): Promise<RegenerateRowSummary> {
+  const { towerId, rowId } = opts;
+  const feedback = opts.feedback?.trim() || undefined;
+
+  const initialProgram = getAssessProgram();
+  const initialTower = initialProgram.towers[towerId];
+  if (!initialTower) {
+    return {
+      rowId,
+      ok: false,
+      l4Count: 0,
+      eligibleL4Count: 0,
+      error: "Tower state missing.",
+    };
+  }
+  const targetRow = initialTower.l3Rows.find((r) => r.id === rowId);
+  if (!targetRow) {
+    return {
+      rowId,
+      ok: false,
+      l4Count: 0,
+      eligibleL4Count: 0,
+      error: "Row no longer exists.",
+    };
+  }
+  if (hasInFlightRows(initialTower.l3Rows)) {
+    return {
+      rowId,
+      ok: false,
+      l4Count: 0,
+      eligibleL4Count: 0,
+      error: "Another regeneration is already in progress for this tower.",
+    };
+  }
+
+  // Snapshot the row's current state — used for failure rollback so a
+  // partial run never leaves the row in a half-updated state.
+  const snapshot = {
+    l4Activities: targetRow.l4Activities,
+    l4Items: targetRow.l4Items,
+    curationContentHash: targetRow.curationContentHash,
+    curationStage: targetRow.curationStage,
+    curationGeneratedAt: targetRow.curationGeneratedAt,
+    curationError: targetRow.curationError,
+  };
+
+  // ----- Pre-flight: flip stage to "running-l4" so the UI shows a skeleton.
+  // Hash and l4Activities untouched, so markRowsStaleByHash is a no-op.
+  patchRow(towerId, rowId, {
+    curationStage: "running-l4",
+    curationError: undefined,
+  });
+
+  if (opts.signal?.aborted) {
+    rollbackRow(towerId, rowId, snapshot, "Aborted before generate-l4 call.");
+    return {
+      rowId,
+      ok: false,
+      l4Count: 0,
+      eligibleL4Count: 0,
+      error: "Aborted.",
+    };
+  }
+
+  // ----- Stage 1: regenerate the L4 activity list with feedback.
+  const genRes = await clientGenerateL4Activities(towerId, [
+    { l2: targetRow.l2, l3: targetRow.l3, ...(feedback ? { feedback } : {}) },
+  ]);
+  if (!genRes.ok) {
+    const error = `Generate L4 failed (${genRes.status}): ${genRes.error}`;
+    rollbackRow(towerId, rowId, snapshot, error);
+    return { rowId, ok: false, l4Count: 0, eligibleL4Count: 0, error };
+  }
+  const generated = genRes.result.groups[0];
+  const newL4Activities = (generated?.activities ?? [])
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (newL4Activities.length === 0) {
+    const error =
+      "Generate L4 returned no activities. Try different feedback or set the AI dial to zero on Step 2.";
+    rollbackRow(towerId, rowId, snapshot, error);
+    return { rowId, ok: false, l4Count: 0, eligibleL4Count: 0, error };
+  }
+
+  // ----- Post-Stage-1 atomic write. Stamp a matching hash so
+  // markRowsStaleByHash is a no-op and the row does NOT get auto-queued.
+  const stage1Hash = computeCurationContentHash(
+    targetRow.l2,
+    targetRow.l3,
+    newL4Activities,
+  );
+  patchRow(towerId, rowId, {
+    l4Activities: newL4Activities,
+    l4Items: [],
+    curationContentHash: stage1Hash,
+    curationStage: "running-curate",
+    curationError: undefined,
+  });
+
+  if (opts.signal?.aborted) {
+    rollbackRow(towerId, rowId, snapshot, "Aborted before curate call.");
+    return {
+      rowId,
+      ok: false,
+      l4Count: 0,
+      eligibleL4Count: 0,
+      error: "Aborted.",
+    };
+  }
+
+  // ----- Stage 2: curate the new L4 list with the same feedback.
+  const curRes = await clientCurateInitiatives(towerId, [
+    {
+      rowId,
+      l2: targetRow.l2,
+      l3: targetRow.l3,
+      l4Activities: newL4Activities,
+      ...(feedback ? { feedback } : {}),
+    },
+  ]);
+  if (!curRes.ok) {
+    const error = `Curate failed (${curRes.status}): ${curRes.error}`;
+    rollbackRow(towerId, rowId, snapshot, error);
+    return { rowId, ok: false, l4Count: 0, eligibleL4Count: 0, error };
+  }
+  const curated: CuratedRow | undefined = curRes.result.rows.find(
+    (r) => r.rowId === rowId,
+  );
+  if (!curated) {
+    const error = "Curate returned no result for this row.";
+    rollbackRow(towerId, rowId, snapshot, error);
+    return { rowId, ok: false, l4Count: 0, eligibleL4Count: 0, error };
+  }
+
+  const generatedAt = new Date().toISOString();
+  const itemSource: L4Item["source"] =
+    curRes.result.source === "llm" ? "llm" : "fallback";
+  const l4Items: L4Item[] = curated.l4Items.map((item) => {
+    const id = synthId(rowId, item.name);
+    const overlay = aiCurationOverlay[id];
+    return {
+      id,
+      name: item.name,
+      source: itemSource,
+      generatedAt,
+      aiCurationStatus: item.aiCurationStatus,
+      aiEligible: item.aiEligible,
+      aiPriority: item.aiPriority,
+      aiRationale: item.aiRationale,
+      notEligibleReason: item.notEligibleReason,
+      frequency: item.frequency,
+      criticality: item.criticality,
+      currentMaturity: item.currentMaturity,
+      primaryVendor: item.primaryVendor,
+      agentOneLine: item.agentOneLine,
+      initiativeId: overlay?.initiativeId,
+      briefSlug: overlay?.briefSlug,
+    };
+  });
+  const finalL4Names = l4Items.map((x) => x.name);
+  const finalHash = computeCurationContentHash(
+    targetRow.l2,
+    targetRow.l3,
+    finalL4Names,
+  );
+
+  // ----- Post-Stage-2 atomic write. Final state for the row.
+  patchRow(towerId, rowId, {
+    l4Items,
+    l4Activities: finalL4Names,
+    curationContentHash: finalHash,
+    curationStage: "done",
+    curationGeneratedAt: generatedAt,
+    curationError: undefined,
+  });
+
+  const eligibleCount = l4Items.filter((x) => x.aiEligible).length;
+  const summary: RegenerateRowSummary = {
+    rowId,
+    ok: true,
+    source: curRes.result.source,
+    l4Count: l4Items.length,
+    eligibleL4Count: eligibleCount,
+  };
+  const warning =
+    genRes.result.warning ?? curRes.result.warning ?? undefined;
+  if (warning) summary.warning = warning;
+  return summary;
+}
+
+/**
+ * Patch ONE row inside a tower's `l3Rows` array. Re-reads the latest
+ * program inside `setTowerAssess`'s `updateAssessProgram` boundary so a
+ * parallel write on a different row cannot be clobbered. Other rows pass
+ * through by reference; only the matching row is shallow-merged with `patch`.
+ */
+function patchRow(
+  towerId: TowerId,
+  rowId: string,
+  patch: Partial<L3WorkforceRow>,
+): void {
+  const fresh = getAssessProgram().towers[towerId];
+  if (!fresh) return;
+  setTowerAssess(towerId, {
+    l3Rows: fresh.l3Rows.map((r) => (r.id === rowId ? { ...r, ...patch } : r)),
+  });
+}
+
+/**
+ * Restore the row to its pre-regen snapshot, then stamp `curationStage: "failed"`
+ * with the error string. Used by every failure path in `regenerateRowWithFeedback`
+ * so a partial run never leaves the row in a half-updated state.
+ */
+function rollbackRow(
+  towerId: TowerId,
+  rowId: string,
+  snapshot: {
+    l4Activities: L3WorkforceRow["l4Activities"];
+    l4Items: L3WorkforceRow["l4Items"];
+    curationContentHash: L3WorkforceRow["curationContentHash"];
+    curationStage: L3WorkforceRow["curationStage"];
+    curationGeneratedAt: L3WorkforceRow["curationGeneratedAt"];
+    curationError: L3WorkforceRow["curationError"];
+  },
+  error: string,
+): void {
+  patchRow(towerId, rowId, {
+    l4Activities: snapshot.l4Activities,
+    l4Items: snapshot.l4Items,
+    curationContentHash: snapshot.curationContentHash,
+    curationGeneratedAt: snapshot.curationGeneratedAt,
+    curationStage: "failed",
+    curationError: error,
+  });
+}

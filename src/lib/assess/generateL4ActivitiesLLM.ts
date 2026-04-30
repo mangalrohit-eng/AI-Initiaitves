@@ -25,6 +25,15 @@ import type { TowerId } from "@/data/assess/types";
 export type LLMGenerateL4Row = {
   l2: string;
   l3: string;
+  /**
+   * Optional free-form qualitative feedback from the user to steer the L4 list
+   * for this row. Used by the per-L3 "Refine + regenerate" affordance on Step 4.
+   * The system prompt instructs the model to honor the user's intent (e.g. split
+   * an activity by sub-segment, add a named activity) WITHOUT bypassing the
+   * Versant-grounded constraints (real brands, named vendors, no hedge language).
+   * Sanitized server-side to ≤600 chars before this struct is built.
+   */
+  feedback?: string;
 };
 
 export type LLMGenerateL4Result = {
@@ -95,6 +104,8 @@ function buildSystemPrompt(
     "",
     `Tower currently being scored: ${towerId} — ${towerContext}`,
     "",
+    "When per-row user feedback is provided, honor the user's intent (e.g., split an activity by linear vs digital, add a named activity like 'Schedule make-up artists') — BUT this never overrides the Versant-grounded constraints above. Real brands, real vendors, no hedge language, no generic-media-company copy.",
+    "",
     `Return STRICT JSON ONLY in this exact shape, with one item per input row, IN INPUT ORDER. Each row gets ${minPerL3}-${maxPerL3} activities (closer to ${minPerL3} for narrow capabilities, closer to ${maxPerL3} for broad ones):`,
     '{"items": [{"activities": ["<activity 1>", "<activity 2>", ...]}, ...]}',
     "",
@@ -103,9 +114,13 @@ function buildSystemPrompt(
 }
 
 function buildUserPrompt(rows: LLMGenerateL4Row[]): string {
-  const lines = rows.map(
-    (r, i) => `${i + 1}. L2="${truncate(r.l2)}" / L3="${truncate(r.l3)}"`,
-  );
+  const lines: string[] = [];
+  rows.forEach((r, i) => {
+    lines.push(`${i + 1}. L2="${truncate(r.l2)}" / L3="${truncate(r.l3)}"`);
+    if (r.feedback && r.feedback.trim()) {
+      lines.push(`   User feedback to honor: "${truncate(r.feedback, 600)}"`);
+    }
+  });
   return [
     `Generate L4 activities for these ${rows.length} L3 capabilities. Preserve order.`,
     "",

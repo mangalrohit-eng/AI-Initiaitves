@@ -191,6 +191,11 @@ export async function clientInferTowerDefaults(
 export type GenerateL4ActivitiesRow = {
   l2: string;
   l3: string;
+  /**
+   * Optional qualitative feedback to steer the L4 list (per-L3 "Refine +
+   * regenerate" affordance on Step 4). Server clamps to ≤600 chars.
+   */
+  feedback?: string;
 };
 
 export type GeneratedL4Group = {
@@ -268,6 +273,11 @@ export type CurateInitiativesRowInput = {
   l3: string;
   /** L4 activity names. The LLM scores one verdict + one summary per name. */
   l4Activities: string[];
+  /**
+   * Optional qualitative feedback to steer the curation (per-L3 "Refine +
+   * regenerate" affordance on Step 4). Server clamps to ≤600 chars.
+   */
+  feedback?: string;
 };
 
 /**

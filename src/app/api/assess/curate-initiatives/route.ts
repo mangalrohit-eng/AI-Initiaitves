@@ -56,6 +56,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_ROWS = 100;
+const MAX_FEEDBACK_CHARS = 600;
 
 type Body = {
   towerId?: unknown;
@@ -105,7 +106,9 @@ export async function POST(req: Request) {
           .filter((n): n is string => typeof n === "string" && n.trim().length > 0)
           .map((n) => n.trim())
       : [];
-    return { rowId, l2, l3, l4Activities };
+    const fbRaw = typeof r.feedback === "string" ? r.feedback.trim() : "";
+    const feedback = fbRaw ? fbRaw.slice(0, MAX_FEEDBACK_CHARS) : undefined;
+    return { rowId, l2, l3, l4Activities, ...(feedback ? { feedback } : {}) };
   });
 
   // Pre-validate: every row needs an id + at least one activity. Refusing

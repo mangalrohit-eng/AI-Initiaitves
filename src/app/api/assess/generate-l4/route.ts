@@ -39,6 +39,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_ROWS = 200;
+const MAX_FEEDBACK_CHARS = 600;
 
 type GenerateL4Body = {
   towerId?: unknown;
@@ -82,9 +83,12 @@ export async function POST(req: Request) {
 
   const rows: LLMGenerateL4Row[] = body.rows.map((raw) => {
     const r = (raw ?? {}) as Record<string, unknown>;
+    const fbRaw = typeof r.feedback === "string" ? r.feedback.trim() : "";
+    const feedback = fbRaw ? fbRaw.slice(0, MAX_FEEDBACK_CHARS) : undefined;
     return {
       l2: typeof r.l2 === "string" ? r.l2 : "",
       l3: typeof r.l3 === "string" ? r.l3 : "",
+      ...(feedback ? { feedback } : {}),
     };
   });
 

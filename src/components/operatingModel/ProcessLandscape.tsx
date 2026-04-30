@@ -6,7 +6,12 @@ import * as Icons from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
 import type { Tower } from "@/data/types";
-import type { InitiativeReview } from "@/data/assess/types";
+import type {
+  AssessProgramV2,
+  CurationStage,
+  InitiativeReview,
+  TowerId,
+} from "@/data/assess/types";
 import type { InitiativeL2, InitiativeL3, InitiativeL4 } from "@/lib/initiatives/select";
 import type { UseInitiativeReviewsResult } from "@/lib/initiatives/useInitiativeReviews";
 import { cn, slugify } from "@/lib/utils";
@@ -15,11 +20,60 @@ import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
 import { getTowerHref } from "@/lib/towerHref";
 import { InitiativeReviewActions } from "./InitiativeReviewActions";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
+import { useToast } from "@/components/feedback/ToastProvider";
+import {
+  getAssessProgram,
+  getAssessProgramHydrationSnapshot,
+  subscribe,
+} from "@/lib/localStore";
+import { hasInFlightRows } from "@/lib/initiatives/curationHash";
+import {
+  regenerateRowWithFeedback,
+  type RegenerateRowSummary,
+} from "@/lib/assess/curationPipeline";
 
 function resolveIcon(name?: string): LucideIcon {
   if (!name) return Icons.Layers;
   const lib = Icons as unknown as Record<string, LucideIcon>;
   return lib[name] ?? Icons.Layers;
+}
+
+const REFINE_FEEDBACK_MAX = 600;
+
+type RowCurationState = {
+  stage: CurationStage | undefined;
+  error: string | undefined;
+};
+
+/**
+ * Subscribe once to the live AssessProgram for this tower and return:
+ *   - `byRowId`: per-row `{ stage, error }` snapshot keyed by `L3WorkforceRow.id`.
+ *   - `anyInFlight`: true iff at least one row in the tower is `running-l4`,
+ *     `running-verdict`, or `running-curate` — used to disable the per-L3 Refine
+ *     button while another regen (single-row OR tower-wide) is mid-flight,
+ *     mirroring the cross-disable pattern in `RegenerateAiGuidanceToolbar`.
+ */
+function useTowerCurationStages(towerId: TowerId): {
+  byRowId: Map<string, RowCurationState>;
+  anyInFlight: boolean;
+} {
+  const [program, setProgram] = React.useState<AssessProgramV2>(() =>
+    getAssessProgramHydrationSnapshot(),
+  );
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
+
+  return React.useMemo(() => {
+    const rows = program.towers[towerId]?.l3Rows ?? [];
+    const byRowId = new Map<string, RowCurationState>();
+    for (const r of rows) {
+      byRowId.set(r.id, { stage: r.curationStage, error: r.curationError });
+    }
+    return { byRowId, anyInFlight: hasInFlightRows(rows) };
+  }, [program, towerId]);
 }
 
 const CRITICALITY_ACCENT: Record<string, string> = {
@@ -264,6 +318,286 @@ function L4Row({
 }
 
 /**
+ * 3-row skeleton + spinner shown inside the expanded L3 panel while a single-L3
+ * regenerate is mid-flight (`running-l4` / `running-curate`). Replaces the live
+ * L4 list so the user doesn't briefly see stale or empty content during the
+ * interim between Stage 1 and Stage 2 atomic writes.
+ */
+function L4ListSkeleton({ stage }: { stage: CurationStage | undefined }) {
+  const label =
+    stage === "running-l4"
+      ? "Generating new activities…"
+      : "Re-scoring eligibility and priority…";
+  return (
+    <div className="space-y-2 px-4 py-4" aria-live="polite" aria-busy="true">
+      <div className="flex items-center gap-2 text-xs text-forge-subtle">
+        <Icons.Loader2 className="h-3.5 w-3.5 animate-spin text-accent-purple" aria-hidden />
+        <span className="font-medium text-forge-body">{label}</span>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
+          this L3 only
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="flex items-center gap-3 rounded-md border border-forge-border/60 bg-forge-well/40 px-4 py-3"
+          >
+            <div className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-forge-border" />
+            <div className="h-3 flex-1 animate-pulse rounded bg-forge-border/70" />
+            <div className="h-3 w-16 animate-pulse rounded bg-forge-border/50" />
+            <div className="h-3 w-12 animate-pulse rounded bg-forge-border/50" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const REFINE_PLACEHOLDER = [
+  "e.g. Split production automation by linear media and digital — they have very different workflows.",
+  "e.g. What about automating the scheduling of make-up artists?",
+].join("\n");
+
+/**
+ * Inline "Refine this capability with feedback" panel rendered inside the
+ * expanded L3 detail. Captures session-only qualitative feedback, runs the
+ * confirm flow, and calls the single-row pipeline helper. Other L3 rows on
+ * the page are not touched by this action.
+ */
+function RefineL3Panel({
+  towerId,
+  rowId,
+  l3Name,
+  inFlight,
+  rowStage,
+}: {
+  towerId: TowerId;
+  rowId: string;
+  l3Name: string;
+  inFlight: boolean;
+  rowStage: CurationStage | undefined;
+}) {
+  const toast = useToast();
+  const [open, setOpen] = React.useState(false);
+  const [feedback, setFeedback] = React.useState("");
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [running, setRunning] = React.useState(false);
+
+  // The L3 card outer wrapper is a <button>; every interactive element inside
+  // the panel must stop propagation so the parent doesn't toggle expand/collapse
+  // on every keystroke or click. Mirrors the existing pattern used by the
+  // placeholder-remediation Link components in L4Row.
+  const stop = React.useCallback(
+    (e: React.SyntheticEvent) => e.stopPropagation(),
+    [],
+  );
+
+  const onSubmit = React.useCallback(
+    async (e: React.MouseEvent) => {
+      stop(e);
+      setConfirmOpen(true);
+    },
+    [stop],
+  );
+
+  const onConfirm = React.useCallback(async () => {
+    if (running) return;
+    setRunning(true);
+    let summary: RegenerateRowSummary;
+    try {
+      summary = await regenerateRowWithFeedback({
+        towerId,
+        rowId,
+        feedback: feedback.trim() || undefined,
+      });
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      toast.error({
+        title: "Couldn't regenerate this capability",
+        description: error,
+      });
+      setRunning(false);
+      setConfirmOpen(false);
+      return;
+    }
+    setRunning(false);
+    setConfirmOpen(false);
+    if (!summary.ok) {
+      toast.error({
+        title: "Regenerate failed",
+        description:
+          (summary.error ?? "Unknown error.") +
+          " The previous activity list and curation are intact.",
+      });
+      return;
+    }
+    setFeedback("");
+    setOpen(false);
+    const sourceLabel =
+      summary.source === "llm"
+        ? "Versant-grounded LLM"
+        : summary.source === "fallback"
+          ? "deterministic verdict composer"
+          : null;
+    const eligibleNote =
+      summary.eligibleL4Count === 1 ? "is now AI-eligible" : "are now AI-eligible";
+    toast.success({
+      title: `Refreshed ${summary.l4Count} activit${summary.l4Count === 1 ? "y" : "ies"} for ${l3Name}`,
+      description:
+        (sourceLabel ? `Sourced via ${sourceLabel}. ` : "") +
+        `${summary.eligibleL4Count} of ${summary.l4Count} ${eligibleNote}. Modeled $ for this L3 is unchanged; per-activity attribution rebalanced.` +
+        (summary.warning ? ` ${summary.warning}` : ""),
+      durationMs: 8000,
+    });
+  }, [feedback, l3Name, rowId, running, toast, towerId]);
+
+  // The Refine button is disabled when ANY in-flight regen exists for the
+  // tower (including a tower-wide refresh), to prevent races on conflicting
+  // writes. Also disabled while this row's confirm is mid-flight.
+  const disabled = running || inFlight;
+  const disabledTooltip =
+    running || rowStage === "running-l4" || rowStage === "running-curate"
+      ? "Regeneration in progress for this capability"
+      : inFlight
+        ? "Another regeneration is in progress for this tower"
+        : undefined;
+
+  return (
+    <div
+      className="border-b border-forge-border bg-accent-purple/[0.03] px-4 py-3"
+      onClick={stop}
+      onMouseDown={stop}
+      onKeyDown={stop}
+      role="presentation"
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          stop(e);
+          setOpen((v) => !v);
+        }}
+        aria-expanded={open}
+        className="inline-flex items-center gap-2 text-xs font-semibold text-accent-purple-dark hover:underline"
+      >
+        <Icons.Wand2 className="h-3.5 w-3.5" aria-hidden />
+        Refine this capability with feedback
+        <Icons.ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 transition",
+            open ? "rotate-180" : "",
+          )}
+          aria-hidden
+        />
+      </button>
+
+      {open ? (
+        <div className="mt-2 space-y-2">
+          <p className="text-[11px] leading-relaxed text-forge-subtle">
+            <span className="font-mono text-forge-hint">›</span> Regenerating
+            affects only this L3. Tower and program $ totals stay the same;
+            per-activity attribution rebalances. Approve / reject decisions on
+            this L3&rsquo;s previous activities become orphans (still visible
+            in the Rejected drawer).
+          </p>
+          <textarea
+            value={feedback}
+            onChange={(e) => {
+              stop(e);
+              setFeedback(e.target.value.slice(0, REFINE_FEEDBACK_MAX));
+            }}
+            onClick={stop}
+            onMouseDown={stop}
+            onKeyDown={stop}
+            onFocus={stop}
+            disabled={disabled}
+            maxLength={REFINE_FEEDBACK_MAX}
+            placeholder={REFINE_PLACEHOLDER}
+            rows={3}
+            className={cn(
+              "block w-full resize-y rounded-md border border-forge-border bg-forge-surface px-3 py-2 text-xs leading-relaxed text-forge-ink shadow-sm",
+              "placeholder:text-forge-hint focus:border-accent-purple/50 focus:outline-none focus:ring-2 focus:ring-accent-purple/30",
+              "disabled:cursor-not-allowed disabled:opacity-60",
+            )}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
+              {feedback.length} / {REFINE_FEEDBACK_MAX}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  stop(e);
+                  setFeedback("");
+                }}
+                disabled={disabled || feedback.length === 0}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md border border-forge-border bg-forge-surface px-2.5 py-1 text-[11px] font-medium text-forge-body transition",
+                  "hover:border-forge-border-strong hover:text-forge-ink",
+                  "disabled:cursor-not-allowed disabled:opacity-50",
+                )}
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={onSubmit}
+                disabled={disabled}
+                title={disabledTooltip}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md bg-accent-purple px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition",
+                  "hover:bg-accent-purple-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/40",
+                  "disabled:cursor-not-allowed disabled:opacity-60",
+                )}
+              >
+                {running ? (
+                  <Icons.Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                ) : (
+                  <Icons.Sparkles className="h-3 w-3" aria-hidden />
+                )}
+                Regenerate ideas
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => {
+          if (!running) setConfirmOpen(false);
+        }}
+        onConfirm={onConfirm}
+        title={`Regenerate AI ideas for "${l3Name}"?`}
+        busy={running}
+        confirmLabel={running ? "Regenerating…" : "Regenerate"}
+        cancelLabel="Cancel"
+        description={
+          <div className="space-y-2 text-sm leading-relaxed text-forge-body">
+            <p>
+              This re-runs both the activity list and AI scoring for this
+              capability only. Other L3s in this tower and every other tower
+              are not touched.
+            </p>
+            <p>
+              Modeled $ for this L3 stays the same (it&rsquo;s driven by the
+              dial on Step 2). Per-activity dollar attribution will rebalance
+              across the new list.
+            </p>
+            <p className="text-forge-subtle">
+              Approve / reject decisions on this L3&rsquo;s previous activities
+              become orphans — they remain visible in the Rejected drawer with
+              their captured snapshot.
+            </p>
+          </div>
+        }
+      />
+    </div>
+  );
+}
+
+/**
  * One L3 row with an expandable detail panel showing AI-eligible L4s.
  *
  * The header carries the modeled $ from `rowModeledSaving` (via the selector),
@@ -278,6 +612,9 @@ function L3RowCard({
   reviews,
   actions,
   showBreadcrumb = true,
+  rowStage,
+  rowError,
+  anyInFlight,
 }: {
   l3: InitiativeL3;
   tower: Tower;
@@ -286,6 +623,9 @@ function L3RowCard({
   reviews: Record<string, InitiativeReview>;
   actions: UseInitiativeReviewsResult["actions"];
   showBreadcrumb?: boolean;
+  rowStage: CurationStage | undefined;
+  rowError: string | undefined;
+  anyInFlight: boolean;
 }) {
   const redact = useRedactDollars();
   const maxTier = React.useMemo(() => {
@@ -378,28 +718,52 @@ function L3RowCard({
             transition={{ duration: 0.22, ease: "easeOut" }}
             className="overflow-hidden border-t border-forge-border"
           >
-            <div className="hidden grid-cols-12 gap-3 border-b border-forge-border bg-forge-well/50 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-forge-hint md:grid">
-              <div className="col-span-6">Activity (L4)</div>
-              <div className="col-span-2">Frequency</div>
-              <div className="col-span-2">Criticality</div>
-              <div className="col-span-1">Maturity</div>
-              <div className="col-span-1 text-right">Priority</div>
-            </div>
+            <RefineL3Panel
+              towerId={tower.id as TowerId}
+              rowId={l3.rowId}
+              l3Name={l3.l3.name}
+              inFlight={anyInFlight}
+              rowStage={rowStage}
+            />
 
-            <div>
-              {l3.l4s.map((l4, i) => (
-                <L4Row
-                  key={l4.id}
-                  l4={l4}
-                  l3={l3}
-                  tower={tower}
-                  index={i}
-                  rowId={l3.rowId}
-                  review={reviews[l4.id]}
-                  actions={actions}
-                />
-              ))}
-            </div>
+            {rowStage === "failed" && rowError ? (
+              <div className="flex items-start gap-2 border-b border-accent-red/30 bg-accent-red/[0.06] px-4 py-2 text-[11px] leading-relaxed text-forge-body">
+                <Icons.AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-red" aria-hidden />
+                <span>
+                  <span className="font-semibold text-forge-ink">Previous regenerate failed:</span>{" "}
+                  {rowError} The activity list below is the last successful version.
+                </span>
+              </div>
+            ) : null}
+
+            {rowStage === "running-l4" || rowStage === "running-curate" ? (
+              <L4ListSkeleton stage={rowStage} />
+            ) : (
+              <>
+                <div className="hidden grid-cols-12 gap-3 border-b border-forge-border bg-forge-well/50 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-forge-hint md:grid">
+                  <div className="col-span-6">Activity (L4)</div>
+                  <div className="col-span-2">Frequency</div>
+                  <div className="col-span-2">Criticality</div>
+                  <div className="col-span-1">Maturity</div>
+                  <div className="col-span-1 text-right">Priority</div>
+                </div>
+
+                <div>
+                  {l3.l4s.map((l4, i) => (
+                    <L4Row
+                      key={l4.id}
+                      l4={l4}
+                      l3={l3}
+                      tower={tower}
+                      index={i}
+                      rowId={l3.rowId}
+                      review={reviews[l4.id]}
+                      actions={actions}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
 
             <div className="flex items-center justify-between gap-2 border-t border-forge-border bg-forge-well/40 px-4 py-2 text-[11px] text-forge-subtle">
               <span>
@@ -441,6 +805,9 @@ export function ProcessLandscape({
   const redact = useRedactDollars();
   const [expandedL3Keys, setExpandedL3Keys] = React.useState<Set<string>>(
     () => new Set(),
+  );
+  const { byRowId: rowStages, anyInFlight } = useTowerCurationStages(
+    tower.id as TowerId,
   );
 
   const toggleL3 = React.useCallback((l2Id: string, l3Id: string) => {
@@ -546,6 +913,7 @@ export function ProcessLandscape({
               <div className="min-w-[min(100%,640px)] space-y-2 p-4 sm:p-5">
                 {l2.l3s.map((l3) => {
                   const key = `${l2.l2.id}::${l3.l3.id}`;
+                  const stageState = rowStages.get(l3.rowId);
                   return (
                     <L3RowCard
                       key={l3.l3.id}
@@ -556,6 +924,9 @@ export function ProcessLandscape({
                       reviews={reviews}
                       actions={actions}
                       showBreadcrumb
+                      rowStage={stageState?.stage}
+                      rowError={stageState?.error}
+                      anyInFlight={anyInFlight}
                     />
                   );
                 })}

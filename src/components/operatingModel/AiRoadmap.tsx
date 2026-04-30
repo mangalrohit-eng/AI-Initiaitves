@@ -171,8 +171,13 @@ export function AiRoadmap({ tower }: { tower: Tower }) {
             <span className="font-semibold text-accent-amber">
               Refresh AI guidance
             </span>{" "}
-            in the banner above. Roadmap will populate as soon as the LLM
-            sequences each L4 into a P1 / P2 / P3 window.
+            in the banner above, or use{" "}
+            <span className="font-semibold text-accent-purple-dark">
+              Regenerate AI guidance
+            </span>{" "}
+            if you are rescoring capabilities with an AI dial above zero without
+            changing the map. Roadmap populates once each L4 is sequenced into a
+            P1 / P2 / P3 window.
           </p>
         </div>
       );

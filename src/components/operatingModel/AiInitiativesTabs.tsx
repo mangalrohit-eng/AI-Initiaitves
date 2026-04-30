@@ -8,6 +8,7 @@ import type { TowerId } from "@/data/assess/types";
 import { OperatingModelSection } from "./OperatingModelSection";
 import { AiRoadmap } from "./AiRoadmap";
 import { StaleCurationBanner } from "./StaleCurationBanner";
+import { RegenerateAiGuidanceToolbar } from "./RegenerateAiGuidanceToolbar";
 import { cn } from "@/lib/utils";
 
 type TabId = "capability" | "roadmap";
@@ -55,6 +56,8 @@ export function AiInitiativesTabs({ tower }: { tower: Tower }) {
   return (
     <div className="space-y-5">
       <StaleCurationBanner towerId={tower.id as TowerId} hideTitle />
+
+      <RegenerateAiGuidanceToolbar towerId={tower.id as TowerId} />
 
       <div
         role="tablist"

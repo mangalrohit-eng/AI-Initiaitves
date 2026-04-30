@@ -8,6 +8,7 @@ import {
   Globe2,
   Grid3X3,
   Map,
+  Network,
   SlidersHorizontal,
   Sparkles,
   UsersRound,
@@ -23,6 +24,7 @@ const productIconMap: Record<string, LucideIcon> = {
   "clipboard-list": ClipboardList,
   sliders: SlidersHorizontal,
   "users-round": UsersRound,
+  network: Network,
 };
 
 const staticIconMap: Record<string, LucideIcon> = {

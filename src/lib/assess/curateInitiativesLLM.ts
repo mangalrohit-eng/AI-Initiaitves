@@ -123,6 +123,10 @@ export const VENDOR_ALLOW_LIST: readonly string[] = [
   "OneTrust",
   "DocuSign CLM",
   "Iron Mountain",
+  // LLM platform options — page already runs on the OpenAI API. Naming them
+  // explicitly in the Cross-Tower Tech View is more honest than "TBD".
+  "OpenAI",
+  "Azure OpenAI",
 ];
 
 const VENDOR_TBD = "TBD — subject to discovery";

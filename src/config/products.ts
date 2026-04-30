@@ -113,6 +113,21 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     ],
   },
   {
+    id: "cross-tower-ai-plan",
+    name: "Cross-Tower AI Plan",
+    navLabel: "Cross-Tower Plan",
+    tagline:
+      "The 24-month AI plan across the 13 Versant towers — ranked initiatives, three-horizon roadmap, architecture, modeled value buildup.",
+    shortDescription:
+      "Consolidates the capability map, impact-lever dials, and tower-level AI initiatives into a single executive narrative. Ranked initiatives, P1/P2/P3 phasing, vendor stack convergence, and 24-month modeled run-rate. Numerics stay deterministic; plan narrative is authored by GPT-5.5.",
+    path: "/program/cross-tower-ai-plan",
+    iconId: "network",
+    order: 45,
+    audience: "both",
+    showInTopNav: false,
+    status: "active",
+  },
+  {
     id: "delivery-plan",
     name: "Effort Estimate",
     navLabel: "Effort Estimate",
@@ -234,6 +249,13 @@ const FOOTER_LINKS: FooterNavLink[] = [
     name: "Executive summary",
     path: "/summary",
     order: 10,
+    audience: "both",
+  },
+  {
+    id: "cross-tower-ai-plan",
+    name: "Cross-tower AI plan",
+    path: "/program/cross-tower-ai-plan",
+    order: 15,
     audience: "both",
   },
   {

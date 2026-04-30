@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { ArrowRight, Network } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { WaterfallChart } from "@/components/charts/WaterfallChart";
@@ -52,6 +54,30 @@ export default function SummaryPage() {
             patterns, and implementation pacing.
           </p>
         </div>
+
+        <Link
+          href="/program/cross-tower-ai-plan"
+          className="group mt-6 flex items-center justify-between gap-4 rounded-2xl border border-accent-purple/30 bg-gradient-to-r from-accent-purple/10 via-accent-purple/5 to-transparent px-5 py-4 transition hover:border-accent-purple/60"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-accent-purple/30 bg-forge-surface text-accent-purple-dark">
+              <Network className="h-5 w-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-accent-purple-dark/80">
+                Plan view
+              </div>
+              <div className="font-display text-base font-semibold text-forge-ink">
+                <span className="font-mono text-accent-purple-dark">&gt;</span> Open the cross-tower AI plan
+              </div>
+              <p className="mt-0.5 text-xs leading-relaxed text-forge-subtle">
+                Ranked initiatives, three-horizon roadmap, agent architecture, and a 24-month modeled value buildup —
+                authored by GPT-5.5 and grounded in this portfolio.
+              </p>
+            </div>
+          </div>
+          <ArrowRight className="h-4 w-4 flex-shrink-0 text-accent-purple-dark transition group-hover:translate-x-0.5" />
+        </Link>
 
         <section className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-sm">

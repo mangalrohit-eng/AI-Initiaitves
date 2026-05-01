@@ -62,8 +62,8 @@ export function StaleDialsBanner({
             Dials are sitting at the platform default ({" "}
             <span className="font-mono">20%</span> offshore /{" "}
             <span className="font-mono">15%</span> AI). Re-score runs the
-            Versant-grounded LLM and writes per-L3 rationales for both
-            levers — so the dial values come with a Versant-specific
+            Versant-grounded LLM and writes per-L4 Activity Group rationales
+            for both levers — so the dial values come with a Versant-specific
             justification, not just a number. If the LLM is unavailable, it
             falls back to the deterministic heuristic.
           </p>
@@ -75,7 +75,7 @@ export function StaleDialsBanner({
           title={
             rescoring
               ? "Re-score in progress"
-              : "Re-evaluate offshore + AI dials for every L3 in this tower using the Versant-grounded LLM."
+              : "Re-evaluate offshore + AI dials for every L4 Activity Group in this tower using the Versant-grounded LLM."
           }
           className={cn(
             "inline-flex items-center gap-2 rounded-lg bg-accent-amber px-4 py-2 text-sm font-semibold text-near-black transition",

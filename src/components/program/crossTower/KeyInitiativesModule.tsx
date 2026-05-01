@@ -4,7 +4,8 @@ import Link from "next/link";
 import { ArrowUpRight, Sparkles } from "lucide-react";
 import type { ProgramInitiativeRow, SelectProgramResult } from "@/lib/initiatives/selectProgram";
 import type { CrossTowerAiPlanLLM } from "@/lib/llm/prompts/crossTowerAiPlan.v1";
-import { TIER_META, TIER_STYLES } from "@/lib/priority";
+import { TIER_STYLES } from "@/lib/priority";
+import { programTierLabel, programTierRank } from "@/lib/programTierLabels";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
 import { slugify } from "@/lib/utils";
@@ -18,10 +19,11 @@ import { slugify } from "@/lib/utils";
  *
  * Deterministic ranking algorithm (used when the LLM is unavailable):
  *
- *   1. Sort all initiatives globally by `(tier asc P1→P2→P3→null,
- *      attributedAiUsd desc, towerName asc, name asc)`. Priority-tier first
- *      because Versant's plan is staged by horizon; $ desc within tier so the
- *      most material initiatives surface; name as the stable tie-breaker.
+ *   1. Sort all initiatives globally by `(programTier asc P1→P2→P3,
+ *      attributedAiUsd desc, towerName asc, name asc)`. ProgramTier comes
+ *      from the deterministic 2x2 (feasibility × parent-L4 Activity Group business impact);
+ *      $ desc within tier so the most material initiatives surface; name as
+ *      the stable tie-breaker.
  *   2. For the first `limit` rows that show on the Overview preview, walk
  *      the globally-sorted list and pick at most ONE row per tower — so the
  *      preview is genuinely cross-tower (not five Finance rows in a row).
@@ -71,10 +73,10 @@ export function KeyInitiativesModule({
   const rankingCriteria = onePerTower
     ? llmAuthored
       ? "Strongest initiative per Versant tower — AI-authored rationale where curated, deterministic elsewhere"
-      : "Strongest initiative per Versant tower, by priority tier then $ impact across all priorities"
+      : "Strongest initiative per Versant tower, by program tier (Quick Wins → Fill-ins → Strategic Builds) then $ impact"
     : llmAuthored
       ? "AI-curated cross-tower set"
-      : "By priority tier then $ impact, one per tower";
+      : "By program tier (Quick Wins → Fill-ins → Strategic Builds) then $ impact, one per tower";
 
   const Header = (
     <header className="flex flex-wrap items-end justify-between gap-3">
@@ -113,7 +115,7 @@ export function KeyInitiativesModule({
         {top.map((row, idx) => {
           const tier = row.tier;
           const tierStyles = tier ? TIER_STYLES[tier] : null;
-          const tierMeta = tier ? TIER_META[tier] : null;
+          const ptLabel = programTierLabel(row.programTier);
           const initiativeHref = row.initiative
             ? `/tower/${row.towerId}/process/${slugify(row.initiative.name)}`
             : row.briefSlug
@@ -133,11 +135,12 @@ export function KeyInitiativesModule({
                     <span className="truncate">{row.name}</span>
                     <ArrowUpRight className="h-3.5 w-3.5 flex-shrink-0 text-forge-hint transition group-hover:text-accent-purple" />
                   </Link>
-                  {tier && tierStyles && tierMeta ? (
+                  {tier && tierStyles ? (
                     <span
                       className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${tierStyles.badge}`}
+                      title={row.programTierReason || ptLabel.longLabel}
                     >
-                      {tier} · {tierMeta.window}
+                      {ptLabel.numeral ?? ""} · {ptLabel.name}
                     </span>
                   ) : null}
                   <span className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5 text-[11px] text-forge-body">
@@ -337,18 +340,11 @@ function pickCrossTowerPreviewIds(
   return picked;
 }
 
-function tierRankScore(tier: ProgramInitiativeRow["tier"]): number {
-  if (tier === "P1") return 0;
-  if (tier === "P2") return 1;
-  if (tier === "P3") return 2;
-  return 3;
-}
-
 function globalRowScore(
   a: ProgramInitiativeRow,
   b: ProgramInitiativeRow,
 ): number {
-  const tierDelta = tierRankScore(a.tier) - tierRankScore(b.tier);
+  const tierDelta = programTierRank(a.programTier) - programTierRank(b.programTier);
   if (tierDelta !== 0) return tierDelta;
   const usdDelta = b.attributedAiUsd - a.attributedAiUsd;
   if (Math.abs(usdDelta) > 0.5) return usdDelta;

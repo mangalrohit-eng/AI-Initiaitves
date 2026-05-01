@@ -5,12 +5,24 @@ import { DollarSign, Check } from "lucide-react";
 import { formatUsdCompact } from "@/lib/format";
 
 /**
- * Plan threshold input — sets the minimum `attributedAiUsd` an initiative
- * must clear to be in plan. Initiatives below the threshold are opportunistic
- * (handled inside the tower roadmaps, not the cross-tower plan).
+ * Plan threshold input — sets the minimum **parent L4 Activity Group prize**
+ * (`l3.aiUsd` in the deterministic substrate; the field name is preserved
+ * for back-compat across the V4 → V5 migration but semantically describes
+ * the L4 Activity Group prize under V5) that an L5 Activity initiative's
+ * parent must clear to be in plan. Initiatives rolling up to a smaller-prize
+ * L4 Activity Group are opportunistic (handled inside the tower roadmaps,
+ * not the cross-tower plan).
+ *
+ * The threshold operates at L4 Activity Group grain so it composes cleanly
+ * with the 2x2 (which also classifies on the parent L4 prize). Filtering at
+ * the per-L5 attribution grain — `parentPrize / surfacedActivityCount` —
+ * was structurally killing P2 rows (HF + LBI), since by definition their L4
+ * prize sits just below the median and the per-L5 split lands well under
+ * any sensible dollar floor.
  *
  * UX:
- *   - One-click presets ($100K / $250K / $500K / $1M / $5M).
+ *   - One-click presets ($1M / $2M / $5M / $10M / $25M) — sized for L4
+ *     Activity Group prizes, not per-L5 attribution.
  *   - Free-form numeric input for custom values.
  *   - Edits debounce to the parent so dragging through values doesn't trigger
  *     a flurry of LLM regenerations. The deterministic view updates on commit.
@@ -19,11 +31,11 @@ import { formatUsdCompact } from "@/lib/format";
  * Fully deterministic — the threshold is a user knob, not LLM output.
  */
 const PRESETS = [
-  { value: 100_000, label: "$100K" },
-  { value: 250_000, label: "$250K" },
-  { value: 500_000, label: "$500K" },
   { value: 1_000_000, label: "$1M" },
+  { value: 2_000_000, label: "$2M" },
   { value: 5_000_000, label: "$5M" },
+  { value: 10_000_000, label: "$10M" },
+  { value: 25_000_000, label: "$25M" },
 ] as const;
 
 const DEBOUNCE_MS = 600;
@@ -95,7 +107,12 @@ export function PlanThresholdInput({
           Plan threshold
         </span>
         <span className="text-[10px] text-forge-hint">·</span>
-        <span className="text-[10px] text-forge-hint">in-plan minimum value</span>
+        <span
+          className="text-[10px] text-forge-hint"
+          title="Minimum parent L4 Activity Group prize for inclusion. Same grain as the 2x2."
+        >
+          minimum L4 prize
+        </span>
         {isStale ? (
           <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-accent-amber/50 bg-accent-amber/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-accent-amber">
             <span className="h-1 w-1 animate-pulse rounded-full bg-accent-amber" />
@@ -160,10 +177,10 @@ export function PlanThresholdInput({
 
       <p className="mt-2 max-w-xs text-[10px] leading-snug text-forge-subtle">
         {value <= 0 ? (
-          <>No threshold — every curated initiative is in plan.</>
+          <>No threshold — every above-the-2x2-line initiative is in plan.</>
         ) : excludedCount === 0 ? (
           <>
-            Every curated initiative is at or above{" "}
+            Every in-plan L5 Activity rolls up to an L4 Activity Group prize at or above{" "}
             <span className="font-mono text-forge-body">
               {formatUsdCompact(value)}
             </span>
@@ -178,7 +195,8 @@ export function PlanThresholdInput({
             <span className="font-mono text-forge-body">
               {formatUsdCompact(excludedAiUsd)}
             </span>{" "}
-            below threshold — opportunistic, handled inside the tower roadmaps.
+            roll up to an L4 Activity Group prize below threshold — opportunistic, handled
+            inside the tower roadmaps.
           </>
         )}
       </p>

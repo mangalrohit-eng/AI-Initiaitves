@@ -33,7 +33,7 @@ import type {
   TowerId,
 } from "@/data/assess/types";
 import type { Process } from "@/data/types";
-import { TIER_STYLES } from "@/lib/priority";
+import { feasibilityChip } from "@/lib/feasibilityChip";
 
 type Params = { slug: string; rowId: string; l4Id: string };
 
@@ -62,8 +62,8 @@ export default function LLMBriefPage() {
   }, []);
 
   const towerState = tower ? program?.towers[tower.id as TowerId] : undefined;
-  const row = towerState?.l3Rows.find((r) => r.id === rowId);
-  const l4Item: L4Item | undefined = row?.l4Items?.find((i) => i.id === l4Id);
+  const row = towerState?.l4Rows.find((r) => r.id === rowId);
+  const l4Item: L4Item | undefined = row?.l5Items?.find((i) => i.id === l4Id);
   const hasFullCache = Boolean(l4Item?.generatedProcess?.process);
 
   const [generating, setGenerating] = React.useState(false);
@@ -78,6 +78,7 @@ export default function LLMBriefPage() {
       towerId: tower.id as TowerId,
       l2: row.l2,
       l3: row.l3,
+      l4: row.l4,
       l4Name: l4Item.name,
       l4Id: l4Item.id,
       aiRationale: l4Item.aiRationale,
@@ -104,6 +105,7 @@ export default function LLMBriefPage() {
       towerId: l4Context.towerId,
       l2: l4Context.l2,
       l3: l4Context.l3,
+      l4: l4Context.l4,
       l4Name: l4Context.l4Name,
       l4Id: l4Context.l4Id,
       aiRationale: l4Context.aiRationale,
@@ -123,11 +125,11 @@ export default function LLMBriefPage() {
     const fresh = getAssessProgram().towers[tower.id as TowerId];
     if (!fresh) return;
     setTowerAssess(tower.id as TowerId, {
-      l3Rows: fresh.l3Rows.map((r) =>
+      l4Rows: fresh.l4Rows.map((r) =>
         r.id === rowId
           ? {
               ...r,
-              l4Items: (r.l4Items ?? []).map((it) =>
+              l5Items: (r.l5Items ?? []).map((it) =>
                 it.id === l4Id
                   ? {
                       ...it,
@@ -217,15 +219,10 @@ export default function LLMBriefPage() {
     );
   }
 
-  const aiPriority = l4Item.aiPriority;
-  const tier = aiPriority
-    ? aiPriority.startsWith("P1")
-      ? "P1"
-      : aiPriority.startsWith("P2")
-        ? "P2"
-        : "P3"
-    : undefined;
-  const tierStyles = tier ? TIER_STYLES[tier] : undefined;
+  // Per-tower brief never surfaces a P1/P2/P3 priority chip — program
+  // priority is owned by the cross-tower 2x2. We show feasibility instead so
+  // the brief still carries the per-tower readiness signal.
+  const feas = l4Item.feasibility ? feasibilityChip(l4Item.feasibility) : null;
   const headerSubtitle = resolvedProcess?.description ?? l4Item.aiRationale;
   const generatedLabel = l4Item.generatedProcess?.source ?? l4Item.generatedBrief?.source;
   /** True from first paint until a Process exists or a fetch error (covers pre-effect gap). */
@@ -288,12 +285,13 @@ export default function LLMBriefPage() {
                 </p>
               </div>
               <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
-                {tier && tierStyles ? (
+                {feas ? (
                   <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${tierStyles.badge}`}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${feas.badge}`}
+                    title={feas.tooltip}
                   >
-                    <span className={`h-1.5 w-1.5 rounded-full ${tierStyles.dot}`} aria-hidden />
-                    {aiPriority}
+                    <span className={`h-1.5 w-1.5 rounded-full ${feas.dot}`} aria-hidden />
+                    {feas.label}
                   </span>
                 ) : null}
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/40 bg-accent-purple/10 px-2.5 py-0.5 text-xs font-medium text-accent-purple">
@@ -439,11 +437,11 @@ export default function LLMBriefPage() {
                 const fresh = getAssessProgram().towers[tower.id as TowerId];
                 if (!fresh) return;
                 setTowerAssess(tower.id as TowerId, {
-                  l3Rows: fresh.l3Rows.map((r) =>
+                  l4Rows: fresh.l4Rows.map((r) =>
                     r.id === rowId
                       ? {
                           ...r,
-                          l4Items: (r.l4Items ?? []).map((it) =>
+                          l5Items: (r.l5Items ?? []).map((it) =>
                             it.id === l4Id
                               ? { ...it, generatedBrief: undefined, generatedProcess: undefined }
                               : it,

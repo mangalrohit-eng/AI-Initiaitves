@@ -133,9 +133,9 @@ export function ReplaceUploadConfirmDialog({
               (offshore + AI percentages) snap back to the tower baseline.
             </li>
             <li>
-              <span className="text-forge-subtle">·</span> L4 activity lists are
+              <span className="text-forge-subtle">·</span> L5 Activity lists are
               cleared — you&rsquo;ll need to re-run{" "}
-              <span className="font-medium">Generate L4 activities</span>.
+              <span className="font-medium">Generate L5 Activities</span>.
             </li>
             <li>
               <span className="text-forge-subtle">·</span> AI Initiatives cache

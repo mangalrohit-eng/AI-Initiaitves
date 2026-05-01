@@ -11,17 +11,17 @@ const STEPS: { Icon: typeof Layers; title: string; body: string }[] = [
   {
     Icon: Layers,
     title: "Confirm capability map",
-    body: "Pull in your tower's L1 → L3 capabilities, or load the sample. L4 activity lists are generated for context.",
+    body: "Pull in your tower's L1 → L4 Activity Groups, or load the sample. L5 Activity lists are generated for context.",
   },
   {
     Icon: ClipboardList,
     title: "Enter headcount",
-    body: "Headcount and average loaded cost per L3 capability. Rough is fine — the dials matter more.",
+    body: "Headcount and average loaded cost per L4 Activity Group. Rough is fine — the dials matter more.",
   },
   {
     Icon: Sliders,
     title: "Set offshore + AI dials",
-    body: "Per L3 capability: how much can move offshore, how much AI displaces. Re-seed defaults any time.",
+    body: "Per L4 Activity Group: how much can move offshore, how much AI displaces. Re-seed defaults any time.",
   },
 ];
 

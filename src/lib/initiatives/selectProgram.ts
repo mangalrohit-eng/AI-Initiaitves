@@ -6,21 +6,57 @@
  *
  *   - Ranked initiative roster across the 13 towers (used as the LLM's
  *     selection ground truth — the model picks from this list, can't invent).
- *   - Phase buckets (P1 / P2 / P3) via `priorityTier()`. Phase membership is
+ *   - **Program-level priority via the 2x2 over `(feasibility, parent-L4
+ *     Activity Group business impact)`.** See `lib/initiatives/programTier.ts`
+ *     for the full classification rule. Tiering is centralized at the program
+ *     layer so a P1 in Finance and a P1 in Editorial are directly comparable
+ *     — unlike the legacy per-tower P-tier, which was tower-local and made
+ *     cross-tower sequencing arguments non-defensible.
+ *   - Phase buckets (P1 / P2 / P3 / Deprioritized). Phase membership is
  *     deterministic; the LLM is not allowed to move an initiative across
- *     phases. P1 = 0–6mo, P2 = 6–12mo, P3 = 12–24mo.
- *   - 24-month cumulative modeled $ buildup, ramped per phase from
- *     `programImpactSummary`. Numbers are entirely deterministic.
+ *     tiers — it ranks within them and adds narrative.
+ *   - 24-month cumulative modeled $ buildup, ramped per phase. Phase start
+ *     months stay UNCHANGED from the legacy model (P1=M1, P2=M7, P3=M13)
+ *     — the rewrite is in the SEMANTIC labels (Quick Wins / Fill-ins /
+ *     Strategic Builds), not the timing math. The labels carry the 2x2 axes
+ *     so the Gantt narrative is self-explanatory.
  *   - Architecture roll-up: orchestration pattern mix, agent type mix, and a
  *     deduped vendor stack drawn from `Process.workbench.post` + named
- *     vendors on agent toolsUsed.
+ *     vendors on agent toolsUsed. Scoped to in-plan (P1+P2+P3 whose parent
+ *     L4 Activity Group prize clears the `aiUsdThreshold`) — Deprioritized
+ *     rows do NOT contribute.
  *   - Tower-in-scope set: every tower that contributes a non-zero AI $ pool.
  *
  * Routes every $ through `selectInitiativesForTower` + `programImpactSummary`
  * — no new arithmetic. Mirrors the financial-integrity contract documented at
  * the top of `select.ts`.
+ *
+ * `aiUsdThreshold` is preserved from the legacy model. It runs as a
+ * **secondary** filter on top of the 2x2 and operates at the **same grain
+ * as the 2x2 — the parent L4 Activity Group's full `aiUsd` (the L4
+ * Activity Group prize)**, NOT the even-split per-L5 Activity attribution.
+ * Reason: dividing the L4 Activity Group prize by the surfaced-L5 count is
+ * purely a display convenience; an L5 Activity with $250K of attribution
+ * doesn't represent a $250K opportunity, it represents one shipping path
+ * into a multi-million-dollar L4 Activity Group prize. Filtering on the
+ * post-split number was structurally killing P2 (HF + LBI), which by
+ * definition lives just below the median and gets sliced into per-L5
+ * crumbs that the threshold then strips out. Operating on `l3.aiUsd`
+ * (field name retained from V4; semantically the L4 Activity Group prize
+ * under V5) keeps both signals at the same grain — the threshold is a
+ * "minimum L4 Activity Group prize for inclusion" knob.
+ *
+ * In-plan rule (post-2x2): `programTier !== "Deprioritized"` AND
+ * `parent l3.aiUsd >= aiUsdThreshold`. Both exclusion paths are surfaced
+ * separately on the KPI strip so an executive can see "below the line by
+ * 2x2" vs "below the L4 Activity Group dollar threshold" as distinct buckets.
  */
-import type { AgentOrchestration, Process, Tower } from "@/data/types";
+import type {
+  AgentOrchestration,
+  ProgramTier,
+  Process,
+  Tower,
+} from "@/data/types";
 import type { AssessProgramV2, TowerId } from "@/data/assess/types";
 import { towers } from "@/data/towers";
 import {
@@ -30,7 +66,12 @@ import {
   type SelectInitiativesResult,
 } from "@/lib/initiatives/select";
 import { findAiInitiative } from "@/lib/utils";
-import { priorityTier, type Tier } from "@/lib/priority";
+import { tierFromProgramTier, type Tier } from "@/lib/priority";
+import { programTierLabel, programTierRank } from "@/lib/programTierLabels";
+import {
+  computeProgramTiers,
+  BUSINESS_IMPACT_FLOOR_USD,
+} from "@/lib/initiatives/programTier";
 import {
   programImpactSummary,
   type ProgramImpactSummary,
@@ -52,16 +93,35 @@ export type ProgramInitiativeRow = {
   towerName: string;
   /** Display name — uses InitiativeL4.name (the activity-level label). */
   name: string;
-  /** L2 / L3 capability path, denormalized for one-line rendering. */
+  /**
+   * L2 / L3 capability path, denormalized for one-line rendering.
+   * Field names retained for back-compat; under V5 these carry the
+   * **L3 Job Family / L4 Activity Group** pair.
+   */
   l2Name: string;
   l3Name: string;
-  /** Full priority string (e.g. "P1 — Immediate (0-6mo)") for chips/badges. */
+  /**
+   * @deprecated Legacy P-tier string carried only for back-compat snapshots
+   * and overlay-debug tooling. Cross-tower priority lives on `programTier`.
+   */
   aiPriority?: string;
-  /** Normalized tier — `null` only when the L4 has no priority assigned. */
+  /**
+   * Program-level priority from the deterministic 2x2 over
+   * `(feasibility, parent-L4 Activity Group business impact)`. Always
+   * defined — every initiative falls into one of P1/P2/P3/Deprioritized.
+   */
+  programTier: ProgramTier;
+  /** Human-readable explanation of the tiering decision; powers tooltips. */
+  programTierReason: string;
+  /**
+   * Visual `Tier` (`P1` / `P2` / `P3` / `null` for Deprioritized). Convenience
+   * derivation of `programTier` for callers that key off the legacy 3-tier
+   * color palette; the underlying truth is `programTier`.
+   */
   tier: Tier | null;
   /** Versant-grounded rationale (short). */
   aiRationale?: string;
-  /** Per-L3 modeled AI $ this initiative contributes to (deterministic). */
+  /** Per-L4 Activity Group modeled AI $ this initiative contributes to (deterministic). */
   aiUsd: number;
   /**
    * Even-split share of `l3.aiUsd` across non-placeholder L4s under the same
@@ -84,14 +144,17 @@ export type ProgramInitiativeRow = {
 };
 
 export type PhaseBucket = {
-  tier: Tier;
-  /** Display label, e.g. "P1 — Immediate (0-6mo)". */
+  /** `null` for the Deprioritized bucket; carries the visual Tier otherwise. */
+  tier: Tier | null;
+  /** The full `ProgramTier` value — distinguishes Deprioritized from "no tier". */
+  programTier: ProgramTier;
+  /** Display label, e.g. "P1 — Quick Wins (HF · HBI)". */
   label: string;
-  /** Time window string, e.g. "0–6 months". */
+  /** Time window string, e.g. "0–6 months · high feasibility, high impact". */
   window: string;
-  /** Initiatives whose deterministic priority lands in this phase. */
+  /** Initiatives whose deterministic 2x2 lands in this bucket. */
   initiatives: ProgramInitiativeRow[];
-  /** Sum of `aiUsd` across initiatives in this phase. */
+  /** Sum of `attributedAiUsd` across initiatives in this bucket. */
   aiUsd: number;
 };
 
@@ -140,40 +203,91 @@ export type ProgramArchitecture = {
 };
 
 /**
- * Plan threshold metadata — surfaces what was filtered out so the page can
- * honestly show "in plan" vs "opportunistic / below threshold". When
- * `aiUsdThreshold === 0`, no filter applied and `excluded*` are zero.
+ * Plan threshold metadata. The threshold is a SECONDARY filter that runs on
+ * top of the 2x2 and operates at the same grain — the parent L4 Activity
+ * Group's full `aiUsd` (the L4 Activity Group prize). A row stays in plan
+ * only when both `programTier !== "Deprioritized"` AND its parent
+ * `l3.aiUsd >= aiUsdThreshold` (field name `l3.aiUsd` retained for back-compat
+ * — semantically the L4 Activity Group prize under V5). The KPI strip surfaces
+ * below-threshold $ as a distinct bucket from below-the-line-by-2x2 $, so the
+ * executive can see why each excluded $ was dropped.
  */
 export type PlanThreshold = {
-  /** Minimum `attributedAiUsd` for an initiative to be in plan. */
+  /**
+   * Minimum parent-L4 Activity Group `aiUsd` (the L4 Activity Group prize)
+   * for the L5 Activity initiatives under it to be in plan. Operates at L4
+   * grain so it doesn't double-jeopardise P2 rows whose per-L5 attribution
+   * would sit below any reasonable dollar floor by definition.
+   */
   aiUsdThreshold: number;
-  /** Initiatives dropped because they fell below the threshold. */
+  /** L5 Activity initiatives dropped because their parent L4 Activity Group prize fell below the threshold. */
   excludedCount: number;
-  /** Sum of `attributedAiUsd` for the dropped initiatives. */
+  /**
+   * Sum of `attributedAiUsd` across the dropped L5 Activity initiatives —
+   * equal to the sum of the dropped L4 Activity Group prizes (even-split
+   * rolls back up).
+   */
   excludedAiUsd: number;
-  /** Towers that lost their last initiative because of the threshold. */
+  /** Towers that lost their last in-plan initiative because of the threshold. */
   excludedTowerCount: number;
 };
 
+/**
+ * Diagnostics surfaced from the program-tier 2x2 for the KPI strip and any
+ * "why is this Deprioritized?" tooltip.
+ */
+export type ProgramTierDiagnostics = {
+  /**
+   * Median of `l3.aiUsd` across the active L4 Activity Group sample.
+   * Field name retained for back-compat; semantically the L4 Activity Group
+   * prize under V5.
+   */
+  medianL3Usd: number;
+  /** $1M absolute floor below which an L4 Activity Group is never "high impact." */
+  floorUsd: number;
+  /** Effective threshold actually applied: max(median, floor). */
+  thresholdUsd: number;
+  /** Unique active L4 Activity Group count contributing to the median sample. */
+  activeL3Count: number;
+  /** True when N < 4 active L4 Activity Groups — median is volatile at this scale. */
+  medianVolatilityWarning: boolean;
+  /** Sum of `attributedAiUsd` across initiatives the 2x2 dropped to Deprioritized. */
+  deprioritizedAiUsd: number;
+  /** Count of initiatives the 2x2 dropped to Deprioritized. */
+  deprioritizedCount: number;
+};
+
 export type SelectProgramResult = {
-  /** Curated initiative roster (post-threshold filter). */
+  /** Curated initiative roster (in-plan only — passes BOTH the 2x2 and the threshold). */
   initiatives: ProgramInitiativeRow[];
-  /** Initiatives bucketed by deterministic priority tier. */
-  phases: { p1: PhaseBucket; p2: PhaseBucket; p3: PhaseBucket };
+  /**
+   * Initiatives the 2x2 routed to Deprioritized. Carried separately so the UI
+   * can show a "below the line" panel without polluting the in-plan roster.
+   * Threshold filter is NOT applied here — these are the rows the 2x2 itself
+   * disqualified.
+   */
+  deprioritized: ProgramInitiativeRow[];
+  /** Initiatives bucketed by deterministic 2x2 tier (in-plan rows only). */
+  phases: {
+    p1: PhaseBucket;
+    p2: PhaseBucket;
+    p3: PhaseBucket;
+    deprioritized: PhaseBucket;
+  };
   /** Towers contributing curated initiatives to the in-plan set. */
   towersInScope: TowerInScope[];
   /**
    * Program-wide modeled impact. `programImpact.ai` is the in-plan total
-   * (sum of `attributedAiUsd` across `initiatives`) when a threshold is
-   * active — so KPI tiles, Gantt full-scale, and the chart all reconcile to
-   * the same in-plan number. Other fields (weightedAiPct, opex, workforce)
-   * stay scenario-level and are unaffected by the threshold.
+   * (sum of `attributedAiUsd` across `initiatives`) — so KPI tiles, Gantt
+   * full-scale, and the chart all reconcile to the same in-plan number.
+   * Other fields (weightedAiPct, opex, workforce) stay scenario-level.
    */
   programImpact: ProgramImpactSummary;
   /**
    * Per-initiative build/ramp/at-scale rows + 24-month run-rate series + tail
    * metadata. Single source of truth for the Gantt, run-rate chart, KPI strip
-   * M24 tile, and BuildScaleSummary.
+   * M24 tile, and BuildScaleSummary. Built from in-plan initiatives only —
+   * Deprioritized rows are never sequenced.
    */
   buildScale: BuildScaleResult;
   /**
@@ -181,20 +295,27 @@ export type SelectProgramResult = {
    * `buildScale.monthly` so legacy consumers stay stable.
    */
   valueBuildup: ValueBuildupPoint[];
-  /** Aggregated architecture rollup across the in-scope Processes. */
+  /** Aggregated architecture rollup across the in-plan Processes. */
   architecture: ProgramArchitecture;
-  /** Threshold metadata — what's in plan, what's been deferred. */
+  /** Threshold metadata — what's been deferred by the dollar floor. */
   threshold: PlanThreshold;
+  /** 2x2 diagnostics — drives the median / volatility surface in the KPI strip. */
+  programTierDiagnostics: ProgramTierDiagnostics;
   /** Hash of the deterministic input — used as the LLM cache key. */
   inputHash: string;
 };
 
 export type SelectProgramOptions = {
   /**
-   * Minimum `attributedAiUsd` an initiative must clear to be in plan.
-   * Initiatives below this are dropped from `initiatives`, `phases`,
-   * `buildScale`, `architecture`, and the LLM input — they're treated as
-   * opportunistic, not part of the cross-tower plan. Default: 0 (no filter).
+   * Minimum parent-L4 Activity Group `aiUsd` (L4 Activity Group prize) an
+   * initiative's parent L4 Activity Group must clear to be in plan. L5
+   * Activities rolling up to a smaller-prize L4 Activity Group are dropped
+   * from `initiatives`, `phases`, `buildScale`, `architecture`, and the
+   * LLM input — they're treated as opportunistic, not part of the
+   * cross-tower plan. Operates at L4 Activity Group grain so it stays
+   * compatible with the 2x2 (which also classifies on `l3.aiUsd`, where
+   * `l3` is the V4 field name preserved for back-compat). Default: 0
+   * (no filter).
    */
   aiUsdThreshold?: number;
 };
@@ -202,19 +323,6 @@ export type SelectProgramOptions = {
 // ===========================================================================
 //   Public selector
 // ===========================================================================
-
-/** Display window strings — kept in lockstep with `priority.TIER_META`. */
-const PHASE_WINDOWS: Record<Tier, string> = {
-  P1: "0–6 months",
-  P2: "6–12 months",
-  P3: "12–24 months",
-};
-
-const PHASE_LABELS: Record<Tier, string> = {
-  P1: "P1 — Immediate (0-6mo)",
-  P2: "P2 — Near-term (6-12mo)",
-  P3: "P3 — Medium-term (12-24mo)",
-};
 
 /**
  * Build the cross-tower AI plan substrate for one program state.
@@ -225,10 +333,12 @@ const PHASE_LABELS: Record<Tier, string> = {
  * `programImpactSummary`.
  *
  * `options.aiUsdThreshold` filters the surfaced initiatives to those whose
- * even-split per-L4 attribution clears the threshold — anything below is
- * opportunistic and not part of the plan. The downstream computations
- * (phases, buildScale, architecture, programImpact.ai, inputHash) are all
- * recomputed from the post-filter set so the page reconciles end-to-end.
+ * **parent-L4 Activity Group prize** clears the threshold — anything rolling
+ * up to a smaller L4 Activity Group is opportunistic and not part of the
+ * plan. Same grain as the 2x2 so the two signals don't conflict. The
+ * downstream computations (phases, buildScale, architecture,
+ * programImpact.ai, inputHash) are all recomputed from the post-filter set
+ * so the page reconciles end-to-end.
  */
 export function selectInitiativesForProgram(
   program: AssessProgramV2,
@@ -257,7 +367,6 @@ export function selectInitiativesForProgram(
           surfacedL4Count > 0 ? l3.aiUsd / surfacedL4Count : 0;
         for (const l4 of l3.l4s) {
           if (l4.isPlaceholder) continue;
-          const tier = priorityTier(l4.aiPriority);
           // Surface real curated rows only — placeholders carry no plan value.
           const initiative = resolveInitiativeProcess(tower, l4);
           allInitiatives.push({
@@ -268,7 +377,12 @@ export function selectInitiativesForProgram(
             l2Name: l3.l2Name,
             l3Name: l3.l3.name,
             aiPriority: l4.aiPriority,
-            tier,
+            // Tiering is stamped in a second pass once we have the full
+            // sample — placeholder values here, overwritten by
+            // `computeProgramTiers()` below.
+            programTier: "Deprioritized",
+            programTierReason: "",
+            tier: null,
             aiRationale: l4.aiRationale,
             aiUsd: l3.aiUsd,
             attributedAiUsd,
@@ -292,33 +406,94 @@ export function selectInitiativesForProgram(
     }
   }
 
-  // Deterministic ranking — by tier (P1 > P2 > P3 > unranked), then by AI $ desc,
-  // then alphabetically by tower then initiative name. The LLM ranks within
-  // this surface; this initial order is the fallback the page renders before
-  // a generation completes.
+  // ---- 2x2 program tiering --------------------------------------------------
+  //
+  // Stamp every initiative with `programTier` + `programTierReason` based on
+  // (feasibility, parent-L4 Activity Group business impact). Sample is the
+  // FULL post-tower scan — pre-threshold — so the threshold doesn't change
+  // which Activity Groups define the median. Otherwise, lowering the
+  // threshold would re-shuffle tier assignments unrelated to the threshold's
+  // purpose.
+  const tierResult = computeProgramTiers(
+    allInitiatives.map((r) => ({
+      id: r.id,
+      l3RowId: r.l3.rowId,
+      l3AiUsd: r.aiUsd,
+      feasibility: r.l4.feasibility,
+    })),
+  );
+  for (const r of allInitiatives) {
+    const pt = tierResult.tierById.get(r.id) ?? "Deprioritized";
+    r.programTier = pt;
+    r.programTierReason =
+      tierResult.reasonById.get(r.id) ??
+      "Deprioritized — tiering input missing.";
+    r.tier = tierFromProgramTier(pt);
+  }
+
+  // Deterministic ranking — by ProgramTier (P1 > P2 > P3 > Deprioritized),
+  // then by AI $ desc, then alphabetically by tower then initiative name.
+  // The LLM ranks within this surface; this initial order is the fallback
+  // the page renders before a generation completes.
   allInitiatives.sort((a, b) => {
-    const tierDelta = tierRank(a.tier) - tierRank(b.tier);
+    const tierDelta = programTierRank(a.programTier) - programTierRank(b.programTier);
     if (tierDelta !== 0) return tierDelta;
-    const usdDelta = b.aiUsd - a.aiUsd;
+    const usdDelta = b.attributedAiUsd - a.attributedAiUsd;
     if (Math.abs(usdDelta) > 1) return usdDelta;
     const towerDelta = a.towerName.localeCompare(b.towerName);
     if (towerDelta !== 0) return towerDelta;
     return a.name.localeCompare(b.name);
   });
 
-  // Apply the in-plan threshold. Initiatives below the floor are deferred as
-  // opportunistic — they still exist in the data, but they're not in plan,
-  // so they don't appear in the Gantt, KPI tiles, LLM input, or roadmap.
-  const initiatives = allInitiatives.filter(
-    (r) => r.attributedAiUsd >= aiUsdThreshold,
+  // ---- 2x2 + threshold split ------------------------------------------------
+  //
+  // Two distinct exclusion paths, both at the SAME grain (parent L4 Activity
+  // Group prize):
+  //
+  //   a) `programTier === "Deprioritized"`     — 2x2 dropped this row
+  //                                              (LF + L4 Activity Group
+  //                                              prize below max(median,
+  //                                              $1M floor)).
+  //   b) parent `l3.aiUsd < aiUsdThreshold`    — dollar threshold dropped it
+  //                                              (L4 Activity Group prize too
+  //                                              small to warrant cross-tower
+  //                                              track). `l3.aiUsd` field
+  //                                              name retained from V4.
+  //
+  // The threshold operates on `r.aiUsd` (the full L4 Activity Group prize),
+  // NOT on `r.attributedAiUsd` (the even-split per-L5 Activity attribution).
+  // Filtering on the post-split number was structurally killing P2 — by
+  // definition P2 is HF + LBI, which means the L4 Activity Group sits just
+  // below the median; once that L4 is sliced across 2-4 L5 children, every
+  // per-L5 number lands well under any reasonable threshold and the entire
+  // P2 column went empty.
+  //
+  // The KPI strip surfaces both buckets so the executive can see what's
+  // excluded for which reason. `excludedAiUsd` is reported as the rolled-up
+  // attributed-$ sum, which (because even-split rolls back up cleanly) equals
+  // the sum of the dropped L4 Activity Group prizes — the number stays
+  // meaningful.
+  const deprioritized = allInitiatives.filter(
+    (r) => r.programTier === "Deprioritized",
   );
-  const excludedInitiatives = allInitiatives.filter(
-    (r) => r.attributedAiUsd < aiUsdThreshold,
+  const aboveLine = allInitiatives.filter(
+    (r) => r.programTier !== "Deprioritized",
   );
-  const excludedAiUsd = excludedInitiatives.reduce(
+  const initiatives = aboveLine.filter(
+    (r) => r.aiUsd >= aiUsdThreshold,
+  );
+  const belowThreshold = aboveLine.filter(
+    (r) => r.aiUsd < aiUsdThreshold,
+  );
+  const belowThresholdAiUsd = belowThreshold.reduce(
     (s, r) => s + r.attributedAiUsd,
     0,
   );
+  const deprioritizedAiUsd = deprioritized.reduce(
+    (s, r) => s + r.attributedAiUsd,
+    0,
+  );
+
   const inPlanTowerIds = new Set(initiatives.map((r) => r.towerId));
   const towersInScope = allTowersInScope
     .filter((t) => inPlanTowerIds.has(t.id))
@@ -329,24 +504,24 @@ export function selectInitiativesForProgram(
   const excludedTowerCount = allTowersInScope.length - towersInScope.length;
   const threshold: PlanThreshold = {
     aiUsdThreshold,
-    excludedCount: excludedInitiatives.length,
-    excludedAiUsd,
+    excludedCount: belowThreshold.length,
+    excludedAiUsd: belowThresholdAiUsd,
     excludedTowerCount,
   };
 
-  const phases = bucketByPhase(initiatives);
+  const phases = bucketByPhase(initiatives, deprioritized);
   const scenarioImpact = programImpactSummary(program);
-  // Override `programImpact.ai` with the in-plan total so KPI tiles, Gantt
-  // full-scale, and the chart all reconcile to the same in-plan number when
-  // a threshold is active. Other fields stay scenario-level.
+  // Recompute `programImpact.ai` from in-plan rows (post-2x2 + post-threshold)
+  // so KPI tiles, Gantt full-scale, and the chart all reconcile to the same
+  // in-plan number. Other fields stay scenario-level.
   const inPlanAiTotal = initiatives.reduce(
     (s, r) => s + r.attributedAiUsd,
     0,
   );
-  const programImpact: ProgramImpactSummary =
-    aiUsdThreshold > 0
-      ? { ...scenarioImpact, ai: inPlanAiTotal }
-      : scenarioImpact;
+  const programImpact: ProgramImpactSummary = {
+    ...scenarioImpact,
+    ai: inPlanAiTotal,
+  };
   const buildScale = computeBuildScale(
     initiatives.map(toBuildScaleInputRow),
     programImpact,
@@ -354,8 +529,30 @@ export function selectInitiativesForProgram(
   const valueBuildup = monthlyToValueBuildup(buildScale);
   const architecture = aggregateArchitecture(initiatives);
 
+  const programTierDiagnostics: ProgramTierDiagnostics = {
+    medianL3Usd: tierResult.medianL3Usd,
+    floorUsd: tierResult.floorUsd,
+    thresholdUsd: tierResult.thresholdUsd,
+    activeL3Count: tierResult.activeL3Count,
+    medianVolatilityWarning: tierResult.medianVolatilityWarning,
+    deprioritizedAiUsd,
+    deprioritizedCount: deprioritized.length,
+  };
+
+  // Dev-mode invariants — every in-plan initiative must carry a real
+  // ProgramTier (P1/P2/P3, never Deprioritized in `initiatives`); every
+  // Deprioritized row must NOT appear in `initiatives`.
+  if (process.env.NODE_ENV !== "production") {
+    assertProgramTierConsistency({
+      initiatives,
+      deprioritized,
+      diagnostics: programTierDiagnostics,
+    });
+  }
+
   return {
     initiatives,
+    deprioritized,
     phases,
     towersInScope,
     programImpact,
@@ -363,6 +560,7 @@ export function selectInitiativesForProgram(
     valueBuildup,
     architecture,
     threshold,
+    programTierDiagnostics,
     inputHash: hashProgramInput({
       initiatives,
       programImpact,
@@ -378,7 +576,7 @@ function toBuildScaleInputRow(row: ProgramInitiativeRow): BuildScaleInputRow {
     name: row.name,
     towerId: row.towerId,
     towerName: row.towerName,
-    tier: row.tier,
+    programTier: row.programTier,
     attributedAiUsd: row.attributedAiUsd,
     timelineMonths: row.initiative?.timelineMonths,
   };
@@ -426,43 +624,43 @@ function resolveInitiativeProcess(
   return findAiInitiative(tower, tp);
 }
 
-function tierRank(t: Tier | null): number {
-  if (t === "P1") return 0;
-  if (t === "P2") return 1;
-  if (t === "P3") return 2;
-  return 3;
-}
-
 function bucketByPhase(
-  initiatives: ProgramInitiativeRow[],
+  inPlan: ProgramInitiativeRow[],
+  deprioritized: ProgramInitiativeRow[],
 ): SelectProgramResult["phases"] {
-  const buckets: Record<Tier, ProgramInitiativeRow[]> = {
+  const buckets: Record<ProgramTier, ProgramInitiativeRow[]> = {
     P1: [],
     P2: [],
     P3: [],
+    Deprioritized: [],
   };
-  for (const init of initiatives) {
-    if (init.tier === "P1" || init.tier === "P2" || init.tier === "P3") {
-      buckets[init.tier].push(init);
-    }
+  for (const init of inPlan) {
+    if (init.programTier === "Deprioritized") continue;
+    buckets[init.programTier].push(init);
   }
+  // Deprioritized bucket is tracked separately because the in-plan filter
+  // already strips it — pass through directly.
+  buckets.Deprioritized = deprioritized.slice();
   return {
     p1: makePhaseBucket("P1", buckets.P1),
     p2: makePhaseBucket("P2", buckets.P2),
     p3: makePhaseBucket("P3", buckets.P3),
+    deprioritized: makePhaseBucket("Deprioritized", buckets.Deprioritized),
   };
 }
 
 function makePhaseBucket(
-  tier: Tier,
+  programTier: ProgramTier,
   initiatives: ProgramInitiativeRow[],
 ): PhaseBucket {
+  const label = programTierLabel(programTier);
   return {
-    tier,
-    label: PHASE_LABELS[tier],
-    window: PHASE_WINDOWS[tier],
+    tier: tierFromProgramTier(programTier),
+    programTier,
+    label: label.axisLabel,
+    window: label.longLabel,
     initiatives,
-    aiUsd: initiatives.reduce((s, i) => s + i.aiUsd, 0),
+    aiUsd: initiatives.reduce((s, i) => s + i.attributedAiUsd, 0),
   };
 }
 
@@ -569,8 +767,11 @@ function hashProgramInput(input: {
       i: r.id,
       t: r.towerId,
       n: r.name,
-      p: r.tier,
-      u: Math.round(r.aiUsd / 1000),
+      // Hash on programTier (the active priority signal); legacy aiPriority
+      // would key the cache against a deprecated field and give us false
+      // cache hits across the migration.
+      p: r.programTier,
+      u: Math.round(r.attributedAiUsd / 1000),
     })),
     impact: {
       ai: Math.round(input.programImpact.ai / 1000),
@@ -595,3 +796,56 @@ function djb2(input: string): string {
   return (h >>> 0).toString(36);
 }
 
+/**
+ * Dev-mode invariant check — every row must land in exactly one of the
+ * `initiatives` (P1/P2/P3) or `deprioritized` lists, never both, and the
+ * 2x2 must produce real labels (no empty `programTierReason`).
+ *
+ * Throws in development; silent in production.
+ */
+function assertProgramTierConsistency(args: {
+  initiatives: ProgramInitiativeRow[];
+  deprioritized: ProgramInitiativeRow[];
+  diagnostics: ProgramTierDiagnostics;
+}): void {
+  const { initiatives, deprioritized } = args;
+  const inPlanIds = new Set(initiatives.map((r) => r.id));
+  const depIds = new Set(deprioritized.map((r) => r.id));
+
+  for (const r of initiatives) {
+    if (r.programTier === "Deprioritized") {
+      throw new Error(
+        `[forge.selectProgram] In-plan row "${r.id}" carries programTier="Deprioritized" — bucketing logic regression.`,
+      );
+    }
+    if (!r.programTierReason) {
+      throw new Error(
+        `[forge.selectProgram] In-plan row "${r.id}" has empty programTierReason — programTier output dropped on the floor.`,
+      );
+    }
+  }
+  for (const r of deprioritized) {
+    if (r.programTier !== "Deprioritized") {
+      throw new Error(
+        `[forge.selectProgram] Deprioritized row "${r.id}" carries programTier="${r.programTier}" — bucketing logic regression.`,
+      );
+    }
+    if (inPlanIds.has(r.id)) {
+      throw new Error(
+        `[forge.selectProgram] Row "${r.id}" appears in both initiatives + deprioritized lists.`,
+      );
+    }
+  }
+  // Floor sanity — should match the constant exposed by programTier.ts.
+  if (args.diagnostics.floorUsd !== BUSINESS_IMPACT_FLOOR_USD) {
+    throw new Error(
+      `[forge.selectProgram] floorUsd diagnostic (${args.diagnostics.floorUsd}) doesn't match BUSINESS_IMPACT_FLOOR_USD (${BUSINESS_IMPACT_FLOOR_USD}).`,
+    );
+  }
+  // Cross-check the `depIds` set is internally consistent (no dup ids).
+  if (depIds.size !== deprioritized.length) {
+    throw new Error(
+      `[forge.selectProgram] Deprioritized list has duplicate ids — selector dedup regression.`,
+    );
+  }
+}

@@ -84,11 +84,11 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   const fileRef = React.useRef<HTMLInputElement>(null);
   const mapStepLocked = isL1L3TreeLocked(tState);
 
-  // Count L3 capabilities that don't yet have any L4 activities. The Generate
-  // L4 button only acts on those (so canonical seeds with activities aren't
-  // overwritten unless the user explicitly chooses regenerate-all).
+  // Count L4 Activity Groups that don't yet have any L5 Activities. The
+  // Generate L5 button only acts on those (so canonical seeds with leaves
+  // aren't overwritten unless the user explicitly chooses regenerate-all).
   const blankL4Count = rows.filter(
-    (r) => !r.l4Activities || r.l4Activities.length === 0,
+    (r) => !r.l5Activities || r.l5Activities.length === 0,
   ).length;
 
   type GenerateL4Outcome = {
@@ -103,39 +103,48 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
       if (!rows.length) throw new Error("Load a capability map & headcount first.");
       const curCheck = getAssessProgram().towers[towerId];
       if (isL1L3TreeLocked(curCheck)) {
-        throw new Error("Unlock the capability map in the action bar to change L4 activities.");
+        throw new Error("Unlock the capability map in the action bar to change L5 Activities.");
       }
       const targetRows =
         mode === "fillBlanks"
-          ? rows.filter((r) => !r.l4Activities || r.l4Activities.length === 0)
+          ? rows.filter((r) => !r.l5Activities || r.l5Activities.length === 0)
           : rows;
       if (targetRows.length === 0) {
-        throw new Error("Every L3 already has activities — nothing to generate.");
+        throw new Error("Every L4 Activity Group already has L5 Activities — nothing to generate.");
       }
-      const apiInputs = targetRows.map((r) => ({ l2: r.l2, l3: r.l3 }));
+      const apiInputs = targetRows.map((r) => ({
+        l2: r.l2,
+        l3: r.l3,
+        l4: r.l4,
+      }));
       const res = await clientGenerateL4Activities(towerId, apiInputs);
       if (!res.ok) {
-        throw new Error(`L4 generation failed (${res.error})`);
+        throw new Error(`L5 Activity generation failed (${res.error})`);
       }
+      // Group key is (L3 Job Family, L4 Activity Group) — the natural
+      // identity of an Activity Group row inside one tower. L2 (Job
+      // Grouping) is the function-name dummy and is constant within a
+      // tower, so omitting it from the key keeps the lookup robust to
+      // any caller that didn't echo it back verbatim.
       const groupByKey = new Map<string, string[]>();
       for (const g of res.result.groups) {
-        const key = `${g.l2}\u0000${g.l3}`;
+        const key = `${g.l3}\u0000${g.l4 ?? ""}`;
         groupByKey.set(key, g.activities ?? []);
       }
       const cur = getAssessProgram().towers[towerId];
       if (!cur) throw new Error("Tower state missing — reload the page.");
       let changedRows = 0;
-      const nextRows = cur.l3Rows.map((r) => {
-        const key = `${r.l2}\u0000${r.l3}`;
+      const nextRows = cur.l4Rows.map((r) => {
+        const key = `${r.l3}\u0000${r.l4}`;
         const generated = groupByKey.get(key);
         if (!generated || generated.length === 0) return r;
-        if (mode === "fillBlanks" && r.l4Activities && r.l4Activities.length > 0) {
+        if (mode === "fillBlanks" && r.l5Activities && r.l5Activities.length > 0) {
           return r;
         }
         changedRows += 1;
-        return { ...r, l4Activities: generated };
+        return { ...r, l5Activities: generated };
       });
-      setTowerAssess(towerId, { l3Rows: nextRows });
+      setTowerAssess(towerId, { l4Rows: nextRows });
       if (sync?.canSync) await sync.flushSave();
       return {
         changedRows,
@@ -153,30 +162,30 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   const generateBlanksOp = useAsyncOp<GenerateL4Outcome, []>({
     run: () => runGenerateL4("fillBlanks"),
     messages: {
-      loadingTitle: "Generating L4 activities...",
+      loadingTitle: "Generating L5 Activities...",
       loadingDescription:
         "Trying AI generation, falling back to canonical map / heuristic if unavailable.",
       successTitle: ({ changedRows }) =>
-        `Generated activities for ${changedRows} L3 capabilit${changedRows === 1 ? "y" : "ies"}`,
+        `Generated L5 Activities for ${changedRows} Activity Group${changedRows === 1 ? "" : "s"}`,
       successDescription: ({ source, warning }) =>
         warning
-          ? `${warning} Filled blank L3s only.`
-          : `Sourced via ${sourceLabel(source)}. Existing activity lists were preserved.`,
-      errorTitle: "Couldn't generate L4 activities",
+          ? `${warning} Filled blank Activity Groups only.`
+          : `Sourced via ${sourceLabel(source)}. Existing L5 Activity lists were preserved.`,
+      errorTitle: "Couldn't generate L5 Activities",
     },
   });
 
   const regenerateAllOp = useAsyncOp<GenerateL4Outcome, []>({
     run: () => runGenerateL4("regenerateAll"),
     messages: {
-      loadingTitle: "Regenerating every L3's activities...",
+      loadingTitle: "Regenerating every Activity Group's L5 Activities...",
       successTitle: ({ changedRows }) =>
-        `Regenerated activities for ${changedRows} L3 capabilit${changedRows === 1 ? "y" : "ies"}`,
+        `Regenerated L5 Activities for ${changedRows} Activity Group${changedRows === 1 ? "" : "s"}`,
       successDescription: ({ source, warning }) =>
         warning
-          ? `${warning} All previous activity lists were replaced.`
-          : `Sourced via ${sourceLabel(source)}. All previous activity lists were replaced.`,
-      errorTitle: "Couldn't regenerate L4 activities",
+          ? `${warning} All previous L5 Activity lists were replaced.`
+          : `Sourced via ${sourceLabel(source)}. All previous L5 Activity lists were replaced.`,
+      errorTitle: "Couldn't regenerate L5 Activities",
     },
   });
 
@@ -192,8 +201,9 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
     return { l1Name: towerName, l2: [] };
   }, [rows, towerName, def]);
 
-  // Step 1 is "done" in the journey stepper when L1–L3 is confirmed, or the
-  // tower was already fully signed off before this field existed.
+  // Step 1 is "done" in the journey stepper when the L1–L4 hierarchy is
+  // confirmed, or the tower was already fully signed off before this field
+  // existed.
   const completedModules: ReadonlyArray<"capability-map"> =
     isCapabilityMapJourneyStepDone(tState) ? ["capability-map"] : [];
 
@@ -356,7 +366,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
             &gt; {towerName} · Capability Map
           </h1>
           <p className="text-xs text-forge-subtle">
-            Step 1 — confirm the <Term termKey="capability map">L1–L3 tree</Term> and headcount, then open{" "}
+            Step 1 — confirm the <Term termKey="capability map">L1–L4 hierarchy</Term> and headcount, then open{" "}
             <Link href={getTowerHref(towerId, "impact-levers")} className="text-accent-purple-dark underline">
               Configure Impact Levers
             </Link>
@@ -404,7 +414,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
               isPreview={isPreview}
               authoredAt={tState.capabilityMapConfirmedAt}
               rowsCount={rows.length}
-              l1L3TreeValidatedAt={tState.l1L3TreeValidatedAt}
+              l1L5TreeValidatedAt={tState.l1L5TreeValidatedAt ?? tState.l1L3TreeValidatedAt}
             />
             {rows.length > 0 ? (
               <div id="generate-l4-toolbar">
@@ -454,7 +464,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
                 Capability map &amp; headcount set — configure your impact levers.
               </p>
               <p className="mt-1 text-sm text-forge-body">
-                Step 2: dial offshore and AI per L3 across the {tState.l3Rows.length} L3 capabilit{tState.l3Rows.length === 1 ? "y" : "ies"} you just confirmed.
+                Step 2: dial offshore and AI per Activity Group across the {tState.l4Rows.length} Activity Group{tState.l4Rows.length === 1 ? "" : "s"} you just confirmed.
               </p>
             </div>
             <Link
@@ -500,12 +510,13 @@ function MapSourceBanner({
   isPreview,
   authoredAt,
   rowsCount,
-  l1L3TreeValidatedAt,
+  l1L5TreeValidatedAt,
 }: {
   isPreview: boolean;
   authoredAt?: string;
   rowsCount: number;
-  l1L3TreeValidatedAt?: string;
+  /** ISO timestamp set when tower lead confirmed the L1–L5 review. */
+  l1L5TreeValidatedAt?: string;
 }) {
   if (isPreview) {
     return (
@@ -526,20 +537,20 @@ function MapSourceBanner({
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent-green/35 bg-accent-green/8 px-3 py-1.5">
           <span className="inline-flex items-center gap-2 text-xs font-medium text-accent-green">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-            Tower lead upload · {rowsCount} L3 capabilit{rowsCount === 1 ? "y" : "ies"}
+            Tower lead upload · {rowsCount} Activity Group{rowsCount === 1 ? "" : "s"}
           </span>
           <span className="text-[11px] text-forge-subtle">
             Confirmed {formatRelative(authoredAt)} · drives the impact-lever dials &amp; impact estimate
             downstream.
           </span>
         </div>
-        {l1L3TreeValidatedAt ? (
+        {l1L5TreeValidatedAt ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent-teal/35 bg-accent-teal/8 px-3 py-1.5">
             <span className="text-xs font-medium text-accent-teal">
-              L1–L3 review confirmed — map and headcount are locked for editing.
+              L1–L5 review confirmed — map and headcount are locked for editing.
             </span>
             <span className="text-[11px] text-forge-subtle">
-              Confirmed {formatRelative(l1L3TreeValidatedAt)} · use Unlock to edit map in the action
+              Confirmed {formatRelative(l1L5TreeValidatedAt)} · use Unlock to edit map in the action
               bar above.
             </span>
           </div>
@@ -547,25 +558,24 @@ function MapSourceBanner({
       </div>
     );
   }
-  // Rows present but loaded from "Load sample" — seed data, not authored.
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-forge-border bg-forge-well/40 px-3 py-1.5">
         <span className="inline-flex items-center gap-2 text-xs font-medium text-forge-body">
           <Info className="h-3.5 w-3.5 text-accent-purple-dark" aria-hidden />
-          Sample seed loaded · {rowsCount} L3 capabilit{rowsCount === 1 ? "y" : "ies"}
+          Sample seed loaded · {rowsCount} Activity Group{rowsCount === 1 ? "" : "s"}
         </span>
         <span className="text-[11px] text-forge-subtle">
           Upload your capability map &amp; headcount to confirm the tower lead version.
         </span>
       </div>
-      {l1L3TreeValidatedAt ? (
+      {l1L5TreeValidatedAt ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent-teal/35 bg-accent-teal/8 px-3 py-1.5">
           <span className="text-xs font-medium text-accent-teal">
-            L1–L3 review confirmed — map and headcount are locked for editing.
+            L1–L5 review confirmed — map and headcount are locked for editing.
           </span>
           <span className="text-[11px] text-forge-subtle">
-            Confirmed {formatRelative(l1L3TreeValidatedAt)} · use Unlock in the action bar above.
+            Confirmed {formatRelative(l1L5TreeValidatedAt)} · use Unlock in the action bar above.
           </span>
         </div>
       ) : null}
@@ -574,15 +584,17 @@ function MapSourceBanner({
 }
 
 /**
- * Toolbar that lets tower leads (re)generate the L4 activity list under each
- * L3. The activities are display-only metadata (they don't drive the math) but
- * leads expect to see *something* under each L3 after they upload an L2/L3
- * template. Two buttons keep the UX honest:
+ * Toolbar that lets tower leads (re)generate the L5 Activity list under each
+ * L4 Activity Group. L5 Activities are display-only metadata (they don't
+ * drive the dial math) but leads expect to see *something* under each
+ * Activity Group after they upload an L2 / L3 / L4 template. Two buttons
+ * keep the UX honest:
  *
- *   - Generate for blanks: only L3s with no `l4Activities` are filled. Safe
- *     by default — runs LLM-first with canonical-map fallback.
- *   - Regenerate all: explicit overwrite. Useful after a substantial upload
- *     where canonical seeds no longer fit the lead's actual map.
+ *   - Generate for blanks: only Activity Groups with no `l5Activities`
+ *     are filled. Safe by default — runs LLM-first with canonical-map
+ *     fallback.
+ *   - Regenerate all: explicit overwrite. Useful after a substantial
+ *     upload where canonical seeds no longer fit the lead's actual map.
  */
 function GenerateL4Toolbar({
   blankL4Count,
@@ -606,18 +618,18 @@ function GenerateL4Toolbar({
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-forge-border bg-forge-surface/60 px-3 py-2">
       <div className="text-[11px] text-forge-subtle">
-        L4 activities{" "}
+        L5 Activities{" "}
         <span className="font-mono text-forge-hint">
-          {totalL3s - blankL4Count}/{totalL3s} L3s have activities
+          {totalL3s - blankL4Count}/{totalL3s} Activity Groups have activities
         </span>
         {noBlanks ? null : (
           <span className="ml-1 text-forge-body">
-            · {blankL4Count} L3{blankL4Count === 1 ? "" : "s"} need generation
+            · {blankL4Count} Activity Group{blankL4Count === 1 ? "" : "s"} need generation
           </span>
         )}
         {locked ? (
           <span className="ml-1 block text-forge-hint sm:ml-2 sm:inline">
-            Unlock the map in the action bar to change activities.
+            Unlock the map in the action bar to change L5 Activities.
           </span>
         ) : null}
       </div>
@@ -628,10 +640,10 @@ function GenerateL4Toolbar({
           disabled={generatingBlanks || noBlanks || disabledAll}
           title={
             disabledAll
-              ? "Unlock the map in the action bar to generate L4 activities."
+              ? "Unlock the map in the action bar to generate L5 Activities."
               : noBlanks
-                ? "Every L3 already has activities. Use Regenerate all to replace them."
-                : "Generate L4 activities only for L3s that don't have any yet."
+                ? "Every Activity Group already has L5 Activities. Use Regenerate all to replace them."
+                : "Generate L5 Activities only for Activity Groups that don't have any yet."
           }
           className={cn(
             "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition",
@@ -645,7 +657,7 @@ function GenerateL4Toolbar({
           {generatingBlanks
             ? "Generating..."
             : noBlanks
-              ? "All L3s have activities"
+              ? "All Activity Groups have L5 Activities"
               : `Generate for ${blankL4Count} blank${blankL4Count === 1 ? "" : "s"}`}
         </button>
         <button
@@ -654,8 +666,8 @@ function GenerateL4Toolbar({
           disabled={regeneratingAll || disabledAll}
           title={
             disabledAll
-              ? "Unlock the map in the action bar to regenerate L4 activities."
-              : "Replace every L3's activity list (LLM-first, canonical-map fallback)."
+              ? "Unlock the map in the action bar to regenerate L5 Activities."
+              : "Replace every Activity Group's L5 Activity list (LLM-first, canonical-map fallback)."
           }
           className="inline-flex items-center gap-1.5 rounded-md border border-forge-border px-2.5 py-1 text-[11px] text-forge-body transition hover:border-accent-purple/30 disabled:opacity-60"
         >
@@ -701,10 +713,10 @@ function CapabilityMapCta({
               Upload your tower&rsquo;s capability map &amp; headcount
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-forge-body">
-              One row per <Term termKey="l3">L3 capability</Term> with onshore / offshore{" "}
+              One row per <Term termKey="l4">L4 Activity Group</Term> with onshore / offshore{" "}
               <Term termKey="fte">FTE</Term> &amp; <Term termKey="contractor">contractors</Term>.
-              We infer the L1–L3 tree from your file and generate the L4 activity list
-              underneath each capability — no separate uploads.
+              We infer the L1–L4 hierarchy from your file and generate the L5 Activity
+              list underneath each Activity Group — no separate uploads.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

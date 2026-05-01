@@ -4,7 +4,7 @@ import * as React from "react";
 import { Cpu, Globe2 } from "lucide-react";
 import type {
   GlobalAssessAssumptions,
-  L3WorkforceRow,
+  L4WorkforceRow,
   TowerBaseline,
   TowerId,
 } from "@/data/assess/types";
@@ -17,29 +17,36 @@ import { cn } from "@/lib/utils";
 import { useRedactDollars, RedactedAmount } from "@/lib/clientMode";
 
 type Props = {
-  /** The L3 capability row — one slider card per row. */
-  row: L3WorkforceRow;
+  /** The L4 Activity Group row — one slider card per row. */
+  row: L4WorkforceRow;
   towerId: TowerId;
   baseline: TowerBaseline;
   global: GlobalAssessAssumptions;
-  onPatch: (patch: Partial<L3WorkforceRow>) => void;
+  onPatch: (patch: Partial<L4WorkforceRow>) => void;
 };
 
 /**
- * Per-L3 lever card for the Configure Impact Levers module.
+ * Per-L4-Activity-Group lever card for the Configure Impact Levers module.
  *
- * Tower leads dial offshore + AI on the L3 capability — Versant's preferred
- * granularity for impact-lever inputs (L4 was too granular). The card shows:
+ * Tower leads dial offshore + AI on the L4 Activity Group — Versant's
+ * preferred granularity for impact-lever inputs (per L5 Activity is too
+ * granular). The card shows:
  *
- *   - L2 > L3 breadcrumb so the lead always sees where the row sits.
- *   - Headcount + pool $ + a small list of reference L4 activities (display
+ *   - L3 Job Family > L4 Activity Group breadcrumb so the lead always sees
+ *     where the row sits in the 5-layer map.
+ *   - Headcount + pool $ + a small list of reference L5 Activities (display
  *     only; the activities don't drive the math).
  *   - Twin sliders (purple offshore + teal AI) writing directly to the
- *     L3 row's `offshoreAssessmentPct` / `aiImpactAssessmentPct`.
+ *     row's `offshoreAssessmentPct` / `aiImpactAssessmentPct`.
  *   - Modeled saving = offshore + AI (sequential combine), matching
  *     `rowModeledSaving` in `scenarioModel.ts` exactly.
+ *
+ * Renamed from `L3LeverRow` in the 5-layer migration (the assessment grain
+ * shifted from per-L3-Capability to per-L4-Activity-Group). The legacy
+ * `L3LeverRow` export is retained as an alias so any caller pinned to the
+ * old name keeps compiling.
  */
-export function L3LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
+export function L4LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
   const redact = useRedactDollars();
   const saving = React.useMemo(
     () => rowModeledSaving(row, baseline, global),
@@ -72,13 +79,13 @@ export function L3LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
   };
   const rationaleSource = row.dialsRationaleSource;
 
-  const activities = row.l4Activities ?? [];
+  const activities = row.l5Activities ?? [];
   const visibleActivities = activities.slice(0, 4);
   const hiddenCount = Math.max(0, activities.length - visibleActivities.length);
 
   return (
     <div
-      id={`l3-${row.id}`}
+      id={`l4-${row.id}`}
       className={cn(
         "scroll-mt-24 rounded-2xl border border-forge-border bg-forge-surface/70 p-3 sm:p-4",
       )}
@@ -86,11 +93,11 @@ export function L3LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
       <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr_1fr_minmax(120px,_0.7fr)] sm:gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-forge-hint">
-            <span>{row.l2}</span>
+            <span>{row.l3}</span>
             <span className="text-forge-subtle">›</span>
-            <span className="text-forge-body">{row.l3}</span>
+            <span className="text-forge-body">{row.l4}</span>
           </div>
-          <div className="mt-0.5 text-sm font-medium text-forge-ink">{row.l3}</div>
+          <div className="mt-0.5 text-sm font-medium text-forge-ink">{row.l4}</div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-forge-subtle">
             <span className="font-mono">{headcount} h/c</span>
             <span className="text-forge-hint">·</span>
@@ -118,7 +125,7 @@ export function L3LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
               {hiddenCount > 0 ? (
                 <span
                   className="rounded-full border border-forge-border/40 px-1.5 py-0.5 font-mono text-[10px] text-forge-hint"
-                  title={`${hiddenCount} more activity${hiddenCount === 1 ? "" : "ies"} on the Capability Map page.`}
+                  title={`${hiddenCount} more L5 Activit${hiddenCount === 1 ? "y" : "ies"} on the Capability Map page.`}
                 >
                   +{hiddenCount}
                 </span>
@@ -293,3 +300,9 @@ function ProvenanceChip({ source }: { source: RationaleSource }) {
     </span>
   );
 }
+
+/**
+ * @deprecated Renamed to `L4LeverRow` in the 5-layer migration. Kept as an
+ * alias so any caller pinned to the old name still compiles.
+ */
+export const L3LeverRow = L4LeverRow;

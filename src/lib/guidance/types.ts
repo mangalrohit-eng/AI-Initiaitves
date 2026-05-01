@@ -28,7 +28,7 @@ export type CapabilityMapGuidanceInput = {
   blankL4Count: number;
   stale: TowerStaleState;
   towerId: import("@/data/assess/types").TowerId;
-  /** True after user confirms L1–L3, or legacy `status === "complete"`. */
+  /** True after user confirms L1–L4, or legacy `status === "complete"`. */
   l1L3JourneyStepComplete: boolean;
 };
 

@@ -26,10 +26,10 @@ export type FormatUsdOptions = {
  * Format a USD value with the same auto-unit selection used everywhere in the
  * app: ≥1B → `$X.XXB`, ≥1M → `$X.XM`, ≥1K → `$XK`, else raw `$X,XXX`.
  *
- * Drives Step 2 (Impact Levers — per-L3 modeled $), Step 3 (Tower scoreboard),
- * and Step 4 (AI Initiatives — per-L3 AI $ and per-tower roll-up). Because all
- * three step surfaces format the same value through the same helper, identical
- * numbers always render identically.
+ * Drives Step 2 (Impact Levers — per-L4 Activity Group modeled $), Step 3
+ * (Tower scoreboard), and Step 4 (AI Initiatives — per-L4 Activity Group AI $
+ * and per-tower roll-up). Because all three step surfaces format the same
+ * value through the same helper, identical numbers always render identically.
  */
 export function formatUsdCompact(value: number, opts: FormatUsdOptions = {}): string {
   return formatMoneyImpl(value, opts);

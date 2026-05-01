@@ -1,5 +1,15 @@
 /**
- * Step-5 Offshore Plan — LLM lane classifier prompt (v1).
+ * Step-5 Offshore Plan — LLM lane classifier prompt (v2).
+ *
+ * Versioned: bump `PROMPT_VERSION` whenever the prompt text or schema
+ * changes, which invalidates the server LRU + client localStorage caches.
+ *
+ * v2 (5-layer migration): Versant capability maps are now FIVE layers —
+ *   L1 Function > L2 Job Grouping > L3 Job Family > L4 Activity Group > L5 Activity.
+ * The unit being classified into a lane is the **L4 Activity Group**
+ * (formerly "L3 capability" under v1). L5 Activities supply context only.
+ * Wire-format back-compat: accept the legacy `l4Names` field as an alias
+ * for `l5Names` so older callers keep working through cutover.
  *
  * The LLM authors TWO things per row:
  *   - lane: GccEligible | GccWithOverlay | OnshoreRetained
@@ -9,14 +19,11 @@
  *   - justification: 2-3 sentences, Versant-grounded.
  *
  * The LLM does NOT touch headcount or dial values. Movable HC math stays
- * deterministic from the Step-2 dial — the LLM only picks the lane and writes
- * the rationale.
- *
- * Versioned: bump `PROMPT_VERSION` whenever the prompt text or schema changes,
- * which invalidates the server LRU + client localStorage caches.
+ * deterministic from the Step-2 dial — the LLM only picks the lane and
+ * writes the rationale.
  */
 
-export const PROMPT_VERSION = "offshore-plan.v1";
+export const PROMPT_VERSION = "offshore-plan.v2";
 
 export type LLMOffshoreLane = "GccEligible" | "GccWithOverlay" | "OnshoreRetained";
 
@@ -24,9 +31,26 @@ export type LLMOffshoreRowInput = {
   rowId: string;
   towerId: string;
   towerName: string;
+  /** L2 Job Grouping. */
   l2: string;
+  /** L3 Job Family. */
   l3: string;
-  l4Names: string[];
+  /**
+   * L4 Activity Group — the row being classified. Optional only for
+   * back-compat with legacy v1 callers that sent only L2/L3.
+   */
+  l4?: string;
+  /**
+   * L5 Activity names that hang off this row (display-only context for the
+   * model — typically capped to 3 in the user prompt to keep tokens lean).
+   */
+  l5Names?: string[];
+  /**
+   * @deprecated v1 wire field. Renamed to `l5Names` after the 5-layer
+   * migration. Still accepted by the route for back-compat — at the prompt
+   * boundary either field is treated as the activity name list.
+   */
+  l4Names?: string[];
   /** total = onshore FTE + offshore FTE + onshore CTR + offshore CTR */
   headcount: {
     fteOnshore: number;
@@ -58,7 +82,11 @@ export function buildOffshoreSystemPrompt(
   ctx: LLMOffshoreClassifyContext,
 ): string {
   return [
-    "You are an Accenture managing director writing the lane-by-lane offshore migration plan for Versant Media Group's GCC India build-out. You assign each L3 capability to one of three lanes and write a brief Versant-grounded rationale.",
+    "You are an Accenture managing director writing the lane-by-lane offshore migration plan for Versant Media Group's GCC India build-out. You assign each L4 Activity Group to one of three lanes and write a brief Versant-grounded rationale.",
+    "",
+    "Hierarchy context (5-layer Versant capability map):",
+    "  L1 Function > L2 Job Grouping > L3 Job Family > L4 Activity Group > L5 Activity.",
+    "  Each row I send you IS one L4 Activity Group. The L5 Activity names are display-only context for what the work actually involves — do not classify them individually.",
     "",
     "Versant Media Group (NASDAQ: VSNT) is the spin-off of NBCUniversal's news, sports, streaming, and digital portfolio: MS NOW, CNBC, Golf Channel, GolfNow, GolfPass, USA Network, E!, Syfy, Oxygen True Crime, Fandango, Rotten Tomatoes, SportsEngine, Free TV Networks. ~$6.7B revenue, ~$2.4B Adj. EBITDA, ~$2.75B debt (BB-), running on NBCU shared services until each TSA expires.",
     "",
@@ -101,18 +129,27 @@ export function buildOffshoreUserPrompt(rows: LLMOffshoreRowInput[]): string {
       (r.headcount.contractorOnshore ?? 0) +
       (r.headcount.contractorOffshore ?? 0);
     const dial = r.dialPct == null ? "unset" : `${r.dialPct}%`;
-    // Keep the prompt small: at most 3 L4 names, short truncation. Drop
+    // Keep the prompt small: at most 3 L5 names, short truncation. Drop
     // the Step-2 rationale (it's already a 15-word headline that adds
     // little signal here and bloats the prompt token count for batches
-    // of 30+ rows).
-    const l4 =
-      r.l4Names.length > 0
-        ? ` :: L4=[${r.l4Names.slice(0, 3).map((s) => truncate(s, 60)).join(", ")}]`
+    // of 30+ rows). `l5Names` is the V2 wire name; `l4Names` is the
+    // legacy v1 field accepted as a fallback for cutover.
+    const activities =
+      (r.l5Names && r.l5Names.length > 0
+        ? r.l5Names
+        : r.l4Names && r.l4Names.length > 0
+        ? r.l4Names
+        : []);
+    const l5Snippet =
+      activities.length > 0
+        ? ` :: L5=[${activities.slice(0, 3).map((s) => truncate(s, 60)).join(", ")}]`
         : "";
-    return `${i + 1}. rowId="${r.rowId}" tower="${r.towerName}" L2="${truncate(r.l2, 80)}" L3="${truncate(r.l3, 80)}" hc=${total} dial=${dial}${l4}`;
+    const l4Snippet =
+      r.l4 && r.l4.trim() ? ` L4="${truncate(r.l4, 80)}"` : "";
+    return `${i + 1}. rowId="${r.rowId}" tower="${r.towerName}" L2="${truncate(r.l2, 80)}" L3="${truncate(r.l3, 80)}"${l4Snippet} hc=${total} dial=${dial}${l5Snippet}`;
   });
   return [
-    `Classify these ${rows.length} L3 capabilities into lanes (GccEligible | GccWithOverlay | OnshoreRetained) and write a 2-3 sentence Versant-grounded justification for each. Preserve order. Echo each rowId exactly.`,
+    `Classify these ${rows.length} L4 Activity Groups into lanes (GccEligible | GccWithOverlay | OnshoreRetained) and write a 2-3 sentence Versant-grounded justification for each. Preserve order. Echo each rowId exactly.`,
     "",
     ...lines,
   ].join("\n");

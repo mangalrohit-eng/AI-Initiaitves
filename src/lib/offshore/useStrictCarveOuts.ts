@@ -70,7 +70,7 @@ export type UseStrictCarveOutsApi = {
 /**
  * Step-5 strict carve-out store hook.
  *
- *   - Reads `program.towers[*].l3Rows[*].offshoreStrictCarveOut`.
+ *   - Reads `program.towers[*].l4Rows[*].offshoreStrictCarveOut`.
  *   - Writes via `setTowerAssess` so the existing AssessSyncProvider flushes
  *     to the server.
  *   - Auto-seeds on first mount (when no row has a flag yet) using
@@ -94,8 +94,8 @@ export function useStrictCarveOuts(): UseStrictCarveOutsApi {
     for (const tower of towers) {
       const towerId = tower.id as TowerId;
       const state = program.towers[towerId];
-      if (!state || state.l3Rows.length === 0) continue;
-      for (const r of state.l3Rows) {
+      if (!state || state.l4Rows.length === 0) continue;
+      for (const r of state.l4Rows) {
         const flag = r.offshoreStrictCarveOut;
         const reason = flag?.reason ?? null;
         const setBy = flag?.setBy ?? null;
@@ -137,7 +137,7 @@ export function useStrictCarveOuts(): UseStrictCarveOutsApi {
         const towerId = tower.id as TowerId;
         const state = cur.towers[towerId];
         if (!state) continue;
-        if (state.l3Rows.some((r) => r.id === rowId)) {
+        if (state.l4Rows.some((r) => r.id === rowId)) {
           foundTower = towerId;
           break;
         }
@@ -145,7 +145,7 @@ export function useStrictCarveOuts(): UseStrictCarveOutsApi {
       if (!foundTower) return;
       const towerState = cur.towers[foundTower];
       if (!towerState) return;
-      const nextRows = towerState.l3Rows.map((r) => {
+      const nextRows = towerState.l4Rows.map((r) => {
         if (r.id !== rowId) return r;
         if (reason == null) {
           // Clear the flag — strip the field rather than leave undefined.
@@ -162,7 +162,7 @@ export function useStrictCarveOuts(): UseStrictCarveOutsApi {
           },
         };
       });
-      setTowerAssess(foundTower, { l3Rows: nextRows });
+      setTowerAssess(foundTower, { l4Rows: nextRows });
     },
     [],
   );
@@ -186,7 +186,7 @@ export function useStrictCarveOuts(): UseStrictCarveOutsApi {
         if (!state) continue;
         const towerId = k as TowerId;
         const seedMap = seedsByTower.get(towerId);
-        const nextRows = state.l3Rows.map((r) => {
+        const nextRows = state.l4Rows.map((r) => {
           const seedReason = seedMap?.get(r.id) ?? null;
           if (seedReason == null) {
             const { offshoreStrictCarveOut: _drop, ...rest } = r;
@@ -202,7 +202,7 @@ export function useStrictCarveOuts(): UseStrictCarveOutsApi {
             },
           };
         });
-        nextTowers[towerId] = { ...state, l3Rows: nextRows };
+        nextTowers[towerId] = { ...state, l4Rows: nextRows };
       }
       return { ...p, towers: nextTowers };
     });
@@ -225,7 +225,7 @@ export function useStrictCarveOuts(): UseStrictCarveOutsApi {
       const tid = tower.id as TowerId;
       const ts = cur.towers[tid];
       if (!ts) continue;
-      if (ts.l3Rows.some((r) => r.offshoreStrictCarveOut)) {
+      if (ts.l4Rows.some((r) => r.offshoreStrictCarveOut)) {
         liveAny = true;
         break;
       }
@@ -259,7 +259,7 @@ export function useStrictCarveOuts(): UseStrictCarveOutsApi {
           nextTowers[towerId] = state;
           continue;
         }
-        const nextRows = state.l3Rows.map((r) => {
+        const nextRows = state.l4Rows.map((r) => {
           const seedReason = seedMap.get(r.id);
           if (!seedReason) return r;
           // Don't overwrite an existing flag — defensive guard.
@@ -273,7 +273,7 @@ export function useStrictCarveOuts(): UseStrictCarveOutsApi {
             },
           };
         });
-        nextTowers[towerId] = { ...state, l3Rows: nextRows };
+        nextTowers[towerId] = { ...state, l4Rows: nextRows };
       }
       return { ...p, towers: nextTowers };
     });

@@ -8,6 +8,7 @@ import type { CrossTowerAiPlanLLM } from "@/lib/llm/prompts/crossTowerAiPlan.v1"
 import type { BuildScaleRow } from "@/lib/initiatives/buildScaleModel";
 import { HORIZON_MONTHS } from "@/lib/initiatives/buildScaleModel";
 import { TIER_STYLES } from "@/lib/priority";
+import { programTierLabel, programTierRank } from "@/lib/programTierLabels";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
 import { slugify } from "@/lib/utils";
@@ -67,8 +68,9 @@ export function InitiativesAllListing({
     const q = search.trim().toLowerCase();
     const filtered = program.initiatives.filter((r) => {
       if (towerFilter.size > 0 && !towerFilter.has(r.towerId)) return false;
-      const phaseLabel = r.tier ?? "Unphased";
-      if (phaseFilter.size > 0 && !phaseFilter.has(phaseLabel)) return false;
+      // Phase filter operates on `programTier` (P1/P2/P3 only — Deprioritized
+      // rows are excluded from `program.initiatives` upstream).
+      if (phaseFilter.size > 0 && !phaseFilter.has(r.programTier)) return false;
       if (q.length > 0) {
         const hay = `${r.name} ${r.towerName} ${r.l3Name} ${r.l2Name}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -177,7 +179,7 @@ export function InitiativesAllListing({
                         {row.towerName}
                       </td>
                       <td className="px-3 py-2 align-top">
-                        <PhaseBadge tier={row.tier} />
+                        <PhaseBadge row={row} />
                       </td>
                       <td className="px-3 py-2 align-top text-xs text-forge-body">
                         {bs ? (
@@ -224,8 +226,8 @@ export function InitiativesAllListing({
                           {redact ? "—" : formatUsdCompact(row.attributedAiUsd)}
                         </div>
                         {row.attributedAiUsd !== row.aiUsd && !redact ? (
-                          <div className="font-mono text-[10px] text-forge-hint" title="L3-level AI $ pool">
-                            of {formatUsdCompact(row.aiUsd)} L3
+                          <div className="font-mono text-[10px] text-forge-hint" title="L4 Activity Group AI $ pool">
+                            of {formatUsdCompact(row.aiUsd)} L4
                           </div>
                         ) : null}
                       </td>
@@ -258,7 +260,11 @@ export function InitiativesAllListing({
 // ===========================================================================
 
 type SortKey = "phase" | "ai-usd" | "tower" | "name" | "start-month";
-const PHASE_OPTIONS = ["P1", "P2", "P3", "Unphased"] as const;
+const PHASE_OPTIONS = [
+  { id: "P1", label: "P1 · Quick Wins" },
+  { id: "P2", label: "P2 · Fill-ins" },
+  { id: "P3", label: "P3 · Strategic Builds" },
+] as const;
 
 function Toolbar({
   sortKey,
@@ -347,7 +353,7 @@ function Toolbar({
 
       <ChipFilterRow
         label="Phase"
-        options={PHASE_OPTIONS.map((p) => ({ id: p, label: p }))}
+        options={PHASE_OPTIONS.map((p) => ({ id: p.id, label: p.label }))}
         selected={phaseFilter}
         onToggle={(id) => {
           const next = new Set(phaseFilter);
@@ -411,11 +417,16 @@ function ChipFilterRow({
 //   Row helpers
 // ===========================================================================
 
-function PhaseBadge({ tier }: { tier: ProgramInitiativeRow["tier"] }) {
+function PhaseBadge({ row }: { row: ProgramInitiativeRow }) {
+  const tier = row.tier;
+  const ptLabel = programTierLabel(row.programTier);
   if (!tier) {
     return (
-      <span className="inline-flex items-center rounded-full border border-forge-border bg-forge-well px-2 py-0.5 font-mono text-[10px] font-semibold text-forge-body">
-        —
+      <span
+        className="inline-flex items-center rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-slate-700"
+        title={row.programTierReason || ptLabel.longLabel}
+      >
+        Below the line
       </span>
     );
   }
@@ -423,8 +434,9 @@ function PhaseBadge({ tier }: { tier: ProgramInitiativeRow["tier"] }) {
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold ${styles.badge}`}
+      title={row.programTierReason || ptLabel.longLabel}
     >
-      {tier}
+      {ptLabel.numeral} · {ptLabel.name}
     </span>
   );
 }
@@ -558,8 +570,8 @@ function buildSorter(
       const m = aStart - bStart;
       if (m !== 0) return m;
     }
-    // Default tail: phase rank → start month → $ desc → tower → name.
-    const phaseDelta = tierRank(a.tier) - tierRank(b.tier);
+    // Default tail: program tier → start month → $ desc → tower → name.
+    const phaseDelta = programTierRank(a.programTier) - programTierRank(b.programTier);
     if (phaseDelta !== 0) return phaseDelta;
     const aStart = buildScaleById.get(a.id)?.phaseStartMonth ?? 99;
     const bStart = buildScaleById.get(b.id)?.phaseStartMonth ?? 99;
@@ -571,12 +583,5 @@ function buildSorter(
     if (towerDelta !== 0) return towerDelta;
     return a.name.localeCompare(b.name);
   };
-}
-
-function tierRank(t: ProgramInitiativeRow["tier"]): number {
-  if (t === "P1") return 0;
-  if (t === "P2") return 1;
-  if (t === "P3") return 2;
-  return 3;
 }
 

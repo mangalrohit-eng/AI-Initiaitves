@@ -17,8 +17,10 @@ export const dynamic = "force-dynamic";
  * POST — rebuild the workshop starter program from the latest code-side seed
  * (`buildSeededAssessProgramV2`) and upsert into `assess_workshop`.
  *
- * Use this after editing the L1–L4 capability maps, the L4 default heuristic, or the
- * tower headcounts. Server-only so the result is reproducible regardless of who clicks.
+ * Use this after editing the L1–L5 capability maps (L1 Function / L2 Job
+ * Grouping / L3 Job Family / L4 Activity Group / L5 Activity), the L4
+ * default-dial heuristic, or the tower headcounts. Server-only so the
+ * result is reproducible regardless of who clicks.
  *
  * Auth: requires the same Forge session cookie as GET/PUT, plus an "internal" portal
  * audience (so client-only deployments can't wipe the database).

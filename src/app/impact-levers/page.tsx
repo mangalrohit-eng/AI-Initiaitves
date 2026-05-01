@@ -5,7 +5,7 @@ import { AssessmentHubClient } from "@/components/assess/AssessmentHubClient";
 export const metadata: Metadata = {
   title: "Configure Impact Levers — Versant Forge Program",
   description:
-    "Step 2 of the assessment. Dial offshore and AI per L3 against the confirmed capability map. Live program-wide impact with sensitivity bands.",
+    "Step 2 of the assessment. Dial offshore and AI per L4 Activity Group against the confirmed capability map. Live program-wide impact with sensitivity bands.",
 };
 
 export default function ImpactLeversHubPage() {

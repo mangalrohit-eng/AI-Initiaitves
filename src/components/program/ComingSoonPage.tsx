@@ -21,7 +21,7 @@ const WHY_THIS_MATTERS: Record<string, string> = {
 
 const WHAT_TODAY: Record<string, { label: string; href: string }[]> = {
   "offshore-plan": [
-    { label: "Set offshore dials per L3 in Configure Impact Levers", href: "/impact-levers" },
+    { label: "Set offshore dials per L4 Activity Group in Configure Impact Levers", href: "/impact-levers" },
     { label: "Review the impact estimate", href: "/impact-levers/summary" },
   ],
   prototypes: [

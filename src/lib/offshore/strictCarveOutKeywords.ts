@@ -154,10 +154,10 @@ export function seedStrictCarveOuts(
   for (const tower of towers) {
     const towerId = tower.id as TowerId;
     const state = program.towers[towerId];
-    if (!state || state.l3Rows.length === 0) continue;
+    if (!state || state.l4Rows.length === 0) continue;
     const towerDefault = TOWER_DEFAULT_REASON[towerId];
 
-    for (const r of state.l3Rows) {
+    for (const r of state.l4Rows) {
       const text = `${r.l2 ?? ""} ${r.l3 ?? ""}`.toLowerCase();
       const reason = pickReason(text, towerDefault);
       if (reason) out.push({ towerId, rowId: r.id, reason });

@@ -136,14 +136,14 @@ export function AssessmentScoreboard(props: Props) {
         icon={<Globe2 className="h-3.5 w-3.5" />}
         label="Offshore (wt avg)"
         value={weighted ? `${weighted.offshorePct.toFixed(0)}%` : "—"}
-        subtle="across L3 capabilities"
+        subtle="across L4 Activity Groups"
         accent="purple"
       />
       <Tile
         icon={<Cpu className="h-3.5 w-3.5" />}
         label="AI impact (wt avg)"
         value={weighted ? `${weighted.aiPct.toFixed(0)}%` : "—"}
-        subtle="across L3 capabilities"
+        subtle="across L4 Activity Groups"
         accent="teal"
       />
       <Tile

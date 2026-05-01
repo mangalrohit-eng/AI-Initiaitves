@@ -1,10 +1,16 @@
 /**
  * POST /api/assess/infer-defaults
  *
+ * Scores per-row dial defaults (offshorePct + aiPct) for the Impact Levers
+ * step. After the 5-layer migration the dial grain is **L4 Activity Group**
+ * (formerly L3 Capability), so the canonical input row carries the full
+ * `{ l2, l3, l4 }` path. Legacy 4-layer callers may still send `{ l2, l3 }`
+ * and the server will treat `l3` as the dial-row label.
+ *
  * Body:
  *   {
  *     towerId: TowerId,
- *     rows: [{ l2: string, l3: string }, ...]
+ *     rows: [{ l2: string, l3: string, l4?: string }, ...]
  *   }
  *
  * Returns:
@@ -97,9 +103,11 @@ export async function POST(req: Request) {
 
   const rows: LLMRowInput[] = body.rows.map((raw) => {
     const r = (raw ?? {}) as Record<string, unknown>;
+    const l4 = typeof r.l4 === "string" ? r.l4 : "";
     return {
       l2: typeof r.l2 === "string" ? r.l2 : "",
       l3: typeof r.l3 === "string" ? r.l3 : "",
+      l4: l4 || undefined,
     };
   });
 
@@ -142,7 +150,12 @@ export async function POST(req: Request) {
   // deterministic `rowStarterRationale` text and stamps `dialsRationaleSource:
   // "heuristic"`.
   try {
-    const defaults: RowDefault[] = rows.map((r) => inferL3Defaults(towerId, r.l2, r.l3));
+    // Heuristic still scores on the dial-row label. In V5, that's L4
+    // (Activity Group); fall back to L3 when callers didn't send L4 (legacy
+    // V4 callers) so the deterministic path still works during cutover.
+    const defaults: RowDefault[] = rows.map((r) =>
+      inferL3Defaults(towerId, r.l3 || r.l2, r.l4 || r.l3),
+    );
     return NextResponse.json(
       { ok: true, source: "heuristic" as const, defaults, warning },
       { status: 200 },

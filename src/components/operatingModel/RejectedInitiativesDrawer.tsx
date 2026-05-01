@@ -6,7 +6,7 @@ import { Archive, X } from "lucide-react";
 import type { UseInitiativeReviewsResult } from "@/lib/initiatives/useInitiativeReviews";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { cn } from "@/lib/utils";
-import { TIER_STYLES, tierFromShort, priorityTier } from "@/lib/priority";
+import { feasibilityChip } from "@/lib/feasibilityChip";
 import { InitiativeReviewRestoreButton } from "./InitiativeReviewActions";
 
 type Props = {
@@ -122,8 +122,8 @@ export function RejectedInitiativesDrawer({
 
             <footer className="border-t border-forge-border bg-forge-well/40 px-5 py-3 text-[11px] text-forge-subtle sm:px-6">
               Decisions persist across sessions and sync to the program
-              database. Rejecting hides the idea from the roadmap; per-L3
-              impact stays driven by Step 2 dials.
+              database. Rejecting hides the idea from the roadmap; per-L4
+              Activity Group impact stays driven by Step 2 dials.
             </footer>
           </motion.aside>
         </motion.div>
@@ -141,9 +141,13 @@ function RejectedRow({
   review: UseInitiativeReviewsResult["rejectedItems"][number]["review"];
   actions: UseInitiativeReviewsResult["actions"];
 }) {
-  const tier =
-    priorityTier(review.snapshot.aiPriority) ??
-    tierFromShort(review.snapshot.aiPriority);
+  // Per-tower views never surface a priority chip — the cross-tower 2x2 owns
+  // priority. We show the captured feasibility (when present on the snapshot)
+  // so the lead remembers whether this idea was a ship-ready bet or a
+  // longer-investigation bet at the time they rejected it.
+  const feas = review.snapshot.feasibility
+    ? feasibilityChip(review.snapshot.feasibility)
+    : null;
   return (
     <li className="rounded-xl border border-forge-border bg-forge-surface p-3 shadow-sm transition hover:border-accent-purple/40">
       <div className="flex items-start justify-between gap-3">
@@ -152,14 +156,16 @@ function RejectedRow({
             <span className="font-medium text-forge-ink">
               {review.snapshot.name}
             </span>
-            {tier ? (
+            {feas ? (
               <span
                 className={cn(
-                  "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-                  TIER_STYLES[tier].badge,
+                  "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+                  feas.badge,
                 )}
+                title={feas.tooltip}
               >
-                {tier}
+                <span className={cn("h-1 w-1 rounded-full", feas.dot)} aria-hidden />
+                {feas.label}
               </span>
             ) : null}
           </div>

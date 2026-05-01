@@ -25,8 +25,9 @@ import { clientGetAdminSessionStatus } from "@/lib/assess/assessClientApi";
  * rates that drive every modeled $ live. There is intentionally nothing else
  * on this page: no scenario presets, no live calculator, no lever weights,
  * no combine mode. The math (in `scenarioModel.ts`) reads these four rates
- * and the per-L3 dials — that's the entire model. Headcount is captured at
- * L3 granularity; L4 activity lists below each L3 are display-only.
+ * and the per-L4 Activity Group dials — that's the entire model. Headcount
+ * is captured at L4 Activity Group granularity; L5 Activity lists below each
+ * L4 are display-only.
  */
 export function AssumptionsClient() {
   const [program, setProgram] = React.useState<AssessProgramV2>(() => getAssessProgramHydrationSnapshot());
@@ -184,8 +185,8 @@ export function AssumptionsClient() {
             &gt; How impact is calculated
           </h2>
           <p className="mt-1 text-xs text-forge-subtle">
-            Every $ in the app comes from these four rates × per-L3 headcount × per-L3
-            offshore + AI dials. No magic lever weights, no caps. Change a rate above and
+            Every $ in the app comes from these four rates × per-L4 Activity Group headcount × per-L4
+            Activity Group offshore + AI dials. No magic lever weights, no caps. Change a rate above and
             watch the Impact Estimate move.
           </p>
 

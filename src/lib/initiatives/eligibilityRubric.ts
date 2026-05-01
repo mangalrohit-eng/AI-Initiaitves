@@ -15,18 +15,25 @@
  *      approved reasons from `docs/context.md` §9.
  *   2. **Strong-include patterns** — clearly automatable work (reconciliation,
  *      processing, matching, monitoring, drafting, tagging, transcription,
- *      verification, compliance check). Returns `curated` with a P-tier
- *      derived from frequency hints.
+ *      verification, compliance check). Returns `curated` with a binary
+ *      `feasibility` ("High" if the pattern is rules-based + named-vendor
+ *      ready; "Low" if real but lower confidence on near-term shipping).
  *   3. **Default** — when neither pattern bank matches. Returns
  *      `pending-discovery` with a generic rationale ("editorial sweep
  *      pending"). The selector treats these as ghost-L3 placeholders.
+ *
+ * Why feasibility (not priority): the rubric assesses ship-readiness only —
+ * the program-level 2x2 in `lib/initiatives/programTier.ts` joins this with
+ * parent-L4 Activity Group business impact to produce the cross-tower
+ * priority. Per-L5 Activity P-tier was misleading because a tower-local "P1"
+ * wasn't comparable to another tower's "P2" once initiatives were rolled up.
  *
  * Calibration target: program-wide, the rubric should land between 40%
  * and 60% `curated` across the 489 canonical L4s. Run
  * `assertEligibilityCalibration(...)` in dev to keep this honest.
  */
 
-import type { AiPriority } from "@/data/types";
+import type { Feasibility } from "@/data/types";
 import type { AiCurationStatus } from "@/data/capabilityMap/types";
 import type { NotEligibleReason } from "@/data/assess/types";
 
@@ -37,8 +44,11 @@ import type { NotEligibleReason } from "@/data/assess/types";
 export type RubricVerdict = {
   status: AiCurationStatus;
   aiEligible: boolean;
-  /** Only set when `status === "curated"`. */
-  aiPriority?: AiPriority;
+  /**
+   * Binary ship-readiness signal — only set when `status === "curated"`.
+   * Feeds the program-level 2x2 via `composeL4Verdict()`.
+   */
+  feasibility?: Feasibility;
   /** Versant-grounded one-liner — mandatory. */
   aiRationale: string;
   /** Only set when `status === "reviewed-not-eligible"`. */
@@ -326,7 +336,13 @@ const EXCLUDE_PATTERNS: ExcludePattern[] = [
 
 type IncludePattern = {
   pattern: RegExp;
-  priority: AiPriority;
+  /**
+   * Binary ship-readiness for this pattern. "High" maps to the legacy
+   * P1 set (rules-based, named vendor ready, high-volume). "Low" maps to
+   * the legacy P2 / P3 sets — real opportunities but lower confidence
+   * on shipping inside the near-term plan window without further build.
+   */
+  feasibility: Feasibility;
   rationaleTemplate: (in_: RubricInput) => string;
   primaryVendor?: string;
   tag: string;
@@ -341,7 +357,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P1: high-volume, rule-based, named vendor exists -----
   {
     pattern: /\b(reconciliation|recons?|reconciliations|3-?way\s+match(ing)?|match-?pay(-and-extract)?)\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `Reconciliation across Versant's 7+ legal entities (NBCU TSA carve-out, Fandango, Nikkei CNBC JV, Golf operations) is rules-based and high-volume — straight-through processing on the modal flow, exception queues for the rest.`,
     primaryVendor: "BlackLine",
@@ -349,7 +365,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(invoice|po|purchase\s+order)\s+(processing|capture|matching|workflow)\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `Invoice / PO processing is high-volume transactional work — vendor agents extract, validate, and route 85%+ straight-through across Versant's six business units.`,
     primaryVendor: "BlackLine",
@@ -357,7 +373,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(t.{0,2}e|expense\s+report)\s+(processing|workflow|management)\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `T&E processing is OCR + policy-rule matching at scale — typical 70-80% straight-through with Concur / SAP Concur agents handling exceptions.`,
     primaryVendor: "SAP Concur",
@@ -365,7 +381,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(transcription|transcribe|caption(ing)?|subtitle|stt|speech-?to-?text)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Transcription and captioning ride proven STT (Deepgram / OpenAI Whisper) — already standard across MSNBC News Group archive ingest, Sport rundowns, and live closed-captioning workflows.`,
     primaryVendor: "Deepgram",
@@ -373,7 +389,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(xbrl|xbrl\s+tagging|tagging|metadata\s+(tagging|enrichment)|categori[sz]ation|classification)\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `Tagging and classification work (XBRL on 10-K/10-Q, content metadata, taxonomy enrichment) is structured and high-volume — proven LLM territory.`,
     primaryVendor: "Workiva",
@@ -381,7 +397,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(monitoring|monitor)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Continuous monitoring (brand mentions, broadcast-quality KPIs, recurring vendor SLAs) — scheduled agents poll, threshold, and escalate, freeing analysts for the exception cases.`,
     primaryVendor: "Datadog",
@@ -389,7 +405,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(breaking\s+news|alert\s+generation|threat\s+detection|fraud\s+detection|anomaly\s+detection)\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `Real-time event detection (breaking news, security signals, transaction anomalies) at MS NOW / CNBC newsroom and Versant SOC scales — humans triage the alerts the agents surface.`,
     primaryVendor: "CrowdStrike",
@@ -397,7 +413,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(scheduling|schedule|rota|shift)\s+(management|optimization|automation)?\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Schedule optimization across MS NOW / CNBC / Sport rundowns and crew rotations — constraint-solver agents handle the complexity that breaks Excel.`,
     primaryVendor: "Quinyx",
@@ -405,7 +421,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(intake|ingestion|wire\s+service|feed\s+ingest)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Wire-service intake and content ingestion (AP / Reuters / Bloomberg / live feeds) is highly structured — agents triage, dedupe, and route at machine speed across the MSNBC News Group desks.`,
     primaryVendor: "AP / Reuters API",
@@ -413,7 +429,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(verification|fact[-\s]?check(ing)?)\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `Real-time fact verification on MS NOW broadcast lower-thirds and CNBC tickers — vector-search + retrieval agents surface authoritative sources for the on-air desk to confirm.`,
     primaryVendor: "Pinecone + LLM",
@@ -421,7 +437,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(publishing|cms\s+(publishing|workflow)|distribution)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Cross-platform publishing (article + video + social + newsletter + podcast feeds) — packaging agents serialise the same source content into 6+ surfaces.`,
     primaryVendor: "Brightspot CMS",
@@ -429,7 +445,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(seo|search\s+engine\s+optimization|metadata\s+seo)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `SEO optimisation (titles, descriptions, schema, internal linking) is structured + high-volume — agents propose, humans approve.`,
     primaryVendor: "Conductor",
@@ -437,7 +453,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(close|consolidation|month-?end|quarter-?end|intercompany|elimination)\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `Close / consolidation across Versant's 7+ entities (Fandango, Nikkei CNBC JV, Golf operations) hits a 12-18 day clock today — orchestration + reconciliation agents push toward a 5-7 day close.`,
     primaryVendor: "BlackLine",
@@ -445,7 +461,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(cash\s+flow\s+forecast|cash\s+forecast(ing)?|liquidity\s+(forecast|position))\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `30/60/90-day cash forecasting feeds Versant's $1.09B cash + $2.75B debt covenant management — ML on AR/AP patterns is well-trodden territory.`,
     primaryVendor: "Kyriba",
@@ -453,7 +469,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(covenant|debt\s+covenant)\s+(monitoring|testing|tracking)\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `BB- credit rating makes covenant monitoring existential at Versant — continuous-monitoring agents test EBITDA / leverage / interest-coverage thresholds nightly.`,
     primaryVendor: "Kyriba",
@@ -463,7 +479,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P2: monthly / regular cadence, judgment-light but not transactional -----
   {
     pattern: /\b(drafting|drafted|narrative\s+drafting|memo\s+drafting|first[-\s]?draft)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `LLM-driven drafting (10-K / 10-Q narrative, MD&A, board memos, earnings press releases) — agents produce a structured first draft, humans edit for tone and accuracy.`,
     primaryVendor: "Workiva + LLM",
@@ -471,7 +487,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(forecast(ing)?|projection|forward\s+look)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Forecasting (rolling FP&A views, ad-sales pipeline, content-amortization curves) — ML on the historical pattern, FP&A overlay on the strategic adjustments.`,
     primaryVendor: "Pigment",
@@ -479,7 +495,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(variance\s+analysis|kpi\s+(monitoring|reporting|scorecard)|management\s+report(ing)?|board\s+(package|reporting)|executive\s+dashboard)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Variance commentary, KPI scorecards, and board-package narrative — agents prep the diff and the talk-track, FP&A leads add the strategic overlay.`,
     primaryVendor: "Workiva",
@@ -487,7 +503,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(audit|sox|controls\s+testing|control\s+monitoring)\s*(support|preparation|testing)?\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `External audit / SOX support — agents collate evidence packages from systems-of-record (Workday, BlackLine, Coupa) so audit teams spend their time on judgment, not tickmark prep.`,
     primaryVendor: "AuditBoard",
@@ -495,7 +511,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(payroll|compensation|benefits)\s+(processing|administration|management|reconciliation)?\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Payroll and benefits administration is rule-driven across the Versant entities — Workday + Eightfold agents handle the standard flow, humans handle exceptions.`,
     primaryVendor: "Workday",
@@ -503,7 +519,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(onboarding|offboarding)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Onboarding / offboarding orchestration (system access, equipment, documents, mandatory training) — workflow agents drive the checklist across HR, IT, and Security.`,
     primaryVendor: "ServiceNow",
@@ -511,7 +527,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(recruit(ing|ment)?|sourc(ing|e)\s+candidates?|talent\s+sourcing|cv\s+(screening|matching)|résum[ée]\s+screening)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Talent sourcing and résumé screening across Versant's News / Sport / Tech orgs — Eightfold matches inbound candidates against open req profiles, recruiters spend their time on the long-list.`,
     primaryVendor: "Eightfold",
@@ -519,7 +535,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(learning|training|skills?\s+(gap|assessment|catalog)|curriculum)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Skills inference and learning-path curation — Eightfold reads the role taxonomy + employee history, surfaces the curriculum that closes the gap.`,
     primaryVendor: "Eightfold",
@@ -527,7 +543,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(creative|copy|video|content)\s+(production|generation|repurposing|adaptation|cutdowns?)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Creative repurposing (long-form → social cutdowns, hero edit → 6/15/30 sec versions) — Descript + Runway agents handle the modal cuts, editors finesse the brand-defining ones.`,
     primaryVendor: "Descript",
@@ -535,7 +551,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(personalization|recommendation|rec(s)?\s+engine|content\s+recommendation)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `On-platform personalisation (newsletter, podcast, GolfNow tee times, GolfPass content) — recommendation agents on first-party signals lift engagement without third-party cookies.`,
     primaryVendor: "LiveRamp",
@@ -543,7 +559,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(ad\s+(operations|ops)|trafficking|campaign\s+(setup|management|optimization)|media\s+plan(ning)?)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Ad ops / trafficking / campaign optimisation — critical post-NBCU TSA where Versant builds its own ad-sales engine; agents handle the order entry + creative QA, humans focus on strategy.`,
     primaryVendor: "FreeWheel",
@@ -551,7 +567,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(rights\s+(management|tracking|amortization)|content\s+rights)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Rights management for split-rights catalogues (Kardashians: on-air retained, streaming to Hulu) is high-complexity — agents track windows, restrictions, and amortization curves across the Versant catalogue.`,
     primaryVendor: "Whip Media",
@@ -559,7 +575,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(security\s+(monitoring|operations|incident)|soc\s+(operations|monitoring)|incident\s+response)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `SOC operations and incident response across the new-public-company Versant attack surface — CrowdStrike + Abnormal agents triage low-severity events, humans handle hands-on response.`,
     primaryVendor: "CrowdStrike",
@@ -567,7 +583,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(playout|broadcast\s+(automation|scheduling)|channel\s+(playout|operations))\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Channel playout and broadcast automation (linear scheduling, FAST channel ops, cloud playout) — Amagi agents orchestrate the schedule and ad-break triggers across Versant's 4 free TV networks.`,
     primaryVendor: "Amagi",
@@ -575,7 +591,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(quality\s+assurance|qa\s+(testing|automation)|test\s+automation)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `QA and test automation across Versant's tech estate (Peacock-derived stack, internal tooling, ad-tech) — coding agents generate test scaffolding, engineers refine.`,
     primaryVendor: "BrowserStack",
@@ -583,7 +599,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(documentation|docs|knowledge\s+base|runbook)\s*(generation|drafting|management)?\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Documentation and runbook generation — LLM agents read the codebase / config and draft the docs that engineers usually defer; freshness measured by automated drift detection.`,
     primaryVendor: "Cursor / Claude",
@@ -591,7 +607,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(contract\s+(review|abstraction|analysis|repository)|clm)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Contract review and abstraction (ad-sales agreements, talent contracts, vendor agreements, IT licence terms) — LLM agents extract clauses, surface risks, attorneys focus on the negotiation.`,
     primaryVendor: "Ironclad",
@@ -599,7 +615,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(chatbot|customer\s+support|tier\s*1\s+support|service\s+desk|help\s+desk)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Tier-1 service desk / customer support — RAG agents on the Versant knowledge base resolve ~50% of tickets straight-through, humans handle the long tail.`,
     primaryVendor: "ServiceNow + Vivantio",
@@ -609,7 +625,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P2: research / analysis (after specific include patterns) -----
   {
     pattern: /\b(research|competitive\s+intelligence|market\s+research|peer\s+benchmarking)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Versant peer-benchmarking against WBD / Paramount / Fox / Disney is structured RAG territory — agents pull comparable filings, summarise the deltas.`,
     primaryVendor: "AlphaSense",
@@ -617,7 +633,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(analytics?|kpi|insight\s+generation)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Analytics / KPI work — agents generate the chart packs and the talk-track, humans add the strategic overlay that drives the decision.`,
     primaryVendor: "Hex",
@@ -625,7 +641,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(reporting|report\s+generation|status\s+report)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Recurring reporting (financial, operational, brand-level) — agents assemble the data, draft the narrative, hand off the editable doc to the analyst.`,
     primaryVendor: "Workiva",
@@ -635,7 +651,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P1: ad-tech / DTC operational (post-NBCU TSA greenfield) -----
   {
     pattern: /\b(dynamic\s+(pricing|paywall|ad\s+insertion)|yield\s+optimization|rate\s+card|programmatic|trial-?to-?paid|checkout(\s+(&|and)?\s*funnel)?|funnel\s+optimization|conversion\s+rate\s+optimization|conversion\s+optimization|pricing\s+(&|and)?\s*packaging|promotion\s+(&|and)?\s*discount)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `DTC pricing, packaging, and dynamic ad / paywall optimisation are continuous-experiment surfaces — Piano + LiveRamp + custom agents test the modal user, humans set the brand guard-rails.`,
     primaryVendor: "Piano",
@@ -643,7 +659,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(audience\s+(targeting|measurement|data|segment(s|ation)?|packages?)|cross-?platform\s+identity|identity\s+graph|clean\s+room|clean[-\s]?room\s+operations|nielsen\s+measurement|cross-?brand\s+(audience|bundle))\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Audience measurement and identity resolution across Versant's 10+ brands is structured, machine-scale work — clean-room agents on LiveRamp + Nielsen feeds match identities and segment without exposing PII.`,
     primaryVendor: "LiveRamp",
@@ -651,7 +667,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(bid\s+(&|and)?\s*budget|paid\s+media|email\s*\/\s*push\s*\/\s*in-?app|crm\s+(&|and)?\s*lifecycle|lifecycle\s+marketing|experimentation\s+program|engagement\s+nudges?|save\s+offer\s+optimization|loyalty\s+(&|and)?\s*rewards)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Lifecycle marketing, loyalty / retention nudges, and bid/budget optimisation lift Versant DTC subscriber LTV — agents continuously tune across email / push / in-app surfaces.`,
     primaryVendor: "Iterable",
@@ -659,7 +675,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(churn\s+prediction|churn\s+prevention|proactive\s+intervention|nps\s*\/?\s*csat|survey\s+(&|and)?\s*feedback|cross-?brand\s+retention)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Churn prediction across Versant's NBCU TSA-exit DTC bases (CNBC Pro, GolfPass) — ML on engagement signal flags at-risk subscribers for save-offer agents and retention humans.`,
     primaryVendor: "Optimove",
@@ -667,7 +683,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(proposal\s+generation|stewardship\s+(&|and)?\s*make-?goods?|campaign\s+execution(\s+(&|and)?\s*optimization)?|ad\s+sales\s+billing|ad\s+sales\s+collections?|ad\s+ops|programmatic\s+advertising)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Ad-sales execution (proposal, stewardship, make-goods, billing) is the post-NBCU TSA greenfield — agents handle the order-entry and reconciliation against impressions delivered.`,
     primaryVendor: "FreeWheel + Operative",
@@ -677,7 +693,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P1: cyber / tech operations -----
   {
     pattern: /\b(soc\b|threat\s+(hunting|intelligence)|incident\s+(triage|response)|phishing|social\s+engineering|vulnerability\s+management|data\s+loss\s+prevention|dlp\b|identity\s+(&|and)?\s*access\s+management|iam\b|access\s+control|visitor\s+management)\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `SOC, IAM, and threat-hunting workflows scale on automation — CrowdStrike + Abnormal + ConductorOne agents triage low-severity events, humans handle hands-on response.`,
     primaryVendor: "CrowdStrike",
@@ -687,7 +703,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P1: facilities / operations technology -----
   {
     pattern: /\b(predictive\s+(facilities\s+|equipment\s+)?maintenance|hvac|mep|energy\s+management|space\s+(&|and)?\s*occupancy|spare\s+parts|equipment\s+lifecycle|capacity\s+planning|equipment\s+tracking)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Predictive maintenance and facilities IoT (HVAC, energy, equipment lifecycle) — sensor-driven agents flag drift before failure across NYC HQ, Englewood Cliffs, and the broadcast TOC.`,
     primaryVendor: "IBM Maximo",
@@ -695,7 +711,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(work\s+order\s+management|dispatch|service\s+desk|help\s+desk)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Work-order routing and service-desk triage at Versant — RAG agents on the knowledge base resolve ~50% of tickets straight-through, humans handle the long tail.`,
     primaryVendor: "ServiceNow",
@@ -705,7 +721,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P2: production / post-production -----
   {
     pattern: /\b(rough\s+cut(s|ting)?|finish\s+edit|promo(\s+(&|and)?\s*trailer)?|trailer\s+cutting|archive\s+clip\s+pulls|graphics\s+(&|and)?\s*thumbnail|thumbnail\s+generation|motion\s+graphics(\s+(&|and)?\s*lower\s+thirds?)?|color\s+correction|audio\s+processing|audio\s+(&|and)?\s*mixing)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Post-production tasks (rough cuts, trailers, thumbnails, lower-thirds, audio cleanup) ride proven media-AI tools — Descript / Runway / Adobe Sensei agents do the modal work, editors finesse hero pieces.`,
     primaryVendor: "Descript",
@@ -713,7 +729,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(studio\s+scheduling|crew\s+scheduling|equipment\s+(tracking|allocation)|production\s+planning|remi\s+decision|logistics\s+coordination|connectivity\s+management)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Resource scheduling across Versant studios + remote / REMI productions is constraint-solver territory — agents optimise crew, equipment, and connectivity assignments.`,
     primaryVendor: "Quinyx",
@@ -723,7 +739,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P2: programming linear / FAST -----
   {
     pattern: /\b(fast\s+channel(\s+programming|\s+launch|\s+content\s+curation)?|catalog\s+(&|and)?\s*library|library\s+(&|and)?\s*catalog|rights\s+(&|and)?\s*window|content\s+rights|window\s+management)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `FAST programming and rights-window management at Versant ride structured metadata — agents schedule, validate windows, and surface conflicts across the catalogue.`,
     primaryVendor: "Whip Media",
@@ -733,7 +749,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P2: legal compliance / structured filings -----
   {
     pattern: /\b(disclosure\s+management|edgar\s+filing|fcc\s+(broadcast\s+)?compliance|insider\s+trading\s+window|political\s+advertising\s+rules|children'?s\s+programming\s+compliance|clause\s+library|signature\s+(&|and)?\s*execution|post-?signature\s+obligation|ethics\s+(&|and)?\s*compliance|corporate\s+policy|privacy\s+(&|and)?\s*consent|data\s+rights\s+request)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Structured legal compliance (SEC disclosure, FCC, political-ad rules, post-signature tracking, privacy / DSAR) — agents read the playbook, surface the obligation, route to counsel for sign-off.`,
     primaryVendor: "Workiva",
@@ -743,7 +759,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P2: finance ops / GL -----
   {
     pattern: /\b(chart\s+of\s+accounts|fixed\s+asset|lease\s+accounting|asc\s+842|banking|short-?term\s+investment|debt\s+issuance|refinancing|fx\s+management|foreign\s+exchange|interest\s+rate\s+risk|insurance\s+(&|and)?\s*risk\s+transfer|profitability\s+by\s+brand|cost\s+allocation)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Recurring finance-ops work (sub-ledger maintenance, lease accounting, FX risk, brand P&L allocation) — Workday + BlackLine + Workiva agents handle the rule-based flow, finance leads handle the strategic edge.`,
     primaryVendor: "Workday",
@@ -753,7 +769,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P2: HR services -----
   {
     pattern: /\b(case\s+management|contact\s*\/?\s*inquiry|hr\s+portal|knowledge\s+management|records\s+management|leave\s+(&|and)?\s*absence|pre-?payroll|hr\s+shared\s+services|talent\s+acquisition\s+delivery|total\s+rewards\s+delivery|policy\s+compliance|continuous\s+improvement|employee\s+communication|change\s+management|digital\s+hr)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `HR shared-services workflows (cases, leave / absence, knowledge base, pre-payroll, communications) ride Workday + ServiceNow rails — agents handle the intake and modal flow, HR leads handle the outliers.`,
     primaryVendor: "Workday + ServiceNow",
@@ -763,7 +779,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P1: software engineering productivity -----
   {
     pattern: /\b(code\s+(development|generation|review|completion)|pair\s+programming|technical\s+debt|ci\/cd|cicd|deployment\s+management|developer\s+experience|developer\s+tooling|internal\s+developer\s+platforms?)\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `Engineering-productivity AI (Cursor / Copilot / Claude Code) is the single largest cycle-time lever at Versant — agents draft, review, refactor; engineers focus on architecture and edge cases.`,
     primaryVendor: "Cursor / GitHub Copilot",
@@ -771,7 +787,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(incident\s+(detection\s+(&|and)?\s*response|triage|response)|sre|on-?call\s+operations?|post-?incident\s+(review|analysis)|rca|runbook)\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `SRE on-call and incident-response automation — agents triage signals, propose runbooks, and draft post-incident reviews; engineers focus on the unique-failure root cause.`,
     primaryVendor: "PagerDuty + Datadog",
@@ -779,7 +795,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(cloud\s+(infrastructure\s+provisioning|cost\s+optimization)|infrastructure\s+as\s+code|iac\b|sd-?wan|edge\s+connectivity|dns|cdn\s+management|network\s+(architecture|management))\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `Cloud / network ops (provisioning, IaC, cost optimization, DNS / CDN) — Terraform + agentic IaC at Versant turns 4-week provisioning cycles into self-service.`,
     primaryVendor: "Terraform / Pulumi",
@@ -787,7 +803,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(mlops|ml\s+platform\s+operations|model\s+(registry|versioning|lifecycle)|llm\s+gateway|cost\s+management|prompt\s+(&|and)?\s*rag(\s+asset\s+management)?|eval\s+(&|and)?\s*quality\s+tooling|responsible\s+ai\s+reviews?|data\s+science\s+enablement|ai\s+governance)\b/i,
-    priority: "P1 — Immediate (0-6mo)",
+    feasibility: "High",
     rationaleTemplate: () =>
       `Versant's AI platform itself — MLOps, LLM gateway, RAG assets, eval tooling — is internal-AI-on-internal-AI: agents instrument, observe, and govern model behaviour for the AI-on-Versant program.`,
     primaryVendor: "LangSmith + Weights & Biases",
@@ -797,7 +813,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P2: operational follow-on -----
   {
     pattern: /\b(travel\s+management|expense\s+policy|corporate\s+card|expense\s+report|vendor\s+master\s+data|lease\s+administration)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Recurring services (T&E, vendor master, lease admin) — agents handle the modal flow against Versant's Concur / Workday / contract repository.`,
     primaryVendor: "SAP Concur",
@@ -805,7 +821,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(corrective\s+maintenance|project\s*\/?\s*build\s+engineering|project\s+engineering)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Corrective maintenance and project-engineering tracking — agents on top of the CMMS surface ticket trends, anticipate part needs, and shorten Versant TOC down-times.`,
     primaryVendor: "IBM Maximo",
@@ -813,7 +829,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(automated\s+data-?driven|data-?driven\s+content|markets?\s+\/?\s*scores?\s+\/?\s*digests?|crisis\s+detection(\s+(&|and)?\s*early\s+warning)?|early\s+warning|cross-?show\s+(promotion|discovery)|show\s+rundown\s+management|rundown\s+management|live\s+broadcast\s+data\s+(&|and)?\s*graphics?)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Automated data-driven content (markets / scores / digests), rundown ops, and crisis early-warning at Versant news desks — agents surface and draft, editors fact-check and frame.`,
     primaryVendor: "AP / Reuters API + LLM",
@@ -823,7 +839,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P2: scheduled finance ops -----
   {
     pattern: /\b(dividend\s+execution|share\s+repurchase\s+execution|buyback\s+execution|rfp\s*\/?\s*rfq\s+administration|vendor\s+payment(\s+execution)?)\b/i,
-    priority: "P2 — Near-term (6-12mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Scheduled finance execution — Versant's $0.375/share quarterly dividend, $1B buyback program, and vendor-payment cycles run on rule-based workflow against the corporate-actions calendar.`,
     primaryVendor: "BlackLine + Treasury Stack",
@@ -833,7 +849,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   // ----- P3: heavier judgment, lower frequency -----
   {
     pattern: /\b(disaster\s+recovery|business\s+continuity\b(?!.*planning)|comcast\s+tsa\s+migration|tsa\s+migration|cutover|equipment\s+lifecycle\s+management)\b/i,
-    priority: "P3 — Medium-term (12-24mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `One-off but very high-stakes programs (Versant TSA exit / cutover from Comcast, DR readiness, multi-year equipment refresh) — AI tracks the runbook, leaders own the cutover decisions.`,
     primaryVendor: "ServiceNow",
@@ -841,7 +857,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(annual\s+budget|long[-\s]?range\s+plan|three[-\s]?year\s+plan|five[-\s]?year\s+plan)\b/i,
-    priority: "P3 — Medium-term (12-24mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Annual budget / long-range plan — once-a-year exercise with heavy executive overlay; agents help with the scenario sweeps and consolidation, humans set the targets.`,
     primaryVendor: "Pigment",
@@ -849,7 +865,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(scenario|sensitivity)\s+(modeling|analysis)\b/i,
-    priority: "P3 — Medium-term (12-24mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Scenario / sensitivity modeling — agents sweep the parameter space and surface the cliff-edges, finance leads pick the scenarios that matter.`,
     primaryVendor: "Pigment",
@@ -857,7 +873,7 @@ const INCLUDE_PATTERNS: IncludePattern[] = [
   },
   {
     pattern: /\b(content\s+investment\s+roi|content\s+roi|programming\s+roi)\b/i,
-    priority: "P3 — Medium-term (12-24mo)",
+    feasibility: "Low",
     rationaleTemplate: () =>
       `Content investment ROI on Versant's $2.45B programming spend — agents reconcile the cost basis, attribute the engagement, and surface the long-tail vs. tent-pole portfolio mix.`,
     primaryVendor: "Hex",
@@ -896,7 +912,7 @@ export function classifyL4(input: RubricInput): RubricVerdict {
       return {
         status: "curated",
         aiEligible: true,
-        aiPriority: inc.priority,
+        feasibility: inc.feasibility,
         aiRationale: inc.rationaleTemplate(input),
         matchedPattern: inc.tag,
         confidence: "high",

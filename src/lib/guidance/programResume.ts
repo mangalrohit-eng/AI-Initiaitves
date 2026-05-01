@@ -22,7 +22,7 @@ function towersWithRows(
   program: AssessProgramV2,
 ): Tower[] {
   return ordered.filter((t) => {
-    const rows = program.towers[t.id as TowerId]?.l3Rows ?? [];
+    const rows = program.towers[t.id as TowerId]?.l4Rows ?? [];
     return rows.length > 0;
   });
 }
@@ -51,7 +51,7 @@ export function resolveProgramHomeGuidance(
       return {
         tier: 1,
         title:
-          "Several towers still have blank L3 rows on Step 1 — open the Capability Map hub and run Generate L4 where needed.",
+          "Several towers still have blank L4 Activity Group rows on Step 1 — open the Capability Map hub and run Generate L5 Activities where needed.",
         staleKind: null,
         actionHref: "/capability-map",
         actionLabel: "Open Capability Map hub",
@@ -61,7 +61,7 @@ export function resolveProgramHomeGuidance(
     const tid = t.id as TowerId;
     return {
       tier: 1,
-      title: `Resume Step 1 on ${t.name}: add L4 activities for every blank L3 on the Capability Map.`,
+      title: `Resume Step 1 on ${t.name}: add L5 Activities for every blank L4 Activity Group on the Capability Map.`,
       staleKind: null,
       actionHref: getTowerHref(tid, "capability-map"),
       actionLabel: `Open ${t.name}`,

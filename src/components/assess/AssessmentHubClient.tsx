@@ -39,9 +39,9 @@ type DialStatus = "no-footprint" | "default-only" | "dialed";
 
 function dialStatus(program: AssessProgramV2, towerId: TowerId): DialStatus {
   const t = program.towers[towerId];
-  if (!t || !t.l3Rows.length) return "no-footprint";
-  const hasOff = t.l3Rows.some((r) => r.offshoreAssessmentPct != null);
-  const hasAi = t.l3Rows.some((r) => r.aiImpactAssessmentPct != null);
+  if (!t || !t.l4Rows.length) return "no-footprint";
+  const hasOff = t.l4Rows.some((r) => r.offshoreAssessmentPct != null);
+  const hasAi = t.l4Rows.some((r) => r.aiImpactAssessmentPct != null);
   return hasOff || hasAi ? "dialed" : "default-only";
 }
 
@@ -121,9 +121,9 @@ export function AssessmentHubClient() {
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
               Dial <Term termKey="offshore dial">offshore</Term> and{" "}
               <Term termKey="ai impact dial">AI impact</Term> per{" "}
-              <Term termKey="l3">L3 capability</Term> against the capability map &amp; headcount you
-              confirmed in step 1. The headline below reflects every drag in real time. When the
-              dials look right, sign the tower off as reviewed.
+              <Term termKey="l4">L4 Activity Group</Term> against the capability map &amp;
+              headcount you confirmed in step 1. The headline below reflects every drag in
+              real time. When the dials look right, sign the tower off as reviewed.
             </p>
           </div>
           <Link
@@ -195,7 +195,7 @@ export function AssessmentHubClient() {
               </div>
               <div className="text-xs text-forge-subtle">
                 {dialStatus(program, nextRecommended.id as TowerId) === "default-only"
-                  ? "Defaults are seeded — review and override per L3 to make the impact yours."
+                  ? "Defaults are seeded — review and override per L4 Activity Group to make the impact yours."
                   : "Tweak the dials to fine-tune the impact."}
               </div>
             </div>
@@ -225,9 +225,9 @@ export function AssessmentHubClient() {
             const sc = dialStatusCopy(status);
             const isMine = minePicked && mine.includes(tid);
             const isComplete = t?.status === "complete";
-            const pool = t ? t.l3Rows.reduce((s, r) => s + rowAnnualCost(r, program.global), 0) : 0;
-            const weighted = t && t.l3Rows.length
-              ? weightedTowerLevers(t.l3Rows, t.baseline, program.global)
+            const pool = t ? t.l4Rows.reduce((s, r) => s + rowAnnualCost(r, program.global), 0) : 0;
+            const weighted = t && t.l4Rows.length
+              ? weightedTowerLevers(t.l4Rows, t.baseline, program.global)
               : null;
             const outcome = towerOutcomeForState(tid, program);
 

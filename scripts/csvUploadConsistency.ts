@@ -4,8 +4,8 @@
  * The live upload flow is:
  *
  *   1. User picks file on /capability-map/tower/[id]
- *   2. parseAssessFile() → L3WorkforceRow[]
- *   3. setTowerAssess(towerId, { l3Rows: parsed, status: "data",
+ *   2. parseAssessFile() → L4WorkforceRow[]
+ *   3. setTowerAssess(towerId, { l4Rows: parsed, status: "data",
  *                                capabilityMapConfirmedAt: now })
  *   4. The Capability Map / Impact Levers / Summary / AI Initiatives pages
  *      all read program state via subscribe("assessProgram", ...) and
@@ -14,17 +14,18 @@
  *
  * What this script does:
  *
- *   - Replaces a tower's l3Rows with three classes of upload-shape rows:
- *       (a) match-canonical: row's L2/L3 name matches the canonical map →
- *           Step 4 surfaces the curated L4 list (rubric / overlay / canonical).
- *       (b) renamed: same L2/L3 names but with whitespace/case mutations →
- *           the selector's name-key fallback still finds the canonical L3
- *           and surfaces the same L4 list.
- *       (c) net-new: an L3 that doesn't exist on the canonical map →
- *           the selector synthesizes a placeholder L4 ("Discovery activity")
- *           so the row's $ never silently disappears.
+ *   - Replaces a tower's l4Rows with three classes of upload-shape rows:
+ *       (a) match-canonical: the (L3 Job Family, L4 Activity Group) names
+ *           match the canonical map → Step 4 surfaces the curated L5
+ *           Activities list (rubric / overlay / canonical).
+ *       (b) renamed: same names but with whitespace/case mutations → the
+ *           selector's name-key fallback still finds the canonical entry
+ *           and surfaces the same L5 list.
+ *       (c) net-new: an Activity Group that doesn't exist on the canonical
+ *           map → the selector synthesizes a placeholder L5 ("Discovery
+ *           activity") so the row's $ never silently disappears.
  *   - Re-runs the selector and checks Step 2/3/4 totals + per-row $.
- *   - Reports on what an LLM regen hook would need to do for new L3/L4
+ *   - Reports on what an LLM regen hook would need to do for new L4/L5
  *     names to get verdicts (today: no auto-trigger; this is PR 2 work).
  *
  * Run via `npx tsx scripts/csvUploadConsistency.ts`.
@@ -33,6 +34,7 @@
 import { towers } from "../src/data/towers";
 import { buildSeededAssessProgramV2 } from "../src/data/assess/seedAssessProgram";
 import { getCapabilityMapForTower } from "../src/data/capabilityMap/maps";
+import { getTowerFunctionName } from "../src/data/towerFunctionNames";
 import {
   rowModeledSaving,
   modeledSavingsForTower,
@@ -48,7 +50,7 @@ import {
   defaultGlobalAssessAssumptions,
   defaultTowerBaseline,
   type AssessProgramV2,
-  type L3WorkforceRow,
+  type L4WorkforceRow,
   type TowerId,
 } from "../src/data/assess/types";
 
@@ -70,56 +72,69 @@ function fmt(n: number): string {
 // ---------------------------------------------------------------------------
 
 type UploadProfile = {
-  matchCanonical: number; // exact name matches → curated L4 path
+  matchCanonical: number; // exact name matches → curated L5 path
   renamedCanonical: number; // case/whitespace mutations → fallback to name-key match
-  netNewL3: number; // brand new L3 that doesn't exist on canonical map
+  netNewL4: number; // brand-new Activity Group that doesn't exist on canonical map
 };
 
 function buildSimulatedUpload(
   towerId: TowerId,
   profile: UploadProfile,
-): L3WorkforceRow[] {
+): L4WorkforceRow[] {
   const map = getCapabilityMapForTower(towerId);
   if (!map) throw new Error(`No canonical map for ${towerId}`);
 
-  // Walk the canonical map for L3 candidates that belong to this tower.
-  type Candidate = { l2: string; l3: string };
+  // Walk the canonical map for L4 (Activity Group) candidates that belong
+  // to this tower. The new L2 Job Grouping wrapper is captured for
+  // round-tripping into the simulated upload rows.
+  type Candidate = { l2: string; l3: string; l4: string };
   const candidates: Candidate[] = [];
   for (const l2 of map.l2) {
     for (const l3 of l2.l3) {
-      if (l3.relatedTowerIds && !l3.relatedTowerIds.includes(towerId)) continue;
-      candidates.push({ l2: l2.name, l3: l3.name });
+      for (const l4 of l3.l4) {
+        if (l4.relatedTowerIds && !l4.relatedTowerIds.includes(towerId)) continue;
+        candidates.push({ l2: l2.name, l3: l3.name, l4: l4.name });
+      }
     }
   }
 
   const need =
-    profile.matchCanonical + profile.renamedCanonical + profile.netNewL3;
+    profile.matchCanonical + profile.renamedCanonical + profile.netNewL4;
   if (candidates.length < profile.matchCanonical + profile.renamedCanonical) {
     throw new Error(
-      `${towerId}: only ${candidates.length} canonical L3s, need ${profile.matchCanonical + profile.renamedCanonical}`,
+      `${towerId}: only ${candidates.length} canonical L4s, need ${profile.matchCanonical + profile.renamedCanonical}`,
     );
   }
 
-  const rows: L3WorkforceRow[] = [];
+  const groupingName = getTowerFunctionName(towerId);
+  const rows: L4WorkforceRow[] = [];
   let cursor = 0;
 
   for (let i = 0; i < profile.matchCanonical; i++) {
     const c = candidates[cursor++];
-    rows.push(makeRow(`upload-match-${i}`, c.l2, c.l3, 12 /* fte */));
+    rows.push(makeRow(`upload-match-${i}`, c.l2, c.l3, c.l4, 12));
   }
   for (let i = 0; i < profile.renamedCanonical; i++) {
     const c = candidates[cursor++];
-    // Preserve names exactly to keep the test deterministic. The selector
-    // accepts case + whitespace variations, but mutating those isn't what
-    // we're stress-testing here — we want *legitimate* uploads to work.
-    rows.push(makeRow(`upload-rename-${i}`, `  ${c.l2}  `, c.l3.toUpperCase(), 9));
+    // Preserve hierarchies exactly; only mutate L4 (Activity Group) name to
+    // exercise the case-fold/whitespace fallback.
+    rows.push(
+      makeRow(
+        `upload-rename-${i}`,
+        c.l2,
+        `  ${c.l3}  `,
+        c.l4.toUpperCase(),
+        9,
+      ),
+    );
   }
-  for (let i = 0; i < profile.netNewL3; i++) {
+  for (let i = 0; i < profile.netNewL4; i++) {
     rows.push(
       makeRow(
         `upload-new-${i}`,
-        "Lead-authored Workstream",
-        `Tower-specific Activity ${i + 1}`,
+        groupingName,
+        "Lead-authored Job Family",
+        `Tower-specific Activity Group ${i + 1}`,
         7,
       ),
     );
@@ -133,12 +148,14 @@ function makeRow(
   id: string,
   l2: string,
   l3: string,
+  l4: string,
   fteTotal: number,
-): L3WorkforceRow {
+): L4WorkforceRow {
   return {
     id,
     l2,
     l3,
+    l4,
     fteOnshore: Math.ceil(fteTotal * 0.7),
     fteOffshore: Math.floor(fteTotal * 0.3),
     contractorOnshore: 0,
@@ -183,17 +200,17 @@ function simulateUpload(
   const uploadedRows = buildSimulatedUpload(towerId, {
     matchCanonical: 4,
     renamedCanonical: 2,
-    netNewL3: 2,
+    netNewL4: 2,
   });
 
   const baseTowerState = baseProgram.towers[towerId];
   program.towers[towerId] = {
     ...(baseTowerState ?? {
-      l3Rows: [],
+      l4Rows: [],
       baseline: defaultTowerBaseline,
       status: "empty" as const,
     }),
-    l3Rows: uploadedRows,
+    l4Rows: uploadedRows,
     status: "data" as const,
     capabilityMapConfirmedAt: new Date().toISOString(),
   };
@@ -245,24 +262,27 @@ function simulateUpload(
     if (ai > 0 && !surfaced.has(r.id)) {
       fail(
         towerId,
-        `Uploaded row "${r.id}" (${r.l2} / ${r.l3}) carries $${ai.toFixed(0)} AI but doesn't surface on Step 4`,
+        `Uploaded row "${r.id}" (${r.l3} / ${r.l4}) carries $${ai.toFixed(0)} AI but doesn't surface on Step 4`,
       );
     }
   }
 
   // (A) Hierarchy provenance — count how each row resolved.
-  // We cannot peek inside the selector, but we can re-derive by comparing
-  // the row's L2/L3 names to the canonical map and inspecting the resulting
-  // L4 view. The selector is a pure function so this is sound.
+  // We can't peek inside the selector, but we can re-derive by comparing
+  // each row's (L3 Job Family, L4 Activity Group) name pair to the canonical
+  // map and inspecting the resulting L5 Activity view. The selector is a
+  // pure function so this is sound.
   const map = getCapabilityMapForTower(towerId);
-  const canonicalL3Keys = new Set<string>();
+  const canonicalL4Keys = new Set<string>();
   if (map) {
     for (const l2 of map.l2) {
       for (const l3 of l2.l3) {
-        if (l3.relatedTowerIds && !l3.relatedTowerIds.includes(towerId)) continue;
-        canonicalL3Keys.add(
-          `${l2.name.trim().toLowerCase()}::${l3.name.trim().toLowerCase()}`.replace(/\s+/g, " "),
-        );
+        for (const l4 of l3.l4) {
+          if (l4.relatedTowerIds && !l4.relatedTowerIds.includes(towerId)) continue;
+          canonicalL4Keys.add(
+            `${l3.name.trim().toLowerCase()}::${l4.name.trim().toLowerCase()}`.replace(/\s+/g, " "),
+          );
+        }
       }
     }
   }
@@ -271,12 +291,12 @@ function simulateUpload(
   let synthesized = 0;
   for (const r of uploadedRows) {
     const direct =
-      `${r.l2.trim().toLowerCase()}::${r.l3.trim().toLowerCase()}`.replace(/\s+/g, " ");
-    if (canonicalL3Keys.has(direct)) {
-      // The original row L2/L3 matches a canonical entry exactly; whether
-      // it's a literal-match or whitespace/case-fold-match is the selector's
-      // choice — both surface curated L4s.
-      if (r.l2.trim() === r.l2 && r.l3.toLowerCase() === r.l3) {
+      `${r.l3.trim().toLowerCase()}::${r.l4.trim().toLowerCase()}`.replace(/\s+/g, " ");
+    if (canonicalL4Keys.has(direct)) {
+      // The original (L3, L4) pair matches a canonical entry exactly;
+      // whether it's a literal or whitespace/case-fold match is the
+      // selector's choice — both surface curated L5 Activities.
+      if (r.l3.trim() === r.l3 && r.l4.toLowerCase() === r.l4) {
         matchedCanonical += 1;
       } else {
         matchedViaFallback += 1;
@@ -363,16 +383,16 @@ function main() {
     const uploadedRows = buildSimulatedUpload(id, {
       matchCanonical: 4,
       renamedCanonical: 2,
-      netNewL3: 2,
+      netNewL4: 2,
     });
     const baseT = baseProgram.towers[id];
     programAfterAllUploads.towers[id] = {
       ...(baseT ?? {
-        l3Rows: [],
+        l4Rows: [],
         baseline: defaultTowerBaseline,
         status: "empty" as const,
       }),
-      l3Rows: uploadedRows,
+      l4Rows: uploadedRows,
       status: "data" as const,
       capabilityMapConfirmedAt: new Date().toISOString(),
     };
@@ -412,7 +432,7 @@ function main() {
     "  1. bootstrapHashOnRead   stamps the seeded rows to idle.",
   );
   console.log(
-    "  2. (upload) builds a fresh L3WorkforceRow[] (no curationContentHash).",
+    "  2. (upload) builds a fresh L4WorkforceRow[] (no curationContentHash).",
   );
   console.log(
     "  3. markRowsStaleByHash should flip renamed rows to 'queued'.\n",
@@ -432,13 +452,14 @@ function main() {
     const id = t.id as TowerId;
     const seeded = baseProgram.towers[id];
     if (!seeded) continue;
-    const stamped = bootstrapHashOnRead(seeded.l3Rows);
+    const stamped = bootstrapHashOnRead(seeded.l4Rows);
     const stampedCount = stamped.filter(
       (r) => r.curationContentHash != null,
     ).length;
-    // Simulate: keep stamped rows but rename one to trigger detection.
+    // Simulate: keep stamped rows but rename the L4 (Activity Group) on
+    // one row to trigger stale-detection.
     const renamed = stamped.map((r, i) =>
-      i === 0 ? { ...r, l3: `${r.l3} (rename for test)` } : r,
+      i === 0 ? { ...r, l4: `${r.l4} (rename for test)` } : r,
     );
     const afterStale = markRowsStaleByHash(renamed);
     const queued = afterStale.filter(
@@ -448,7 +469,7 @@ function main() {
     console.log(
       [
         id.padEnd(22),
-        String(seeded.l3Rows.length).padStart(8),
+        String(seeded.l4Rows.length).padStart(8),
         String(stampedCount).padStart(7),
         String(renamed.length).padStart(8),
         String(queued).padStart(6),
@@ -468,16 +489,16 @@ function main() {
   console.log(
     [
       "What runs on CSV upload today (verified live in src/lib/assess/useTowerAssessOps.ts):",
-      "  1. parseAssessFile() → L3WorkforceRow[]",
-      "  2. setTowerAssess(towerId, { l3Rows: parsed, status: 'data', capabilityMapConfirmedAt: now })",
+      "  1. parseAssessFile() → L4WorkforceRow[]",
+      "  2. setTowerAssess(towerId, { l4Rows: parsed, status: 'data', capabilityMapConfirmedAt: now })",
       "  3. sync.flushSave() persists to localStorage / cloud sync",
       "",
       "Step 2 (Impact Levers)  : recomputes via rowModeledSaving on the new rows. CONSISTENT.",
       "Step 3 (Impact Estimate): recomputes via programImpactSummary on the new state. CONSISTENT.",
       "Step 4 (AI Initiatives) : selectInitiativesForTower joins canonical map + composer.",
-      "                           Rows whose L2/L3 names match the canonical map keep their",
-      "                           curated L4 list (rubric / overlay / canonical L4 fields).",
-      "                           Rows whose L2/L3 names don't match → ghost-L3 placeholder L4",
+      "                           Rows whose (Job Family, Activity Group) names match the canonical",
+      "                           map keep their curated L5 Activity list (rubric / overlay / canonical).",
+      "                           Rows whose names don't match → ghost-L4 placeholder L5",
       "                           ('Discovery activity'). Dollars still flow through.",
       "",
       "What does NOT run automatically today:",
@@ -487,10 +508,10 @@ function main() {
       "",
       "Implication:",
       "  - $$ consistency is automatic and bulletproof on every upload.",
-      "  - Hierarchy & curated L4 details for *renamed or net-new* L3s require",
-      "    the LLM curation pipeline (PR 2) to fire automatically on upload —",
-      "    keyed by `curationContentHash` + `curationStage` already wired into",
-      "    L3WorkforceRow.",
+      "  - Hierarchy & curated L5 details for *renamed or net-new* Activity Groups",
+      "    require the LLM curation pipeline (PR 2) to fire automatically on upload",
+      "    — keyed by `curationContentHash` + `curationStage` already wired into",
+      "    L4WorkforceRow.",
     ].join("\n"),
   );
 

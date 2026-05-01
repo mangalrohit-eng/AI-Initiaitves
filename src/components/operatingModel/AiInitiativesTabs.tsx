@@ -24,26 +24,34 @@ const TABS: ReadonlyArray<TabDef> = [
   {
     id: "capability",
     label: "By capability",
-    hint: "L2 → L4",
+    hint: "L2 → L5",
     icon: Layers,
   },
   {
     id: "roadmap",
-    label: "Priority roadmap",
-    hint: "P1 / P2 / P3",
+    label: "Feasibility roster",
+    hint: "Ship-ready / Investigate",
     icon: CalendarRange,
   },
 ];
 
 /**
  * Hosts the per-tower AI Initiatives experience as two sub-tabs:
- *   - "By capability" (default) renders the L2 → L4 OperatingModelSection.
- *   - "Priority roadmap" renders the P1/P2/P3 AiRoadmap.
+ *   - "By capability" (default) renders the V5 L2 → L3 → L4 → L5
+ *     OperatingModelSection (L4 Activity Group cards expand to reveal
+ *     the AI-eligible L5 Activities under each).
+ *   - "Feasibility roster" renders AiRoadmap grouped by binary feasibility.
+ *
+ * Per-tower views never surface a P1/P2/P3 priority chip — program priority
+ * is owned by the cross-tower 2x2 (feasibility × business impact) and lives
+ * on the Cross-Tower AI Plan page, where rows from all towers can be
+ * compared on a common scale.
  *
  * Both panes are always mounted and the inactive one is hidden via the
  * Tailwind `hidden` class so internal state inside OperatingModelSection
- * (expanded L3 keys in ProcessLandscape) and AiRoadmap survives tab
- * switches — important for the user-experience feel of the page.
+ * (expanded L4 Activity Group keys in ProcessLandscape) and AiRoadmap
+ * survives tab switches — important for the user-experience feel of the
+ * page.
  *
  * The StaleCurationBanner is hoisted up here from OperatingModelSection
  * so the program-level "L4 curation is stale" alert remains visible on
@@ -124,8 +132,13 @@ export function AiInitiativesTabs({ tower }: { tower: Tower }) {
         className="space-y-4"
       >
         <p className="max-w-3xl text-sm text-forge-subtle">
-          AI-eligible initiatives sequenced by readiness and impact — now (0–6mo),
-          next (6–12mo), later (12–24mo). Click any card for the full four-lens design.
+          AI-eligible activities grouped by ship-readiness for this tower.
+          Final program priority (P1 / P2 / P3) is set on the{" "}
+          <span className="font-medium text-forge-body">
+            Cross-Tower AI Plan
+          </span>{" "}
+          via the feasibility × business-impact 2x2. Click any card for the
+          full four-lens design.
         </p>
         <AiRoadmap tower={tower} />
       </div>

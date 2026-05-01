@@ -9,6 +9,7 @@ import type {
 } from "@/lib/initiatives/selectProgram";
 import type {
   CrossTowerAiPlanLLM,
+  PromptDeprioritizedInitiative,
   PromptKeyInitiative,
 } from "@/lib/llm/prompts/crossTowerAiPlan.v1";
 import type { Tier } from "@/lib/priority";
@@ -165,6 +166,7 @@ export function useCrossTowerPlan(
 function buildPromptPayload(program: SelectProgramResult): {
   initiatives: PromptKeyInitiative[];
   phaseMembership: Record<string, Tier | null>;
+  deprioritized: PromptDeprioritizedInitiative[];
   towersInScope: { id: string; name: string; initiativeCount: number }[];
   vendorStack: { vendor: string; count: number }[];
   orchestrationMix: { pattern: string; count: number }[];
@@ -177,11 +179,21 @@ function buildPromptPayload(program: SelectProgramResult): {
       name: row.name,
       capabilityPath: `${row.l2Name} / ${row.l3Name}`,
       tier: row.tier,
+      programTierReason: row.programTierReason,
       aiPriority: row.aiPriority,
       rationale: row.aiRationale,
     }));
   const phaseMembership: Record<string, Tier | null> = {};
   for (const row of initiatives) phaseMembership[row.id] = row.tier;
+  const deprioritized: PromptDeprioritizedInitiative[] = program.deprioritized
+    .slice(0, 30)
+    .map((row) => ({
+      id: row.id,
+      towerName: row.towerName,
+      name: row.name,
+      capabilityPath: `${row.l2Name} / ${row.l3Name}`,
+      programTierReason: row.programTierReason,
+    }));
   const towersInScope = (program.towersInScope as TowerInScope[]).map((t) => ({
     id: t.id,
     name: t.name,
@@ -191,6 +203,7 @@ function buildPromptPayload(program: SelectProgramResult): {
   return {
     initiatives,
     phaseMembership,
+    deprioritized,
     towersInScope,
     vendorStack: arch.vendorStack.map((v) => ({ vendor: v.vendor, count: v.count })),
     orchestrationMix: arch.orchestrationMix.map((o) => ({ pattern: o.pattern, count: o.count })),

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { Tower, AiPriority } from "@/data/types";
+import type { Tower } from "@/data/types";
 import type { TowerId, InitiativeReview, InitiativeReviewSnapshot } from "@/data/assess/types";
 import {
   clearInitiativeReview,
@@ -98,7 +98,7 @@ export function useInitiativeReviews(tower: Tower): UseInitiativeReviewsResult {
         // the L3 row stays visible and the user can either restore an idea
         // from the drawer or zero the dial on Step 2.
         if (kept.length === 0 && l3.aiUsd > 0) {
-          kept.push(buildAllRejectedPlaceholder(l3.rowId, l3.aiPct));
+          kept.push(buildAllRejectedPlaceholder(l3.rowId));
         }
         return { ...l3, l4s: kept };
       });
@@ -176,33 +176,35 @@ export function useInitiativeReviews(tower: Tower): UseInitiativeReviewsResult {
 function buildSnapshot(l4: InitiativeL4, l3: InitiativeL3): InitiativeReviewSnapshot {
   const snap: InitiativeReviewSnapshot = {
     name: l4.name,
+    // l2Name = parent Job Grouping (post-5-layer-migration); pre-migration this
+    // captured the Pillar name. l3Name = parent Job Family (was Pillar). l4Name
+    // = parent Activity Group, captured separately on the InitiativeL3
+    // view-model so we don't have to re-walk the program state here.
     l2Name: l3.l2Name,
     l3Name: l3.l3.name,
+    l4Name: l3.rowL4Name,
     rowId: l3.rowId,
   };
   if (l4.aiRationale) snap.aiRationale = l4.aiRationale;
-  if (l4.aiPriority) snap.aiPriority = l4.aiPriority;
+  // Capture binary feasibility on the snapshot so the rejected drawer can
+  // show "ship-ready / investigate" without echoing the deprecated P-tier.
+  if (l4.feasibility) snap.feasibility = l4.feasibility;
   return snap;
 }
 
 /**
  * Synthesize a placeholder L4 when every real L4 under an L3 has been
- * rejected. Mirrors `buildPlaceholderL4Fallback` in `select.ts` so the row
- * styling and tier grouping in the AI Roadmap stay consistent.
+ * rejected. Mirrors `buildPlaceholderL4Fallback` in `select.ts`. Carries no
+ * `aiPriority` or `feasibility` — placeholders are pre-filtered out before
+ * the cross-tower 2x2, so leaving these undefined matches the upstream
+ * placeholder convention without breaking any reader.
  */
-function buildAllRejectedPlaceholder(rowId: string, aiPct: number): InitiativeL4 {
-  const aiPriority: AiPriority =
-    aiPct >= 50
-      ? "P1 — Immediate (0-6mo)"
-      : aiPct >= 25
-        ? "P2 — Near-term (6-12mo)"
-        : "P3 — Medium-term (12-24mo)";
+function buildAllRejectedPlaceholder(rowId: string): InitiativeL4 {
   return {
     id: `${rowId}-all-rejected`,
     name: "All AI ideas rejected for this capability",
     source: "placeholder",
     isPlaceholder: true,
-    aiPriority,
     aiRationale:
       "The Tower Lead has rejected every AI idea generated for this capability. Restore one from the Rejected ideas drawer, or set this capability's AI dial to 0 on Step 2 if it should be removed from the roadmap.",
   };

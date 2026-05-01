@@ -50,14 +50,15 @@ export function OffshorePlanClient() {
     for (const t of plan.towerSummaries) {
       for (const r of t.rows) {
         if (r.classificationSource === "user-carve-out" || r.classificationSource === "seeded-carve-out") continue;
-        const programRow = plan.program.towers[t.towerId]?.l3Rows.find((x) => x.id === r.rowId);
+        const programRow = plan.program.towers[t.towerId]?.l4Rows.find((x) => x.id === r.rowId);
         rows.push({
           rowId: r.rowId,
           towerId: t.towerId,
           towerName: t.towerName,
           l2: r.l2,
           l3: r.l3,
-          l4Names: programRow?.l4Activities ?? [],
+          l4: r.l4,
+          l5Names: programRow?.l5Activities ?? [],
           headcount: {
             fteOnshore: r.todayFteOnshore,
             fteOffshore: r.todayFteOffshore,

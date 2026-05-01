@@ -35,9 +35,9 @@ import { cn } from "@/lib/utils";
  * "queued"`. While a run is in flight, the CTA is disabled with a
  * "Refresh in progress" tooltip — prevents double-fires + race conditions.
  *
- * Precondition guard: if any queued row has no L4 activities, the LLM has
+ * Precondition guard: if any queued row has no L5 Activities, the LLM has
  * nothing to score, so the banner switches modes and routes the user back
- * to Step 1's "Generate L4 activities" CTA instead of firing a request
+ * to Step 1's "Generate L5 Activities" CTA instead of firing a request
  * that's guaranteed to fail.
  */
 export function StaleCurationBanner({
@@ -57,7 +57,7 @@ export function StaleCurationBanner({
   }, []);
 
   const rows: ReadonlyArray<L3WorkforceRow> = React.useMemo(
-    () => program.towers[towerId]?.l3Rows ?? [],
+    () => program.towers[towerId]?.l4Rows ?? [],
     [program, towerId],
   );
 
@@ -160,14 +160,14 @@ export function StaleCurationBanner({
               </span>{" "}
               of{" "}
               <span className="font-mono text-forge-body">{totalCount}</span>{" "}
-              {queuedCount === 1 ? "capability has" : "capabilities have"} stale
+              {queuedCount === 1 ? "Activity Group has" : "Activity Groups have"} stale
               AI guidance.
             </h3>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-forge-subtle">
             {missingL4ForRefresh
-              ? "Some queued capabilities have no L4 activities yet. Generate L4 activities on Step 1 first, then come back to refresh AI guidance."
-              : "Refresh runs the Versant-grounded LLM. If the LLM is unavailable, it falls back to the deterministic verdict composer + overlay rubric. Until you refresh, P-tier and eligibility tags on the capability map stay out of date for the queued rows. Dollars and headcount on Steps 2 and 3 are unaffected."}
+              ? "Some queued Activity Groups have no L5 Activities yet. Generate L5 Activities on Step 1 first, then come back to refresh AI guidance."
+              : "Refresh runs the Versant-grounded LLM. If the LLM is unavailable, it falls back to the deterministic verdict composer + overlay rubric. Until you refresh, feasibility (Ship-ready / Investigate) and eligibility tags on the capability map stay out of date for the queued rows — and the cross-tower 2x2 will tier them off the older signal. Dollars and headcount on Steps 2 and 3 are unaffected."}
           </p>
         </div>
         {missingL4ForRefresh ? (
@@ -177,10 +177,10 @@ export function StaleCurationBanner({
               "inline-flex items-center gap-2 rounded-lg bg-accent-amber px-4 py-2 text-sm font-semibold text-near-black transition",
               "hover:bg-accent-amber/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-amber/50",
             )}
-            title="Open Step 1 to generate L4 activities for the queued capabilities first."
+            title="Open Step 1 to generate L5 Activities for the queued Activity Groups first."
           >
             <Icons.ListPlus className="h-4 w-4" />
-            Generate L4 activities first
+            Generate L5 Activities first
           </Link>
         ) : (
           <button
@@ -243,8 +243,8 @@ export function StaleCurationBanner({
                   <span className="font-medium text-forge-ink">{row.l3}</span>
                 </span>
                 <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
-                  {(row.l4Activities ?? []).length}{" "}
-                  L4{(row.l4Activities ?? []).length === 1 ? "" : "s"}
+                  {(row.l5Activities ?? []).length}{" "}
+                  L4{(row.l5Activities ?? []).length === 1 ? "" : "s"}
                 </span>
               </li>
             ))}

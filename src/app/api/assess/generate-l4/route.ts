@@ -1,26 +1,38 @@
 /**
  * POST /api/assess/generate-l4
  *
+ * (URL kept for back-compat; semantics are now generate-L5 — one batch per
+ * Activity Group, returning L5 Activity names.)
+ *
  * Body:
  *   {
  *     towerId: TowerId,
- *     rows: [{ l2: string, l3: string }, ...]
+ *     rows: [
+ *       { l2: string,   // L2 Job Grouping (prompt context)
+ *         l3: string,   // L3 Job Family   (prompt context)
+ *         l4?: string,  // L4 Activity Group — the row being scored. Optional
+ *                       // for legacy v4 callers; if omitted we treat l3 as
+ *                       // the parent.
+ *         feedback?: string },
+ *       ...
+ *     ]
  *   }
  *
  * Returns:
  *   {
  *     ok: true,
  *     source: "llm" | "fallback",
- *     groups: [{ l2, l3, activities: string[] }, ...],
+ *     groups: [{ l2, l3, l4, activities: string[] }, ...],
  *     warning?: string
  *   }
  *
  * Behaviour:
  *   - Always returns a `groups` array of the same length as `rows`, in order.
  *   - Tries OpenAI first when OPENAI_API_KEY is configured.
- *   - Falls back to the canonical capability map for matching (l2, l3) pairs;
- *     for L3s not in the canonical map, falls back to a 3-item generic list
- *     derived from the L3 name. The route NEVER returns an empty group.
+ *   - Falls back to the canonical capability map for matching (l3 Job Family,
+ *     l4 Activity Group) pairs (or, for v4 callers, `(l2, l3)`); for rows
+ *     not in the canonical map, falls back to a 3-item generic list derived
+ *     from the parent name. The route NEVER returns an empty group.
  */
 
 import { cookies } from "next/headers";
@@ -46,7 +58,13 @@ type GenerateL4Body = {
   rows?: unknown;
 };
 
-type GroupResult = { l2: string; l3: string; activities: string[] };
+type GroupResult = {
+  l2: string;
+  l3: string;
+  /** L4 Activity Group; empty string for legacy v4 callers (no `l4` in input). */
+  l4: string;
+  activities: string[];
+};
 
 export async function POST(req: Request) {
   if (!(await isAuthed())) {
@@ -85,9 +103,11 @@ export async function POST(req: Request) {
     const r = (raw ?? {}) as Record<string, unknown>;
     const fbRaw = typeof r.feedback === "string" ? r.feedback.trim() : "";
     const feedback = fbRaw ? fbRaw.slice(0, MAX_FEEDBACK_CHARS) : undefined;
+    const l4 = typeof r.l4 === "string" ? r.l4 : "";
     return {
       l2: typeof r.l2 === "string" ? r.l2 : "",
       l3: typeof r.l3 === "string" ? r.l3 : "",
+      ...(l4 ? { l4 } : {}),
       ...(feedback ? { feedback } : {}),
     };
   });
@@ -114,7 +134,9 @@ export async function POST(req: Request) {
     const groups: GroupResult[] = llmGroups.map((g, i) => ({
       l2: rows[i].l2,
       l3: rows[i].l3,
-      activities: g.activities.length > 0 ? g.activities : fallbackActivities(towerId, rows[i]),
+      l4: rows[i].l4 ?? "",
+      activities:
+        g.activities.length > 0 ? g.activities : fallbackActivities(towerId, rows[i]),
     }));
     return NextResponse.json(
       { ok: true, source: "llm" as const, groups },
@@ -126,6 +148,7 @@ export async function POST(req: Request) {
     const groups: GroupResult[] = rows.map((r) => ({
       l2: r.l2,
       l3: r.l3,
+      l4: r.l4 ?? "",
       activities: fallbackActivities(towerId, r),
     }));
     return NextResponse.json(
@@ -139,26 +162,49 @@ export async function POST(req: Request) {
 }
 
 /**
- * Deterministic fallback: look up the canonical capability map for this tower
- * and pull L4 names whose (l2, l3) match (case-insensitive). When no match is
- * found, return three generic verb-noun activities derived from the L3 name.
+ * Deterministic fallback: look up the canonical capability map for this
+ * tower and pull L5 Activity names whose (L3 Job Family, L4 Activity Group)
+ * match (case-insensitive). For legacy v4 callers (no `l4` in input), treat
+ * `l3` as the parent and walk the canonical map's L4 names instead. When no
+ * match is found, return three generic verb-noun activities derived from
+ * the deepest available label.
  */
 function fallbackActivities(towerId: TowerId, row: LLMGenerateL4Row): string[] {
   const map = getCapabilityMapForTower(towerId);
+  const l4Name = row.l4 ?? "";
   if (map) {
-    const l2Match = map.l2.find(
-      (x) => x.name.trim().toLowerCase() === row.l2.trim().toLowerCase(),
-    );
-    if (l2Match) {
-      const l3Match = l2Match.l3.find(
-        (x) => x.name.trim().toLowerCase() === row.l3.trim().toLowerCase(),
+    if (l4Name) {
+      // V5 path: walk to the matching Activity Group and emit its L5 list.
+      for (const l2 of map.l2) {
+        for (const l3 of l2.l3) {
+          if (l3.name.trim().toLowerCase() !== row.l3.trim().toLowerCase()) {
+            continue;
+          }
+          const l4Match = l3.l4.find(
+            (x) => x.name.trim().toLowerCase() === l4Name.trim().toLowerCase(),
+          );
+          if (l4Match && l4Match.l5.length > 0) {
+            return l4Match.l5.map((x) => x.name);
+          }
+        }
+      }
+    } else {
+      // V4 fallback: caller only sent (l2, l3); walk to that L3 and emit
+      // the L4 names (which used to be the leaf level pre-migration).
+      const l2Match = map.l2.find(
+        (x) => x.name.trim().toLowerCase() === row.l2.trim().toLowerCase(),
       );
-      if (l3Match && l3Match.l4.length > 0) {
-        return l3Match.l4.map((x) => x.name);
+      if (l2Match) {
+        const l3Match = l2Match.l3.find(
+          (x) => x.name.trim().toLowerCase() === row.l3.trim().toLowerCase(),
+        );
+        if (l3Match && l3Match.l4.length > 0) {
+          return l3Match.l4.map((x) => x.name);
+        }
       }
     }
   }
-  const base = row.l3.trim() || "Activities";
+  const base = (l4Name || row.l3 || "Activities").trim();
   return [
     `${base} — execution`,
     `${base} — review and exception handling`,

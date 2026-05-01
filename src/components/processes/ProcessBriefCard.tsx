@@ -17,20 +17,7 @@ import type { AIProcessBrief, FeasibilityEvidence, Process, Tower } from "@/data
 import { MetricPill } from "@/components/ui/MetricPill";
 import { EvidenceSection } from "@/components/evidence/EvidenceSection";
 import { slugify } from "@/lib/utils";
-import { TIER_STYLES } from "@/lib/priority";
 import { ChangedSinceBadge } from "@/components/collab/ChangedSinceBadge";
-
-function priorityBadge(priority: AIProcessBrief["aiPriority"]) {
-  const styles = TIER_STYLES[priority];
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${styles.badge}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} aria-hidden />
-      {priority} — {priority === "P1" ? "Immediate (0-6mo)" : "Near-term (6-12mo)"}
-    </span>
-  );
-}
 
 function ImpactPill({ impact }: { impact: string }) {
   const lower = impact.toLowerCase();
@@ -63,10 +50,10 @@ export function ProcessBriefCard({
 }) {
   return (
     <article className="space-y-8">
-      {/* Header */}
+      {/* Header — per-tower views no longer surface a priority chip; the
+          cross-tower 2x2 owns sequencing. */}
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          {priorityBadge(brief.aiPriority)}
           <span className="inline-flex items-center gap-1.5 rounded-full border border-forge-border bg-forge-surface px-2.5 py-0.5 text-xs font-medium text-forge-subtle">
             <Layers className="h-3 w-3" />
             Process brief

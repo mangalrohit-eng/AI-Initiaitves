@@ -8,6 +8,7 @@ import type {
 } from "@/lib/initiatives/buildScaleModel";
 import { HORIZON_MONTHS, RAMP_MONTHS } from "@/lib/initiatives/buildScaleModel";
 import { TIER_HEX, type Tier } from "@/lib/priority";
+import { programTierLabel } from "@/lib/programTierLabels";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
 import type { TowerId } from "@/data/assess/types";
@@ -181,7 +182,10 @@ function Toolbar({
       {phasesPresent.length > 1 ? (
         <ChipFilterRow
           label="Phase"
-          options={phasesPresent.map((p) => ({ id: p, label: p }))}
+          options={phasesPresent.map((p) => ({
+            id: p,
+            label: phaseFilterLabel(p),
+          }))}
           selected={phaseFilter as Set<string>}
           onToggle={(id) => {
             const next = new Set(phaseFilter);
@@ -516,13 +520,25 @@ function PhaseChip({
   phase: BuildScaleRow["phase"];
   colors: PhaseColors;
 }) {
+  const tierLabel =
+    phase === "P1" || phase === "P2" || phase === "P3"
+      ? programTierLabel(phase)
+      : null;
   return (
     <span
       className={`inline-flex items-center rounded-full border px-1.5 py-0 font-mono text-[10px] font-semibold ${colors.badge}`}
+      title={tierLabel?.longLabel}
     >
       {phase === "Unphased" ? "—" : phase}
     </span>
   );
+}
+
+function phaseFilterLabel(phase: BuildScaleRow["phase"]): string {
+  if (phase === "P1") return "P1 · Quick Wins";
+  if (phase === "P2") return "P2 · Fill-ins";
+  if (phase === "P3") return "P3 · Strategic Builds";
+  return "Unphased";
 }
 
 // ===========================================================================

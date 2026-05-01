@@ -1,16 +1,17 @@
 import type {
   AssessProgramV2,
   GlobalAssessAssumptions,
-  L3WorkforceRow,
+  L4WorkforceRow,
   TowerId,
 } from "@/data/assess/types";
 import { mergeLeadDeadlines, parseLeadDeadlines } from "@/lib/program/leadDeadlines";
 import { defaultGlobalAssessAssumptions, defaultTowerBaseline, defaultTowerState } from "@/data/assess/types";
+import { getTowerFunctionName } from "@/data/towerFunctionNames";
 import { towers } from "@/data/towers";
 import { coerceInitiativeReviews, groupL4RowsToL3RowsForImport } from "@/lib/localStore";
 
-export const ASSESS_PROGRAM_FILE_FORMAT = "forge-assess-program-v4" as const;
-const SUPPORTED_PROGRAM_VERSIONS: ReadonlyArray<number> = [2, 3, 4];
+export const ASSESS_PROGRAM_FILE_FORMAT = "forge-assess-program-v5" as const;
+const SUPPORTED_PROGRAM_VERSIONS: ReadonlyArray<number> = [2, 3, 4, 5];
 
 export type AssessProgramFileEnvelope = {
   format: typeof ASSESS_PROGRAM_FILE_FORMAT;
@@ -45,17 +46,28 @@ function slugify(s: string): string {
   );
 }
 
-function asL3Row(x: unknown): L3WorkforceRow | null {
+function asL4Row(x: unknown, towerId: TowerId): L4WorkforceRow | null {
   if (!isRecord(x)) return null;
   const id = x.id;
-  const l2 = x.l2;
-  const l3 = x.l3;
-  if (typeof l2 !== "string" || typeof l3 !== "string") return null;
+  // V5 input: rows already carry `l2` (Job Grouping) + `l3` (Job Family) +
+  // `l4` (Activity Group). V4 input: rows have `l2` (old Pillar) + `l3`
+  // (old Capability) only — we shift those one level deeper (file's `l2` →
+  // new `l3`, file's `l3` → new `l4`) and stamp the new `l2` Job Grouping
+  // with the tower's L1 Function name.
+  const fileL2 = typeof x.l2 === "string" ? x.l2 : "";
+  const fileL3 = typeof x.l3 === "string" ? x.l3 : "";
+  const fileL4 = typeof x.l4 === "string" ? x.l4 : "";
+  const isV5 = !!fileL4.trim();
+  const l2 = isV5 ? fileL2 : getTowerFunctionName(towerId);
+  const l3 = isV5 ? fileL3 : fileL2;
+  const l4 = isV5 ? fileL4 : fileL3;
+  if (!l3.trim() || !l4.trim()) return null;
   const clamp01 = (v: number) => Math.min(100, Math.max(0, v));
-  const out: L3WorkforceRow = {
-    id: typeof id === "string" && id ? id : `${slugify(l2)}::${slugify(l3)}`,
+  const out: L4WorkforceRow = {
+    id: typeof id === "string" && id ? id : `${slugify(l3)}::${slugify(l4)}`,
     l2,
     l3,
+    l4,
     fteOnshore: coalesceNumber(x.fteOnshore, 0),
     fteOffshore: coalesceNumber(x.fteOffshore, 0),
     contractorOnshore: coalesceNumber(x.contractorOnshore, 0),
@@ -80,33 +92,49 @@ function asL3Row(x: unknown): L3WorkforceRow | null {
     return Number.isFinite(n) ? clamp01(n) : undefined;
   })();
   if (ai != null) out.aiImpactAssessmentPct = ai;
-  if (Array.isArray(x.l4Activities)) {
-    const names = (x.l4Activities as unknown[])
+  // V5 prefers `l5Activities`; V4 wrote `l4Activities`. Accept either so
+  // older Postgres rows + JSON exports still hydrate cleanly.
+  const rawActivities = Array.isArray(x.l5Activities)
+    ? x.l5Activities
+    : Array.isArray(x.l4Activities)
+      ? x.l4Activities
+      : null;
+  if (rawActivities) {
+    const names = (rawActivities as unknown[])
       .filter((n): n is string => typeof n === "string" && n.trim().length > 0)
       .map((n) => n.trim());
-    if (names.length > 0) out.l4Activities = names;
+    if (names.length > 0) out.l5Activities = names;
   }
 
   // ----- API / export round-trip (must mirror `migrateAssessProgram` in
   // `localStore.ts`) — Postgres GET → `importAssessProgramFromJsonText` must
   // preserve pipeline + staleness fields or Step 4 loses `queued` on every
   // reload and the StaleCurationBanner never fires after upload.
-  if (Array.isArray(x.l4Items)) {
-    out.l4Items = x.l4Items as L3WorkforceRow["l4Items"];
+  const rawItems = Array.isArray(x.l5Items)
+    ? x.l5Items
+    : Array.isArray(x.l4Items)
+      ? x.l4Items
+      : null;
+  if (rawItems) {
+    out.l5Items = rawItems as L4WorkforceRow["l5Items"];
   }
   if (typeof x.curationContentHash === "string") {
     out.curationContentHash = x.curationContentHash;
   }
+  // Accept both the new `running-l5` and the legacy `running-l4`
+  // curationStage so V4 snapshots replay without losing pipeline state.
   if (
     x.curationStage === "idle" ||
     x.curationStage === "queued" ||
     x.curationStage === "running-l4" ||
+    x.curationStage === "running-l5" ||
     x.curationStage === "running-verdict" ||
     x.curationStage === "running-curate" ||
     x.curationStage === "done" ||
     x.curationStage === "failed"
   ) {
-    out.curationStage = x.curationStage;
+    out.curationStage =
+      x.curationStage === "running-l4" ? "running-l5" : x.curationStage;
   }
   if (typeof x.curationGeneratedAt === "string") {
     out.curationGeneratedAt = x.curationGeneratedAt;
@@ -190,7 +218,7 @@ export function importAssessProgramFromJsonText(
     return {
       ok: false,
       error:
-        "Unrecognized file: use a Forge export (.json) with program version 2, 3, or 4.",
+        "Unrecognized file: use a Forge export (.json) with program version 2, 3, 4, or 5.",
     };
   }
 
@@ -207,7 +235,7 @@ export function importAssessProgramFromJsonText(
   const inputVersion = programRaw.version;
 
   const program: AssessProgramV2 = {
-    version: 4,
+    version: 5,
     global: parseGlobal(programRaw.global),
     towers: {},
   };
@@ -217,13 +245,26 @@ export function importAssessProgramFromJsonText(
     for (const [k, v] of Object.entries(towersObj)) {
       if (!isTowerId(k) || !isRecord(v)) continue;
       const base = defaultTowerState();
-      let l3Rows: L3WorkforceRow[];
-      if (inputVersion >= 4 && Array.isArray(v.l3Rows)) {
-        l3Rows = (v.l3Rows.map((r) => asL3Row(r)).filter(Boolean) as L3WorkforceRow[]);
+      // V5 stores rows under `l4Rows`; V4 used `l3Rows`; V2/V3 used the
+      // pre-collapse `l4Rows` (per-L4-Activity granularity). All three
+      // shapes round-trip through `asL4Row` / `groupL4RowsToL3RowsForImport`
+      // (the latter is the legacy regrouper, which now emits L4 rows
+      // stamped with the tower's L1 Function name as the new L2).
+      let l4Rows: L4WorkforceRow[];
+      if (inputVersion >= 5 && Array.isArray(v.l4Rows)) {
+        l4Rows = v.l4Rows
+          .map((r) => asL4Row(r, k))
+          .filter(Boolean) as L4WorkforceRow[];
+      } else if (inputVersion >= 4 && Array.isArray(v.l3Rows)) {
+        l4Rows = v.l3Rows
+          .map((r) => asL4Row(r, k))
+          .filter(Boolean) as L4WorkforceRow[];
       } else if (Array.isArray(v.l4Rows)) {
-        l3Rows = groupL4RowsToL3RowsForImport(v.l4Rows as unknown[]);
+        // Legacy V2/V3 shape: per-L4 rows that need regrouping. The grouper
+        // emits L4WorkforceRow with the L1 Function name stamped into l2.
+        l4Rows = groupL4RowsToL3RowsForImport(v.l4Rows as unknown[], k);
       } else {
-        l3Rows = base.l3Rows;
+        l4Rows = base.l4Rows;
       }
       const bRaw = isRecord(v.baseline) ? { ...defaultTowerBaseline, ...v.baseline } : defaultTowerBaseline;
       const st = v.status;
@@ -235,7 +276,7 @@ export function importAssessProgramFromJsonText(
       const reviews = coerceInitiativeReviews(v.initiativeReviews);
 
       program.towers[k] = {
-        l3Rows,
+        l4Rows,
         baseline: {
           baselineOffshorePct: coalesceNumber(
             bRaw.baselineOffshorePct,
@@ -249,8 +290,15 @@ export function importAssessProgramFromJsonText(
           typeof v.capabilityMapConfirmedAt === "string"
             ? v.capabilityMapConfirmedAt
             : undefined,
-        l1L3TreeValidatedAt:
-          typeof v.l1L3TreeValidatedAt === "string" ? v.l1L3TreeValidatedAt : undefined,
+        // 5-layer migration: v5 writes `l1L5TreeValidatedAt`; older v4
+        // snapshots wrote `l1L3TreeValidatedAt`. Carry whichever lands so
+        // the lock state survives the round-trip.
+        l1L5TreeValidatedAt:
+          typeof v.l1L5TreeValidatedAt === "string"
+            ? v.l1L5TreeValidatedAt
+            : typeof v.l1L3TreeValidatedAt === "string"
+              ? v.l1L3TreeValidatedAt
+              : undefined,
         headcountConfirmedAt:
           typeof v.headcountConfirmedAt === "string" ? v.headcountConfirmedAt : undefined,
         offshoreConfirmedAt:

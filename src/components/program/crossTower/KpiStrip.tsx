@@ -31,10 +31,14 @@ export function KpiStrip({ program }: { program: SelectProgramResult }) {
   const showOpportunisticCaption =
     thresholdActive && t.excludedCount > 0 && !redact;
 
+  const diag = program.programTierDiagnostics;
+  const showDeprioritizedCaption =
+    diag.deprioritizedCount > 0 && !redact;
+
   const initiativesSubtitle =
     totalInitiatives === 0
-      ? "Threshold filters out every initiative"
-      : `${phases.p1.initiatives.length} P1 · ${phases.p2.initiatives.length} P2 · ${phases.p3.initiatives.length} P3`;
+      ? "2x2 + L4 Activity Group prize threshold filter out every initiative"
+      : `${phases.p1.initiatives.length} Quick Wins · ${phases.p2.initiatives.length} Fill-ins · ${phases.p3.initiatives.length} Strategic Builds`;
 
   return (
     <section>
@@ -46,7 +50,7 @@ export function KpiStrip({ program }: { program: SelectProgramResult }) {
           }
           subtitle={
             thresholdActive
-              ? `At full scale · threshold ≥ ${formatUsdCompact(t.aiUsdThreshold)}`
+              ? `At full scale · L4 Activity Group prize ≥ ${formatUsdCompact(t.aiUsdThreshold)}`
               : "At full scale, all initiatives ramped"
           }
           emphasis
@@ -67,7 +71,7 @@ export function KpiStrip({ program }: { program: SelectProgramResult }) {
           value={String(program.towersInScope.length)}
           subtitle={
             t.excludedTowerCount > 0
-              ? `of 13 Versant towers · ${t.excludedTowerCount} below threshold`
+              ? `of 13 Versant towers · ${t.excludedTowerCount} below L4 Activity Group prize threshold`
               : `of ${"13"} Versant towers`
           }
         />
@@ -92,6 +96,29 @@ export function KpiStrip({ program }: { program: SelectProgramResult }) {
         />
       </div>
 
+      {showDeprioritizedCaption ? (
+        <p className="mt-2 text-[11px] text-forge-subtle">
+          <span className="font-mono text-forge-body">
+            {diag.deprioritizedCount} initiative{diag.deprioritizedCount === 1 ? "" : "s"}
+          </span>{" "}
+          ·{" "}
+          <span className="font-mono text-forge-body">
+            {formatUsdCompact(diag.deprioritizedAiUsd, { decimals: 2 })}
+          </span>{" "}
+          below the line by 2x2 — low feasibility AND low parent-L4 Activity
+          Group business impact (median ≈{" "}
+          <span className="font-mono text-forge-body">
+            {formatUsdCompact(diag.medianL3Usd)}
+          </span>
+          , floor{" "}
+          <span className="font-mono text-forge-body">
+            {formatUsdCompact(diag.floorUsd)}
+          </span>
+          {diag.medianVolatilityWarning ? "; median volatile at small N" : ""}
+          ).
+        </p>
+      ) : null}
+
       {showOpportunisticCaption ? (
         <p className="mt-2 text-[11px] text-forge-subtle">
           <span className="font-mono text-forge-body">
@@ -101,12 +128,12 @@ export function KpiStrip({ program }: { program: SelectProgramResult }) {
           <span className="font-mono text-forge-body">
             {formatUsdCompact(t.excludedAiUsd, { decimals: 2 })}
           </span>{" "}
-          below the{" "}
+          above the 2x2 line but rolling up to an L4 Activity Group prize below the{" "}
           <span className="font-mono text-forge-body">
             {formatUsdCompact(t.aiUsdThreshold)}
           </span>{" "}
-          threshold — opportunistic, addressed inside the tower roadmaps. Lower
-          the threshold to bring them into plan.
+          inclusion threshold — opportunistic, addressed inside the tower
+          roadmaps. Lower the threshold to bring them into plan.
         </p>
       ) : null}
 

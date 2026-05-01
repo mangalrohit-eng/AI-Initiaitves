@@ -90,9 +90,13 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
                 AI initiatives
               </h2>
               <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
-                Explore this tower&apos;s AI program by capability (L2 → L4) or as
-                a sequenced priority roadmap. Use the tabs to switch views — your
-                selections are preserved.
+                Explore this tower&apos;s AI program by capability (L2 Job
+                Grouping → L3 Job Family → L4 Activity Group → L5 Activity)
+                or grouped into a feasibility roster (Ship-ready vs.
+                Investigate). Final program priority (P1 / P2 / P3) is set
+                on the Cross-Tower AI Plan via the deterministic 2x2 over
+                feasibility × parent-L4 Activity Group business impact. Use
+                the tabs to switch views — your selections are preserved.
               </p>
             </div>
             <InitiativeReviewChip tower={tower} />

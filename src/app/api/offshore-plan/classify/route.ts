@@ -225,15 +225,22 @@ function sanitizeRows(raw: unknown): LLMOffshoreRowInput[] | null {
     const o = r as Record<string, unknown>;
     if (typeof o.rowId !== "string" || !o.rowId.trim()) continue;
     const hc = (o.headcount ?? {}) as Record<string, unknown>;
+    // Accept either the V2 wire field (`l5Names`) or the legacy v1
+    // `l4Names`. Under the 5-layer map this list represents the L5
+    // Activities under the row's L4 Activity Group.
+    const activityNames = Array.isArray(o.l5Names)
+      ? o.l5Names.filter((s): s is string => typeof s === "string")
+      : Array.isArray(o.l4Names)
+      ? o.l4Names.filter((s): s is string => typeof s === "string")
+      : [];
     out.push({
       rowId: o.rowId,
       towerId: typeof o.towerId === "string" ? o.towerId : "",
       towerName: typeof o.towerName === "string" ? o.towerName : "",
       l2: typeof o.l2 === "string" ? o.l2 : "",
       l3: typeof o.l3 === "string" ? o.l3 : "",
-      l4Names: Array.isArray(o.l4Names)
-        ? o.l4Names.filter((s): s is string => typeof s === "string")
-        : [],
+      l4: typeof o.l4 === "string" ? o.l4 : undefined,
+      l5Names: activityNames,
       headcount: {
         fteOnshore: numOr0(hc.fteOnshore),
         fteOffshore: numOr0(hc.fteOffshore),

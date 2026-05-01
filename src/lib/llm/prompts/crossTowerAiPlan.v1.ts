@@ -11,6 +11,25 @@
  *                   commentary, executive summary headline.
  *   LLM never authors: $/% figures, FTE counts, dates beyond phase labels,
  *                   brand/people/vendor names not on the allow-lists.
+ *                   Tier assignments (P1/P2/P3/Deprioritized) are owned by
+ *                   the deterministic 2x2 in `lib/initiatives/programTier.ts`
+ *                   — the model is told this explicitly and cannot move an
+ *                   initiative across tiers.
+ *
+ * v2.0.0 — Tiering switched from per-tower P1/P2/P3 (legacy) to a program-
+ * wide 2x2 over (feasibility, parent-L3 business impact under V4 / parent-L4
+ * Activity Group business impact under V5). Phase semantics rewritten: P1 =
+ * Quick Wins (HF/HBI), P2 = Fill-ins (HF/LBI), P3 = Strategic Builds (LF/HBI).
+ * Deprioritized = below the line. Phase start months stay the same as v1
+ * (P1=M1, P2=M7, P3=M13).
+ *
+ * v2.1.0 — 5-layer capability map cutover (`AssessProgramV5`). Initiatives
+ * now attach at L5 Activity (formerly L4); the dial-bearing parent is L4
+ * Activity Group (formerly L3 Capability). The deterministic substrate
+ * keeps its field names (`l3AiUsd`, `l3RowId`) for back-compat — those
+ * fields semantically describe the **L4 Activity Group** prize under V5.
+ * The prompt vocabulary has been updated to surface this mapping to the
+ * model so narratives don't talk past the new hierarchy.
  *
  * Server validation rejects any string field containing a `$`, `%`, or a
  * digit cluster of length ≥2 in disallowed fields. One repair retry is
@@ -20,7 +39,7 @@
 import type { Tier } from "@/lib/priority";
 import { VENDOR_ALLOW_LIST } from "@/lib/assess/curateInitiativesLLM";
 
-export const PROMPT_VERSION = "v1.0.0";
+export const PROMPT_VERSION = "v2.1.0";
 
 // ---------------------------------------------------------------------------
 //   Static, doc-grounded risk + dependency catalog
@@ -194,11 +213,45 @@ export type PromptKeyInitiative = {
   id: string;
   towerName: string;
   name: string;
-  /** L2 / L3 capability path. */
+  /**
+   * Path label shown in the prompt to anchor the initiative in the map.
+   * Under V5 this carries the **L3 Job Family / L4 Activity Group** pair
+   * (the row that owns the dial). The field name is intentionally generic
+   * so the wire format stays stable across V4 → V5.
+   */
   capabilityPath: string;
+  /**
+   * Visual tier (P1/P2/P3) — `null` is reserved for the legacy "unranked"
+   * fallback and should not appear in v2 inputs because the 2x2 always
+   * lands a row in P1/P2/P3 or filters it out as Deprioritized before this
+   * prompt sees it.
+   */
   tier: Tier | null;
+  /**
+   * Human-readable explanation of WHY the deterministic 2x2 placed this
+   * initiative in this tier (e.g. "P1 — Quick Wins · high feasibility ×
+   * high parent-L4 Activity Group impact · L4 Activity Group impact $24M vs
+   * threshold $8M"). Surfaced to the model so its `why` strings can echo the
+   * underlying reasoning.
+   */
+  programTierReason?: string;
+  /**
+   * @deprecated Legacy P-tier passed through for any prompt template that
+   * still echoes it. Use `tier` (visual) and `programTierReason` (semantic)
+   * instead.
+   */
   aiPriority?: string;
   rationale?: string;
+};
+
+/** Lightweight summary of one Deprioritized initiative shown as context. */
+export type PromptDeprioritizedInitiative = {
+  id: string;
+  towerName: string;
+  name: string;
+  capabilityPath: string;
+  /** Why the 2x2 dropped it — one short sentence. */
+  programTierReason: string;
 };
 
 export type BuildPromptInput = {
@@ -208,6 +261,14 @@ export type BuildPromptInput = {
    * initiative across phases; the validator double-checks against this map.
    */
   phaseMembership: Record<string, Tier | null>;
+  /**
+   * Optional roster of Deprioritized initiatives (the "below the line" pile
+   * from the 2x2). Surfaced so the model can reference them in narrative
+   * ("editorial-grade work intentionally held outside the active plan…")
+   * without inventing names. The model may NOT promote a Deprioritized id
+   * into `keyInitiatives`.
+   */
+  deprioritized?: PromptDeprioritizedInitiative[];
   towersInScope: { id: string; name: string; initiativeCount: number }[];
   vendorStack: { vendor: string; count: number }[];
   orchestrationMix: { pattern: string; count: number }[];
@@ -239,16 +300,32 @@ export function buildSystemPrompt(): string {
     "  - Editorial / news judgment / on-air talent / political coverage → stay onshore + human; AI is co-pilot only.",
     "  - Live broadcast / master control / in-studio production → physical floor; automate around the operator, not the seat.",
     "",
+    "HIERARCHY CONTEXT (5-layer Versant capability map):",
+    "  L1 Function > L2 Job Grouping > L3 Job Family > L4 Activity Group > L5 Activity.",
+    "  Each in-plan initiative attaches at L5 Activity. The 2x2 business-impact axis is the **parent L4 Activity Group** prize (the row that carries the dial). Some upstream field names still read 'L3' for back-compat; treat any reference to 'parent-L3 impact' below as the L4 Activity Group prize under V5.",
+    "",
+    "TIERING — read carefully:",
+    "  - Tier assignment comes from a deterministic 2x2 the engine runs upstream:",
+    "      P1 — Quick Wins (HIGH feasibility × HIGH parent-L4 Activity Group business impact)",
+    "      P2 — Fill-ins (HIGH feasibility × LOW parent-L4 Activity Group business impact)",
+    "      P3 — Strategic Builds (LOW feasibility × HIGH parent-L4 Activity Group business impact)",
+    "      Deprioritized (LOW feasibility × LOW parent-L4 Activity Group business impact) — never in keyInitiatives.",
+    "  - You CANNOT move an initiative across tiers. Phase membership is supplied verbatim.",
+    "  - 'Strategic Builds' (P3) start in month 13 NOT because they're less important, but because they need longer build runways (lower feasibility = more integration / change-management). Treat them with the gravitas of P1 in narrative.",
+    "  - Deprioritized rows are passed as context only — you may reference them as 'work intentionally held outside the active plan,' but you may NOT echo their ids in `keyInitiatives`.",
+    "",
     "RANKING + SELECTION:",
-    "  - You receive the full deterministic initiative roster grouped by tier.",
-    "  - Pick the strongest cross-tower set for `keyInitiatives` (target 8–12 rows). Each row must echo a `initiativeId` from the input.",
+    "  - You receive the full deterministic initiative roster grouped by tier (P1+P2+P3 only — Deprioritized rows live in the DEPRIORITIZED CONTEXT block).",
+    "  - Pick the strongest cross-tower set for `keyInitiatives` (target 8–12 rows). Each row must echo an `initiativeId` from the in-plan list. NEVER promote a Deprioritized id.",
     "  - Rank within each tier, with `ranking` 1-indexed (1 = first).",
-    "  - You may NOT move an initiative across tiers. The deterministic engine owns phase membership.",
     "",
     "DEPENDENCIES:",
     "  - For each `keyInitiative`, list 0–4 supporting initiative ids in `dependsOn`. Use the same id strings from the input. Self-reference is forbidden.",
     "",
-    "ROADMAP PHASES (P1/P2/P3 → 0-6mo / 6-12mo / 12-24mo):",
+    "ROADMAP PHASES (P1/P2/P3 → start months M1 / M7 / M13):",
+    "  - P1 narrative: Quick Wins — leverage proven Versant platforms (BlackLine, Workday, Eightfold, Amagi) to ship configuration + agent rollouts inside the first half-year. High-impact, high-feasibility.",
+    "  - P2 narrative: Fill-ins — high-feasibility but smaller-impact rows that slot into team capacity once Quick Wins are in flight.",
+    "  - P3 narrative: Strategic Builds — high-impact, lower-feasibility rows that need M13+ for the longer build runway (multi-system integration, vendor onboarding, change management). Frame these as the high-prize program bets, not as the leftovers.",
     "  - For each phase, write a tight narrative (≤50 words), 3–5 concrete milestones, and 1–3 owner notes naming the towers / people accountable. No numerics — talk in qualitative shifts (e.g. 'close cycle compresses', 'ad sales pipeline becomes self-serve').",
     "",
     "ARCHITECTURE NARRATIVE:",
@@ -287,13 +364,14 @@ export function buildSystemPrompt(): string {
 
 export function buildUserPrompt(input: BuildPromptInput): string {
   const lines: string[] = [];
-  lines.push("CROSS-TOWER INITIATIVE ROSTER (deterministic — pick from this list):");
+  lines.push("IN-PLAN INITIATIVE ROSTER (deterministic — pick from this list ONLY):");
   lines.push("");
   for (const init of input.initiatives) {
     const tierStr = init.tier ?? "unranked";
+    const reason = init.programTierReason ? ` :: ${init.programTierReason}` : "";
     const rationale = init.rationale ? ` — ${init.rationale}` : "";
     lines.push(
-      `  - id="${init.id}" tower="${init.towerName}" tier=${tierStr} ${init.capabilityPath} :: ${init.name}${rationale}`,
+      `  - id="${init.id}" tower="${init.towerName}" tier=${tierStr} ${init.capabilityPath} :: ${init.name}${rationale}${reason}`,
     );
   }
   lines.push("");
@@ -303,6 +381,23 @@ export function buildUserPrompt(input: BuildPromptInput): string {
     lines.push(`  - ${id}: ${tier ?? "unranked"}`);
   }
   lines.push("");
+
+  if (input.deprioritized && input.deprioritized.length > 0) {
+    lines.push(
+      "DEPRIORITIZED CONTEXT (the 2x2 routed these below the line — context only, never echo in keyInitiatives):",
+    );
+    for (const d of input.deprioritized.slice(0, 30)) {
+      lines.push(
+        `  - id="${d.id}" tower="${d.towerName}" ${d.capabilityPath} :: ${d.name} :: ${d.programTierReason}`,
+      );
+    }
+    if (input.deprioritized.length > 30) {
+      lines.push(
+        `  - …and ${input.deprioritized.length - 30} more Deprioritized rows omitted for brevity.`,
+      );
+    }
+    lines.push("");
+  }
 
   lines.push("TOWERS IN SCOPE:");
   for (const t of input.towersInScope) {

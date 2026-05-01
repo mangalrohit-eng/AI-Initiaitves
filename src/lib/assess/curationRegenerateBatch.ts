@@ -1,9 +1,10 @@
 /**
  * Step 4 "Regenerate AI guidance" — row selection + API batching.
  *
- * Scopes to the same L3 rows as `selectInitiativesForTower` (modeled AI pct > 0)
- * plus at least one L4 activity. Chunks requests to satisfy
- * `/api/assess/curate-initiatives` limits (row count + total L4 count).
+ * Scopes to the same L4 Activity Group rows as `selectInitiativesForTower`
+ * (modeled AI pct > 0) plus at least one L5 Activity. Chunks requests to
+ * satisfy `/api/assess/curate-initiatives` limits (row count + total L5
+ * Activity count).
  */
 
 import type { AssessProgramV2, L3WorkforceRow, TowerId } from "@/data/assess/types";
@@ -26,8 +27,9 @@ export type RegenerableRowsResult = {
 };
 
 /**
- * L3 rows that appear on AI Initiatives (modeled AI dial > 0) with at least
- * one L4 activity — same gate as `selectInitiativesForTower` / `rowModeledSaving`.
+ * L4 Activity Group rows that appear on AI Initiatives (modeled AI dial > 0)
+ * with at least one L5 Activity — same gate as `selectInitiativesForTower` /
+ * `rowModeledSaving`.
  */
 export function regenerableRowsForStep4(
   program: AssessProgramV2,
@@ -38,8 +40,8 @@ export function regenerableRowsForStep4(
   const baseline = t.baseline;
   const g = program.global;
   const rows: L3WorkforceRow[] = [];
-  for (const row of t.l3Rows) {
-    if ((row.l4Activities ?? []).length === 0) continue;
+  for (const row of t.l4Rows) {
+    if ((row.l5Activities ?? []).length === 0) continue;
     const saving = rowModeledSaving(row, baseline, g);
     if (saving.aiPct <= 0) continue;
     rows.push(row);
@@ -63,7 +65,7 @@ export function chunkRowsForCurationApi(rows: L3WorkforceRow[]): CurationChunkPl
   let current: string[] = [];
   let currentL4 = 0;
 
-  const l4Len = (r: L3WorkforceRow) => (r.l4Activities ?? []).length;
+  const l4Len = (r: L3WorkforceRow) => (r.l5Activities ?? []).length;
 
   for (const row of rows) {
     const n = l4Len(row);

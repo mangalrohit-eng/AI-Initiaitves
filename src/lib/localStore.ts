@@ -5,7 +5,7 @@ import type {
   InitiativeReview,
   InitiativeReviewSnapshot,
   InitiativeStatus,
-  L3WorkforceRow,
+  L4WorkforceRow,
   OffshoreAssumptions,
   TowerId,
 } from "@/data/assess/types";
@@ -16,6 +16,7 @@ import {
   defaultTowerState,
   type TowerAssessState,
 } from "@/data/assess/types";
+import { getTowerFunctionName } from "@/data/towerFunctionNames";
 import {
   bootstrapHashOnRead,
   markRowsStaleByHash,
@@ -350,21 +351,31 @@ const slugify = (s: string): string =>
     .slice(0, 24) || "x";
 
 /**
- * Group an array of legacy per-L4 rows into per-L3 rows by `(l2, l3)`. Used
- * by both the V3->V4 read-time migration and any file imports that arrive
- * in the legacy shape.
+ * Group an array of legacy per-L4-Activity rows into per-L4-Activity-Group
+ * rows by `(l2, l3)` (semantics in V5: bucket by Job Family + Activity
+ * Group). Used by both the V3->V4 read-time migration path and any file
+ * imports that arrive in the legacy V2/V3 shape.
+ *
+ * V5 stamping: the new L2 Job Grouping is the tower's L1 Function name and
+ * is set by the caller via `towerId`. The legacy file's `l2` becomes the
+ * row's `l3` (Job Family) and the legacy file's `l3` becomes the row's
+ * `l4` (Activity Group). The legacy per-row `l4` (Activity) name is
+ * preserved into `l5Activities` for display.
  *
  * Aggregation rules:
  *   - Headcount and spend are summed.
- *   - Offshore/AI percentages are cost-weighted (weighted by per-L4 pool $;
+ *   - Offshore/AI percentages are cost-weighted (weighted by per-row pool $;
  *     when no rows have a pool, fall back to a simple average across rows
- *     that carry an explicit value). When no L4 in the group has an explicit
+ *     that carry an explicit value). When no row in the group has an explicit
  *     value, the field is left undefined so the tower baseline still applies.
- *   - L4 names are preserved into `l4Activities` (de-duplicated, original
- *     order). This keeps the canonical activity list visible in the UI even
- *     after the math collapses to L3.
+ *   - L4 (legacy) names are preserved into `l5Activities` (de-duplicated,
+ *     original order). This keeps the canonical activity list visible in the
+ *     UI even after the math collapses to the Activity Group.
  */
-function groupLegacyL4RowsToL3(input: LegacyL4Row[]): L3WorkforceRow[] {
+function groupLegacyL4RowsToL3(
+  input: LegacyL4Row[],
+  towerId: TowerId,
+): L4WorkforceRow[] {
   type Acc = {
     id: string;
     l2: string;
@@ -489,6 +500,7 @@ function groupLegacyL4RowsToL3(input: LegacyL4Row[]): L3WorkforceRow[] {
     }
   }
 
+  const groupingName = getTowerFunctionName(towerId);
   return order.map((k) => {
     const a = groups.get(k)!;
     const offWeighted =
@@ -499,10 +511,11 @@ function groupLegacyL4RowsToL3(input: LegacyL4Row[]): L3WorkforceRow[] {
       a.plainOffshoreN > 0 ? Math.round(a.plainOffshoreSum / a.plainOffshoreN) : undefined;
     const aiFallback =
       a.plainAiN > 0 ? Math.round(a.plainAiSum / a.plainAiN) : undefined;
-    const out: L3WorkforceRow = {
+    const out: L4WorkforceRow = {
       id: a.id,
-      l2: a.l2,
-      l3: a.l3,
+      l2: groupingName,
+      l3: a.l2,
+      l4: a.l3,
       fteOnshore: a.fteOnshore,
       fteOffshore: a.fteOffshore,
       contractorOnshore: a.contractorOnshore,
@@ -513,7 +526,7 @@ function groupLegacyL4RowsToL3(input: LegacyL4Row[]): L3WorkforceRow[] {
     const ai = aiWeighted ?? aiFallback;
     if (off != null) out.offshoreAssessmentPct = clamp01Pct(off);
     if (ai != null) out.aiImpactAssessmentPct = clamp01Pct(ai);
-    if (a.activities.length > 0) out.l4Activities = a.activities;
+    if (a.activities.length > 0) out.l5Activities = a.activities;
     return out;
   });
 }
@@ -552,19 +565,32 @@ export function coerceInitiativeReviews(
     if (typeof s.name !== "string" || !s.name) continue;
     if (typeof s.l2Name !== "string" || typeof s.l3Name !== "string") continue;
     if (typeof s.rowId !== "string" || !s.rowId) continue;
+    // 5-layer migration: V5 snapshots write `l4Name` (Activity Group at
+    // decision time). Older V4 snapshots have no `l4Name`; we fall back to
+    // the previous `l3Name` so the rejected drawer still renders the
+    // last-known-deepest label without losing the entry.
+    const l4Name =
+      typeof s.l4Name === "string" && s.l4Name ? s.l4Name : s.l3Name;
     const snapshot: InitiativeReviewSnapshot = {
       name: s.name,
       l2Name: s.l2Name,
       l3Name: s.l3Name,
+      l4Name,
       rowId: s.rowId,
     };
     if (typeof s.aiRationale === "string" && s.aiRationale) {
       snapshot.aiRationale = s.aiRationale;
     }
+    // Hydrate legacy `aiPriority` if present so older snapshots survive the
+    // migration; the rejected drawer no longer renders it but downstream
+    // exports / debugging still benefits from the original capture.
     if (typeof s.aiPriority === "string" && s.aiPriority) {
-      // AiPriority is the union of full em-dash strings; trust the source
-      // since the only writers are our own helpers, but guard the type.
       snapshot.aiPriority = s.aiPriority as InitiativeReviewSnapshot["aiPriority"];
+    }
+    // New binary feasibility — written by post-2x2 snapshots; what the
+    // rejected drawer actually displays today.
+    if (s.feasibility === "High" || s.feasibility === "Low") {
+      snapshot.feasibility = s.feasibility;
     }
     const review: InitiativeReview = {
       status: status as InitiativeStatus,
@@ -579,7 +605,7 @@ export function coerceInitiativeReviews(
 }
 
 /**
- * Read-time migration from any prior snapshot to the current V4.
+ * Read-time migration from any prior snapshot to the current V5.
  *
  *   V2 -> V3: dropped scenarios + lever weights (already happened in prior
  *     releases; we still tolerate v2 input here for safety).
@@ -588,6 +614,15 @@ export function coerceInitiativeReviews(
  *     - Old `l4OffshoreAssessmentPct` / `l4AiImpactAssessmentPct` become
  *       cost-weighted `offshoreAssessmentPct` / `aiImpactAssessmentPct`.
  *     - L4 activity names are preserved into `l4Activities` for display.
+ *   V4 -> V5: new L2 Job Grouping layer is inserted between L1 Function
+ *     and the existing layers; field names shift one level deeper.
+ *     - `l3Rows` is renamed to `l4Rows`.
+ *     - Each row's existing `l2` (Pillar) becomes `l3` (Job Family); each
+ *       row's existing `l3` (Capability) becomes `l4` (Activity Group);
+ *       a new `l2` (Job Grouping) is stamped from `getTowerFunctionName(towerId)`.
+ *     - `l4Activities` -> `l5Activities`; `l4Items` -> `l5Items`;
+ *       `running-l4` curationStage -> `running-l5`.
+ *     - `l1L3TreeValidatedAt` carries forward into `l1L5TreeValidatedAt`.
  *
  * Side-effect free — we don't write back here, so actual user actions are
  * still the only thing that persists state changes. The migrated shape is
@@ -639,21 +674,38 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
         ? v.status
         : "empty";
 
-    let l3Rows: L3WorkforceRow[];
-    if (versionRaw >= 4 && Array.isArray(v.l3Rows)) {
-      // Already V4 — just sanity-coerce.
-      l3Rows = (v.l3Rows as unknown[])
+    const towerId = k as TowerId;
+    const groupingName = getTowerFunctionName(towerId);
+    let l4Rows: L4WorkforceRow[];
+    // V5 already stores rows under `l4Rows` with the new layer semantics.
+    // V4 stored under `l3Rows`; we promote each row one level deeper and
+    // stamp the new L2 (Job Grouping) with the tower's L1 Function name.
+    const v5Rows = versionRaw >= 5 && Array.isArray(v.l4Rows) ? (v.l4Rows as unknown[]) : null;
+    const v4Rows = !v5Rows && versionRaw >= 4 && Array.isArray(v.l3Rows) ? (v.l3Rows as unknown[]) : null;
+    if (v5Rows || v4Rows) {
+      const isV5 = !!v5Rows;
+      l4Rows = (v5Rows ?? v4Rows ?? [])
         .map((rawRow) => {
           if (!rawRow || typeof rawRow !== "object") return null;
           const x = rawRow as Record<string, unknown>;
-          if (typeof x.l2 !== "string" || typeof x.l3 !== "string") return null;
-          const out: L3WorkforceRow = {
+          // V5: rows already have l2/l3/l4. V4: rows have l2/l3 only —
+          // shift them up one level deeper to land at l3/l4 and stamp the
+          // new l2 from the tower's L1 Function name.
+          const fileL2 = typeof x.l2 === "string" ? x.l2 : "";
+          const fileL3 = typeof x.l3 === "string" ? x.l3 : "";
+          const fileL4 = typeof x.l4 === "string" ? x.l4 : "";
+          const l2 = isV5 ? fileL2 : groupingName;
+          const l3 = isV5 ? fileL3 : fileL2;
+          const l4 = isV5 ? fileL4 : fileL3;
+          if (!l3.trim() || !l4.trim()) return null;
+          const out: L4WorkforceRow = {
             id:
               typeof x.id === "string" && x.id
                 ? x.id
-                : `${slugify(x.l2)}::${slugify(x.l3)}`,
-            l2: x.l2,
-            l3: x.l3,
+                : `${slugify(l3)}::${slugify(l4)}`,
+            l2,
+            l3,
+            l4,
             fteOnshore: numOr(x.fteOnshore, 0),
             fteOffshore: numOr(x.fteOffshore, 0),
             contractorOnshore: numOr(x.contractorOnshore, 0),
@@ -665,30 +717,45 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
           if (off != null) out.offshoreAssessmentPct = clamp01Pct(off);
           const ai = optNum(x.aiImpactAssessmentPct);
           if (ai != null) out.aiImpactAssessmentPct = clamp01Pct(ai);
-          if (Array.isArray(x.l4Activities)) {
-            const names = (x.l4Activities as unknown[])
+          // Activities: V5 writes `l5Activities`; V4 wrote `l4Activities`.
+          const rawActivities = Array.isArray(x.l5Activities)
+            ? x.l5Activities
+            : Array.isArray(x.l4Activities)
+              ? x.l4Activities
+              : null;
+          if (rawActivities) {
+            const names = (rawActivities as unknown[])
               .filter((n): n is string => typeof n === "string" && n.trim().length > 0)
               .map((n) => n.trim());
-            if (names.length > 0) out.l4Activities = names;
+            if (names.length > 0) out.l5Activities = names;
           }
           // Pipeline cache + staleness fields. Preserved verbatim — the
           // pipeline writes them as a single atomic block, and read-time
           // migration must NOT strip them or every refresh would be lost on
-          // the next page reload.
-          if (Array.isArray(x.l4Items)) out.l4Items = x.l4Items as L3WorkforceRow["l4Items"];
+          // the next page reload. V5: `l5Items`; V4: `l4Items`.
+          const rawItems = Array.isArray(x.l5Items)
+            ? x.l5Items
+            : Array.isArray(x.l4Items)
+              ? x.l4Items
+              : null;
+          if (rawItems) out.l5Items = rawItems as L4WorkforceRow["l5Items"];
           if (typeof x.curationContentHash === "string") {
             out.curationContentHash = x.curationContentHash;
           }
+          // Curation stage: V5 uses `running-l5`; carry V4's `running-l4`
+          // forward into `running-l5` so in-flight rows survive the upgrade.
           if (
             x.curationStage === "idle" ||
             x.curationStage === "queued" ||
             x.curationStage === "running-l4" ||
+            x.curationStage === "running-l5" ||
             x.curationStage === "running-verdict" ||
             x.curationStage === "running-curate" ||
             x.curationStage === "done" ||
             x.curationStage === "failed"
           ) {
-            out.curationStage = x.curationStage;
+            out.curationStage =
+              x.curationStage === "running-l4" ? "running-l5" : x.curationStage;
           }
           if (typeof x.curationGeneratedAt === "string") {
             out.curationGeneratedAt = x.curationGeneratedAt;
@@ -697,7 +764,7 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
             out.curationError = x.curationError;
           }
           // LLM dial rationale pair + provenance. Preserved across reloads
-          // so the L3LeverRow popovers + provenance chips don't reset to
+          // so the L4LeverRow popovers + provenance chips don't reset to
           // "starter" every time the user navigates back to Step 2.
           if (typeof x.offshoreRationale === "string" && x.offshoreRationale.trim()) {
             out.offshoreRationale = x.offshoreRationale.trim();
@@ -717,19 +784,21 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
           }
           return out;
         })
-        .filter((r): r is L3WorkforceRow => r != null);
+        .filter((r): r is L4WorkforceRow => r != null);
     } else {
-      // Legacy v2/v3 shape — group L4 rows into L3 rows.
+      // Legacy v2/v3 shape — group per-L4-Activity rows up to per-L4-
+      // Activity-Group rows. The grouper stamps the new L2 (Job Grouping)
+      // from the tower's L1 Function name.
       const legacyRows = Array.isArray(v.l4Rows)
         ? (v.l4Rows as unknown[]).filter(
             (x): x is LegacyL4Row => x != null && typeof x === "object",
           )
         : [];
-      l3Rows = groupLegacyL4RowsToL3(legacyRows);
+      l4Rows = groupLegacyL4RowsToL3(legacyRows, towerId);
     }
 
     const towerState: TowerAssessState = {
-      l3Rows,
+      l4Rows,
       baseline,
       status,
       lastUpdated:
@@ -738,8 +807,15 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
         typeof v.capabilityMapConfirmedAt === "string"
           ? v.capabilityMapConfirmedAt
           : undefined,
-      l1L3TreeValidatedAt:
-        typeof v.l1L3TreeValidatedAt === "string" ? v.l1L3TreeValidatedAt : undefined,
+      // 5-layer migration: v5 writes `l1L5TreeValidatedAt`; older v4
+      // snapshots wrote `l1L3TreeValidatedAt`. Carry whichever lands so
+      // the lock state survives the round-trip.
+      l1L5TreeValidatedAt:
+        typeof v.l1L5TreeValidatedAt === "string"
+          ? v.l1L5TreeValidatedAt
+          : typeof v.l1L3TreeValidatedAt === "string"
+            ? v.l1L3TreeValidatedAt
+            : undefined,
       headcountConfirmedAt:
         typeof v.headcountConfirmedAt === "string" ? v.headcountConfirmedAt : undefined,
       offshoreConfirmedAt:
@@ -773,7 +849,7 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
   );
 
   return {
-    version: 4,
+    version: 5,
     towers,
     global,
     ...(leadDeadlines && Object.keys(leadDeadlines).length > 0 ? { leadDeadlines } : {}),
@@ -794,9 +870,9 @@ function migrateBootstrapCurationHash(program: AssessProgramV2): AssessProgramV2
   const towers: AssessProgramV2["towers"] = {};
   for (const [k, t] of Object.entries(program.towers)) {
     if (!t) continue;
-    const stamped = bootstrapHashOnRead(t.l3Rows);
-    if (stamped !== t.l3Rows) {
-      towers[k as TowerId] = { ...t, l3Rows: stamped };
+    const stamped = bootstrapHashOnRead(t.l4Rows);
+    if (stamped !== t.l4Rows) {
+      towers[k as TowerId] = { ...t, l4Rows: stamped };
       touched = true;
     } else {
       towers[k as TowerId] = t;
@@ -827,15 +903,19 @@ export function getAssessProgram(): AssessProgramV2 {
 }
 
 /**
- * Group a flat list of legacy per-L4 records into the new per-L3 shape. Used
- * by file-import flows (`assessProgramIO`) so JSON exports written before V4
- * still load cleanly.
+ * Group a flat list of legacy per-L4-Activity records into the new
+ * `L4WorkforceRow[]` shape. Used by file-import flows (`assessProgramIO`)
+ * so JSON exports written before V5 still load cleanly. Caller passes the
+ * tower id so the new L2 (Job Grouping) can be stamped from the tower's
+ * L1 Function name.
  */
 export function groupL4RowsToL3RowsForImport(
   rows: ReadonlyArray<unknown>,
-): L3WorkforceRow[] {
+  towerId: TowerId,
+): L4WorkforceRow[] {
   return groupLegacyL4RowsToL3(
     rows.filter((x): x is LegacyL4Row => x != null && typeof x === "object"),
+    towerId,
   );
 }
 
@@ -854,14 +934,15 @@ export function updateAssessProgram(
 export function setTowerAssess(towerId: TowerId, patch: Partial<TowerAssessState>): void {
   updateAssessProgram((p) => {
     const cur = p.towers[towerId] ?? { ...defaultTowerState() };
-    // Any write that touches `l3Rows` runs through markRowsStaleByHash so a
-    // changed L3 name or L4 list lights up the StaleCurationBanner.
-    // Idempotent: rows whose names didn't change keep their existing stage.
-    // Rows that haven't been bootstrapped yet (no curationContentHash) are
-    // intentionally left alone — bootstrapHashOnRead handles those at read.
-    const nextRows = patch.l3Rows
-      ? markRowsStaleByHash(patch.l3Rows)
-      : cur.l3Rows;
+    // Any write that touches `l4Rows` runs through markRowsStaleByHash so a
+    // changed Activity Group name or L5 Activity list lights up the
+    // StaleCurationBanner. Idempotent: rows whose names didn't change keep
+    // their existing stage. Rows that haven't been bootstrapped yet (no
+    // curationContentHash) are intentionally left alone — bootstrapHashOnRead
+    // handles those at read.
+    const nextRows = patch.l4Rows
+      ? markRowsStaleByHash(patch.l4Rows)
+      : cur.l4Rows;
     return {
       ...p,
       towers: {
@@ -869,7 +950,7 @@ export function setTowerAssess(towerId: TowerId, patch: Partial<TowerAssessState
         [towerId]: {
           ...cur,
           ...patch,
-          l3Rows: nextRows,
+          l4Rows: nextRows,
           baseline: patch.baseline ? { ...cur.baseline, ...patch.baseline } : cur.baseline,
           status: patch.status ?? cur.status,
           lastUpdated: new Date().toISOString(),

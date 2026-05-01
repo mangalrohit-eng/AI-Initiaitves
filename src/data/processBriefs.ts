@@ -23,7 +23,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "finance",
     "parentProcessId": "financial-close",
     "matchRowName": "Content Rights Amortization Automation",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Automating the calculation and booking of content rights amortization across hundreds of licensing deals with varying terms — duration, territory, platform, cost structure. One of the most operationally complex accounting processes in media.",
     "impactTier": "Medium",
     "preState": {
@@ -94,7 +94,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "finance",
     "parentProcessId": "financial-close",
     "matchRowName": "AI-Matched Intercompany Eliminations",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Automating the matching and elimination of intercompany transactions across Versant's 7+ entities — brand-to-brand charges, shared service allocations, content licensing between entities, and JV transactions (Fandango 75/25, Nikkei CNBC).",
     "impactTier": "Medium",
     "preState": {
@@ -155,7 +155,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "finance",
     "parentProcessId": "financial-close",
     "matchRowName": "AI-Generated Variance Analysis & Commentary",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Automating the comparison of actuals to budget/forecast/prior period with AI-generated root cause narratives — replacing the most time-consuming FP&A deliverable of every close cycle.",
     "impactTier": "Medium",
     "preState": {
@@ -216,7 +216,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "finance",
     "parentProcessId": "cash-flow-forecasting",
     "matchRowName": "Continuous Debt Covenant Compliance Monitoring",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Continuous AI monitoring of Versant's projected financial ratios against the $2.75B debt facility covenants — alerting treasury 30+ days before any potential breach. Existentially important for a BB- rated company.",
     "impactTier": "Low",
     "preState": {
@@ -281,7 +281,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "finance",
     "parentProcessId": "procurement",
     "matchRowName": "AI-Powered Invoice 3-Way Matching",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Automating the matching of vendor invoices to purchase orders and goods receipts across all Versant entities — high-volume, rule-based process that's a quick-win for AP automation.",
     "impactTier": "Medium",
     "preState": {
@@ -340,7 +340,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "finance",
     "parentProcessId": "financial-close",
     "matchRowName": "AI-Assisted Revenue Recognition",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "description": "Automating revenue recognition across Versant's 4 revenue streams — linear distribution ($4.09B), advertising ($1.58B), platforms ($826M), and content licensing ($193M) — each with different recognition timing and rules under ASC 606.",
     "impactTier": "Medium",
     "preState": {
@@ -401,7 +401,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "finance",
     "parentProcessId": "financial-close",
     "matchRowName": "AI-Drafted SEC Filing Narratives",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "description": "Generating first drafts of SEC filing narrative sections — MD&A, risk factors, business descriptions — linked to underlying financial data, with human review and legal sign-off.",
     "impactTier": "Medium",
     "preState": {
@@ -458,7 +458,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "finance",
     "parentProcessId": "financial-close",
     "matchRowName": "Auto-Assembled Board Reporting Package",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "description": "Automatically assembling the quarterly board reporting package from consolidated financials, KPIs, strategic updates, and AI-generated commentary — eliminating the manual deck-building exercise.",
     "impactTier": "Low",
     "preState": {
@@ -520,7 +520,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "finance",
     "parentProcessId": "cash-flow-forecasting",
     "matchRowName": "AI-Powered Rolling Forecast",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "description": "Replacing the static monthly forecast update with a continuously rolling AI forecast that self-adjusts based on actuals, market data, and operational signals — providing always-current revenue and cost projections.",
     "impactTier": "Medium",
     "preState": {
@@ -588,7 +588,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "finance",
     "parentProcessId": "investor-relations",
     "matchRowName": "Automated Peer Benchmarking",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "description": "AI-automated comparison of Versant's financial and operational performance against media peers — Warner Bros Discovery, Fox Corp, Paramount Global, Disney (media segment) — with auto-generated commentary on relative positioning.",
     "impactTier": "Low",
     "preState": {
@@ -643,7 +643,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "finance",
     "parentProcessId": "procurement",
     "matchRowName": "AI-Powered Cross-Entity Spend Analytics",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "description": "Building the first unified view of Versant's total vendor spend across all entities and categories — identifying consolidation opportunities, maverick spending, and contract optimization targets.",
     "impactTier": "Low",
     "preState": {
@@ -704,7 +704,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "hr",
     "parentProcessId": "talent-acquisition",
     "matchRowName": "AI Resume Screening & Candidate Scoring",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "High",
     "preState": {
       "summary": "Recruiters manually screen 100+ resumes per role, spending 30-60 seconds per resume, inevitably missing qualified candidates or advancing poor fits.",
@@ -756,7 +756,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "hr",
     "parentProcessId": "talent-acquisition",
     "matchRowName": "AI Interview Scheduling & Coordination",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "Medium",
     "preState": {
       "summary": "Recruiting coordinators manually schedule interviews across 3-5 interviewers, juggling calendars, time zones, room availability, and candidate preferences via email chains.",
@@ -812,7 +812,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "hr",
     "parentProcessId": "onboarding",
     "matchRowName": "AI-Orchestrated Pre-boarding & Day 1 Setup",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "Medium",
     "preState": {
       "summary": "IT, HR, facilities, and security each handle separate pieces of new hire setup — badge, laptop, system access, email, training enrollment — via separate requests, often incomplete on Day 1.",
@@ -877,7 +877,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "hr",
     "parentProcessId": "workforce-planning",
     "matchRowName": "AI Attrition Prediction & Early Warning",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Attrition is reactive — HR learns about departures at resignation. No predictive capability. Flight risk discussed anecdotally in talent reviews.",
@@ -933,7 +933,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "research-analytics",
     "parentProcessId": "audience-identity",
     "matchRowName": "AI-Powered Dynamic Audience Segmentation",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "Medium",
     "preState": {
       "summary": "Audience segments defined manually based on demographics and broad behavioral groups. Static segments updated quarterly. No cross-brand segmentation capability.",
@@ -993,7 +993,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "research-analytics",
     "parentProcessId": "audience-identity",
     "matchRowName": "Unified Social Audience Measurement",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Each brand's social team pulls metrics from native platform dashboards (TikTok, YouTube, Instagram, X) separately. No unified view across brands or platforms.",
@@ -1053,7 +1053,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "legal",
     "parentProcessId": "rights-management",
     "matchRowName": "Sports Rights Platform Compliance",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "description": "Tracking and enforcing platform-specific distribution restrictions for Versant's sports rights portfolio — USGA partnership (through 2032), WNBA rights, Winter Olympics coverage on USA/CNBC, and Golf Channel's 200+ live events. Each deal has unique platform, geography, and window restrictions.",
     "impactTier": "Low",
     "preState": {
@@ -1114,7 +1114,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "legal",
     "parentProcessId": "regulatory-compliance",
     "matchRowName": "AI Regulatory Change Tracking & Impact Assessment",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "description": "Continuously monitoring regulatory developments affecting Versant — AI regulation (EU AI Act, US proposals), media ownership rules (FCC), privacy laws (state-by-state CCPA variants), SEC reporting changes, and political advertising rules — and assessing business impact.",
     "impactTier": "Low",
     "preState": {
@@ -1171,7 +1171,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "corp-services",
     "parentProcessId": "facilities",
     "matchRowName": "Predictive Facilities Maintenance",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "description": "IoT sensor-driven predictive maintenance for building systems — HVAC, elevators, generators, plumbing — across Versant's NYC HQ, Englewood Cliffs broadcast facility, and DC bureau. Broadcast facilities run 24/7 and cannot tolerate unplanned HVAC or power failures.",
     "impactTier": "Low",
     "preState": {
@@ -1228,7 +1228,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "corp-services",
     "parentProcessId": "facilities",
     "matchRowName": "AI Space Optimization & Occupancy Management",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "description": "Optimizing space utilization across Versant's hybrid workplace — studio and newsroom space is fixed (must be on-site), but office space for corporate functions can be flexed based on occupancy patterns.",
     "impactTier": "Low",
     "preState": {
@@ -1285,7 +1285,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "corp-services",
     "parentProcessId": "security",
     "matchRowName": "AI-Powered CCTV & Physical Monitoring",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "description": "Replacing passive human CCTV monitoring with AI computer vision that watches all camera feeds simultaneously, detects anomalies (tailgating, unauthorized access, loitering, aggressive behavior), and alerts security officers to real threats.",
     "impactTier": "Medium",
     "preState": {
@@ -1338,7 +1338,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "corp-services",
     "parentProcessId": "security",
     "matchRowName": "Automated Visitor & Access Management",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "description": "Automating visitor registration, identity verification, and dynamic access provisioning across Versant locations — especially complex at DC bureau (shared with NBC) and during high-traffic events.",
     "impactTier": "Low",
     "preState": {
@@ -1395,7 +1395,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "corp-services",
     "parentProcessId": "vendor-procurement",
     "matchRowName": "AI-Guided Vendor Onboarding",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "New vendor setup requires collecting W-9, insurance certificates, NDAs, banking information via email. Documents verified manually. Setup in procurement system is manual data entry.",
@@ -1446,7 +1446,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "corp-services",
     "parentProcessId": "vendor-procurement",
     "matchRowName": "Automated Purchase Order Processing",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "POs created manually in spreadsheet or basic system after email approval chains. Often POs created after work already performed (retrospective POs), creating compliance gaps.",
@@ -1498,7 +1498,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "corp-services",
     "parentProcessId": "vendor-procurement",
     "matchRowName": "Corporate Spend Analytics & Consolidation",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "No unified view of corporate services spend. Each location and function manages vendors independently. Annual spend review (if done) is a manual spreadsheet exercise.",
@@ -1549,7 +1549,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "tech-engineering",
     "parentProcessId": "cloud-migration",
     "matchRowName": "AI Cloud Cost Optimization",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Continuously monitoring and optimizing Versant's cloud infrastructure spend as the company migrates from Comcast-era on-premise to cloud-native. Without governance, cloud costs escalate 30-50% beyond plan within 12 months.",
     "impactTier": "Medium",
     "preState": {
@@ -1602,7 +1602,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "tech-engineering",
     "parentProcessId": "cloud-migration",
     "matchRowName": "AI-Assisted Cloud Migration Planning",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Using AI to analyze Versant's legacy workloads (inherited from Comcast), recommend migration strategy per workload (rehost, replatform, refactor), estimate effort and risk, and track migration progress against TSA expiration deadlines.",
     "impactTier": "High",
     "preState": {
@@ -1659,7 +1659,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "tech-engineering",
     "parentProcessId": "sdlc",
     "matchRowName": "AI-Automated Code Review",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "AI-powered automated code review on every pull request — checking for security vulnerabilities, coding standards, performance issues, and logical errors before human reviewer sees the code.",
     "impactTier": "High",
     "preState": {
@@ -1712,7 +1712,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "tech-engineering",
     "parentProcessId": "sdlc",
     "matchRowName": "AI-Powered Test Generation & Automation",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "AI generates test cases from code changes, identifies coverage gaps, creates regression suites, and runs automated testing — critical for Versant's digital products (CNBC.com, MS NOW, Fandango, GolfNow) where bugs affect millions of users.",
     "impactTier": "High",
     "preState": {
@@ -1765,7 +1765,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "tech-engineering",
     "parentProcessId": "sdlc",
     "matchRowName": "AI-Managed CI/CD & Deployment",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Deployment processes vary by team. Some have CI/CD, others deploy manually. Rollback decisions made by on-call engineer under pressure. No intelligent deployment strategies (canary, blue-green) in place.",
@@ -1821,7 +1821,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "tech-engineering",
     "parentProcessId": "sdlc",
     "matchRowName": "AI Incident Detection & Auto-Triage",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Production incidents detected via monitoring alerts (noisy, high false positive rate) or user reports. On-call engineer triages manually, often woken at night with insufficient context.",
@@ -1873,7 +1873,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "tech-engineering",
     "parentProcessId": "mlops",
     "matchRowName": "LLM Gateway & Cost Management",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Centralized gateway for all LLM API calls across Versant — routing, caching, cost tracking per use case, rate limiting, and prompt management. Without this, LLM costs from 200+ agents across 13 towers will spiral uncontrolled.",
     "impactTier": "Medium",
     "preState": {
@@ -1936,7 +1936,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "tech-engineering",
     "parentProcessId": "mlops",
     "matchRowName": "AI Governance & Responsible AI Framework",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "description": "Building and enforcing AI governance across Versant — model inventory, usage audit trails, bias monitoring, and responsible AI compliance. Critical for a news organization using AI in editorial content production.",
     "impactTier": "Medium",
     "preState": {
@@ -1994,7 +1994,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "tech-engineering",
     "parentProcessId": "cybersecurity",
     "matchRowName": "AI Cybersecurity Incident Triage & Response",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "Medium",
     "preState": {
       "summary": "Security alerts from multiple tools (SIEM, EDR, email gateway) reviewed manually by SOC analysts. High volume of alerts with 90%+ false positive rate. Critical threats can be buried in noise.",
@@ -2046,7 +2046,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "tech-engineering",
     "parentProcessId": "cybersecurity",
     "matchRowName": "AI Phishing & Social Engineering Defense",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "AI-powered email security specifically tuned for a news organization — protecting journalists from source impersonation, executives from BEC attacks, and all employees from credential phishing. MS NOW journalists are high-value targets for politically motivated attacks.",
     "impactTier": "Medium",
     "preState": {
@@ -2099,7 +2099,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "tech-engineering",
     "parentProcessId": "cybersecurity",
     "matchRowName": "AI-Prioritized Vulnerability Management",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Vulnerability scans generate thousands of findings. Security team prioritizes by CVSS score, which doesn't account for business context (is this system internet-facing? does it process financial data? is it a broadcast system?).",
@@ -2151,7 +2151,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "tech-engineering",
     "parentProcessId": "cybersecurity",
     "matchRowName": "Automated Security Compliance & Audit Evidence",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Security compliance evidence gathered manually for SOC 2, PCI (if processing payments), and internal audits. Analysts pull logs, screenshots, and reports from multiple systems and assemble evidence packages.",
@@ -2203,7 +2203,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "operations-technology",
     "parentProcessId": "master-control",
     "matchRowName": "AI-Verified Commercial Insertion Execution",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Ensuring accurate commercial insertion across 7+ linear networks — correct spot, correct time, correct pod position. Every insertion error is direct revenue loss and potential contractual penalty to the advertiser.",
     "impactTier": "Medium",
     "preState": {
@@ -2260,7 +2260,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "operations-technology",
     "parentProcessId": "master-control",
     "matchRowName": "Automated FCC Compliance Logging",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Automatically logging all aired content across 7+ linear networks for FCC compliance — program content, commercial placements, public interest programming, political advertising records, and emergency alert system compliance.",
     "impactTier": "Medium",
     "preState": {
@@ -2313,7 +2313,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "operations-technology",
     "parentProcessId": "master-control",
     "matchRowName": "AI-Coordinated Breaking News Pre-emption",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "When breaking news hits, master control manually pre-empts scheduled programming, coordinates across affected networks (if story spans MS NOW + CNBC), notifies ad sales of pre-empted spots, and manages the return to regular programming.",
@@ -2369,7 +2369,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "operations-technology",
     "parentProcessId": "master-control",
     "matchRowName": "AI Broadcast Quality Assurance Monitoring",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "High",
     "preState": {
       "summary": "Operators visually and aurally monitor output feeds for quality issues — video artifacts, audio level problems, captioning sync issues, wrong aspect ratio, color space errors. Across 7+ simultaneous feeds, issues are regularly missed.",
@@ -2425,7 +2425,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "operations-technology",
     "parentProcessId": "signal-distribution",
     "matchRowName": "AI Auto-Failover & Signal Redundancy",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "Medium",
     "preState": {
       "summary": "Signal failure triggers manual failover — engineer switches to backup satellite path, backup encoder, or backup CDN origin. During the switch (30 sec to several minutes), viewers experience interruption.",
@@ -2485,7 +2485,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "operations-technology",
     "parentProcessId": "signal-distribution",
     "matchRowName": "AI-Managed FAST Channel Operations",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "FAST channel operations managed separately per platform (Pluto TV, Tubi, Samsung TV+, Roku Channel). Each platform has different ingestion specs, metadata formats, and schedule requirements. Free TV Networks acquisition is adding more channels.",
@@ -2537,7 +2537,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "operations-technology",
     "parentProcessId": "signal-distribution",
     "matchRowName": "AI International Feed Management",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "International feeds (Nikkei CNBC JV for Japan, European distribution) managed manually — timezone-shifted playout schedules, localized metadata, regulatory compliance per geography, all coordinated with international partners.",
@@ -2593,7 +2593,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "operations-technology",
     "parentProcessId": "broadcast-maintenance",
     "matchRowName": "AI-Managed Broadcast Spare Parts Inventory",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Spare parts inventory managed manually — spreadsheet tracking of critical broadcast components (encoder cards, camera modules, switcher boards). Parts sometimes unavailable when needed for emergency repairs, causing extended downtime.",
@@ -2650,7 +2650,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "sales",
     "parentProcessId": "ad-sales-platform",
     "matchRowName": "AI Cross-Platform Audience Targeting & Segment Creation",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Creating premium, cross-brand audience segments for advertisers using Versant's unique data combination — CNBC investor behavior + GolfNow golfer profiles + Fandango moviegoer purchase data + Rotten Tomatoes interest signals + MS NOW political engagement. No competitor can replicate these cross-vertical segments.",
     "impactTier": "High",
     "preState": {
@@ -2707,7 +2707,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "sales",
     "parentProcessId": "ad-sales-platform",
     "matchRowName": "AI Dynamic Ad Pricing & Yield Optimization",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Real-time AI-driven pricing for Versant's ad inventory across linear, digital, FAST, OTA, DTC, and podcast — setting floor prices based on demand signals, remaining inventory, time-to-air, advertiser vertical, and competitive landscape.",
     "impactTier": "Medium",
     "preState": {
@@ -2764,7 +2764,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "sales",
     "parentProcessId": "ad-sales-platform",
     "matchRowName": "AI Campaign Execution & Cross-Platform Optimization",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Campaign execution managed manually per platform — linear ad ops team handles TV, digital team handles web, separate teams for FAST and podcast. No cross-platform optimization during campaign flight.",
@@ -2816,7 +2816,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "sales",
     "parentProcessId": "ad-sales-platform",
     "matchRowName": "AI-Generated Advertiser Proposals",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Ad sales reps manually build advertiser proposals in PowerPoint — pulling audience data from research, inventory availability from ad ops, pricing from rate cards, and competitive context from industry reports. Each proposal takes 1-3 days.",
@@ -2868,7 +2868,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "sales",
     "parentProcessId": "ad-sales-platform",
     "matchRowName": "Political/Election Advertising AI Management",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Specialized AI management for political advertising during election cycles — demand surge pricing, FCC political ad compliance (lowest unit rate rules, disclosure requirements), cross-platform political audience targeting, and real-time inventory management during the most profitable periods for MS NOW.",
     "impactTier": "Medium",
     "preState": {
@@ -2925,7 +2925,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "sales",
     "parentProcessId": "carriage-negotiation",
     "matchRowName": "MVPD Cord-Cutting Churn Risk Prediction",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "MVPD subscriber loss monitored via quarterly Nielsen reports and MVPD disclosure data. No predictive capability — Versant learns about subscriber losses after they've happened.",
@@ -2981,7 +2981,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "sales",
     "parentProcessId": "dtc-subscription",
     "matchRowName": "AI Trial-to-Paid Conversion Optimization",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Maximizing trial-to-paid conversion for MS NOW membership (summer 2026 launch), CNBC Pro, and GolfPass through AI-personalized trial experiences, engagement nudges, and conversion offers.",
     "impactTier": "Medium",
     "preState": {
@@ -3042,7 +3042,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "sales",
     "parentProcessId": "dtc-subscription",
     "matchRowName": "DTC Pricing & Packaging AI Optimization",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "DTC pricing set based on competitive benchmarking and gut feel. Single price point per product. No bundle optimization across Versant's DTC portfolio (MS NOW + CNBC Pro + GolfPass).",
@@ -3098,7 +3098,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "sales",
     "parentProcessId": "dtc-subscription",
     "matchRowName": "AI Cross-Brand Upsell & Bundle Offers",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "No cross-brand upselling. A CNBC Pro subscriber has no idea GolfPass exists. A GolfNow user doesn't know about MS NOW DTC. Each brand operates as a silo.",
@@ -3155,7 +3155,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "marketing-comms",
     "parentProcessId": "social-media-ops",
     "matchRowName": "AI-Orchestrated Multi-Platform Social Publishing",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "Medium",
     "preState": {
       "summary": "Social media teams manually schedule posts across TikTok, YouTube, Instagram, X, Facebook, and Threads for 10+ brands. Each platform has different optimal posting times, format requirements, and character limits. Breaking news overrides require manual scramble.",
@@ -3207,7 +3207,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "marketing-comms",
     "parentProcessId": "social-media-ops",
     "matchRowName": "AI-Powered Community Management & Moderation",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Social comments monitored manually across platforms. MS NOW's political content generates high-volume, often toxic comments. No moderation at scale for the upcoming MS NOW DTC community feature.",
@@ -3259,7 +3259,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "marketing-comms",
     "parentProcessId": "social-media-ops",
     "matchRowName": "Real-Time Cross-Platform Social Analytics",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Each brand pulls social metrics from native platform dashboards. No cross-brand view. Cannot connect social engagement to DTC conversion or ad revenue.",
@@ -3311,7 +3311,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "marketing-comms",
     "parentProcessId": "dtc-marketing",
     "matchRowName": "AI Creative Generation & Multivariate Testing",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "Medium",
     "preState": {
       "summary": "Agency produces 2-5 creative variants per campaign. A/B testing limited to those variants. Creative production cycle is 4-8 weeks. Cannot test at the speed needed for MS NOW DTC launch.",
@@ -3363,7 +3363,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "marketing-comms",
     "parentProcessId": "dtc-marketing",
     "matchRowName": "AI-Personalized CRM & Lifecycle Marketing",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "No CRM/lifecycle marketing infrastructure as independent company. Email marketing (if any) is batch-and-blast, not personalized. No triggered messaging based on user behavior.",
@@ -3419,7 +3419,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "marketing-comms",
     "parentProcessId": "dtc-marketing",
     "matchRowName": "AI Conversion Rate Optimization",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Landing pages, registration flows, and onboarding screens built once and rarely optimized. A/B testing manual, infrequent, and limited to headline/button copy changes.",
@@ -3471,7 +3471,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "marketing-comms",
     "parentProcessId": "pr-comms",
     "matchRowName": "AI Crisis Detection & Early Warning",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "Low",
     "preState": {
       "summary": "Crises detected when they hit mainstream media or when journalists call for comment. No early warning. MS NOW's progressive editorial position means controversies brew regularly on social media before mainstream pickup.",
@@ -3527,7 +3527,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "marketing-comms",
     "parentProcessId": "pr-comms",
     "matchRowName": "AI-Assisted Press Release & Statement Drafting",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "PR team drafts press releases, media statements, and talking points from scratch for each announcement. Drafting takes 2-4 hours per release, with multiple review cycles.",
@@ -3579,7 +3579,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "marketing-comms",
     "parentProcessId": "pr-comms",
     "matchRowName": "AI-Personalized Internal Communications",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Internal communications via mass email or Slack announcements. Same message to everyone regardless of role, location, or relevance. Critical for culture building but currently one-size-fits-all.",
@@ -3631,7 +3631,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "marketing-comms",
     "parentProcessId": "brand-analytics",
     "matchRowName": "AI Continuous Marketing Mix Modeling",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "No marketing mix modeling exists. Marketing effectiveness measured via last-click attribution (inaccurate) or not measured at all. Annual MMM via external agency is too infrequent for DTC launch velocity.",
@@ -3687,7 +3687,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "service",
     "parentProcessId": "customer-support",
     "matchRowName": "AI Order & Transaction Management",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "High",
     "preState": {
       "summary": "Fandango ticket issues (wrong showtime, refunds, theater problems), GolfNow booking problems (tee time cancellations, pricing disputes), and general purchase issues handled by human agents via phone/chat.",
@@ -3743,7 +3743,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "service",
     "parentProcessId": "customer-support",
     "matchRowName": "AI Subscription Lifecycle Management",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "High",
     "preState": {
       "summary": "Subscription changes (upgrades, downgrades, pauses, plan changes, payment updates) handled by human agents or basic self-serve portal with limited capability.",
@@ -3803,7 +3803,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "service",
     "parentProcessId": "customer-support",
     "matchRowName": "AI Escalation Intelligence & Context Handoff",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "When AI can't resolve an issue, escalation to human agent loses context. Customer repeats their problem. Agent starts from scratch without history.",
@@ -3859,7 +3859,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "service",
     "parentProcessId": "customer-support",
     "matchRowName": "AI Voice of Customer Analytics",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Customer feedback buried in support tickets and CSAT surveys. No systematic analysis. Product issues surface slowly through escalation chains. Feature requests not tracked.",
@@ -3911,7 +3911,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "service",
     "parentProcessId": "subscriber-retention",
     "matchRowName": "AI Save Offer Optimization",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "Medium",
     "preState": {
       "summary": "When subscriber clicks cancel, a generic save offer appears (10% discount or free month). Same offer for everyone regardless of their usage pattern, cancellation reason, or subscriber value.",
@@ -3968,7 +3968,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "service",
     "parentProcessId": "subscriber-retention",
     "matchRowName": "AI Win-Back Campaign Management",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Batch win-back emails at 30/60/90 days post-churn. Same message and offer regardless of churn reason, subscriber history, or current content lineup.",
@@ -4024,7 +4024,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "service",
     "parentProcessId": "subscriber-retention",
     "matchRowName": "AI Cross-Brand Retention Offers",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "At-risk subscribers are only offered retention within their own brand. A churning CNBC Pro subscriber who also uses GolfNow extensively is never offered a cross-brand bundle as a retention mechanism.",
@@ -4085,7 +4085,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "editorial-news",
     "parentProcessId": "base-layer-content",
     "matchRowName": "AI 24/7 Breaking News Monitoring & Alert Generation",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "High",
     "preState": {
       "summary": "Assignment desk editors monitor wire services (AP, Reuters), social media, and news feeds manually. MS NOW needs 24/7 political monitoring; CNBC needs 24/7 market/economic monitoring. Overnight coverage depends on limited staff.",
@@ -4145,7 +4145,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "editorial-news",
     "parentProcessId": "base-layer-content",
     "matchRowName": "AI Wire Service Intake & Curation",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "Medium",
     "preState": {
       "summary": "Wire service stories (AP, Reuters) arrive in a continuous stream. Editors manually review, select, and curate for digital publishing and broadcast use. Volume overwhelms — many relevant stories missed.",
@@ -4205,7 +4205,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "editorial-news",
     "parentProcessId": "base-layer-content",
     "matchRowName": "AI-Optimized CMS Publishing & SEO",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Digital publishing requires manual CMS formatting, metadata entry, image selection, SEO tag creation, and cross-platform distribution. Each article touches 5-10 CMS fields.",
@@ -4257,7 +4257,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "editorial-news",
     "parentProcessId": "live-broadcast-ai",
     "matchRowName": "AI Real-Time Broadcast Data & Graphics Feed",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Graphics operators manually input data into on-screen graphics during live broadcasts — market tickers for CNBC, poll numbers for MS NOW, sports stats for Golf Channel. Data entry errors occur under live pressure.",
@@ -4313,7 +4313,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "editorial-news",
     "parentProcessId": "investigative-research",
     "matchRowName": "AI Pattern & Connection Detection in Investigations",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Investigative journalists manually search through documents, financial records, and public databases looking for patterns and connections. A human can review hundreds of documents; some investigations involve tens of thousands.",
@@ -4373,7 +4373,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "editorial-news",
     "parentProcessId": "investigative-research",
     "matchRowName": "AI Real-Time Fact Verification",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Fact-checking happens manually — producers and standards team (Brian Carovillano's team) verify claims in scripts before broadcast and in articles before publication. During live broadcasts, real-time fact-checking is limited to what the team can look up on the fly.",
@@ -4434,7 +4434,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "editorial-news",
     "parentProcessId": "podcast-production",
     "matchRowName": "AI Dynamic Podcast Ad Insertion",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Podcast ads inserted statically — same ad for every listener regardless of their profile. Ad inventory managed manually per show. If Vox Media acquisition proceeds (~40 shows), ad management complexity multiplies.",
@@ -4490,7 +4490,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "editorial-news",
     "parentProcessId": "podcast-production",
     "matchRowName": "AI Cross-Show & Cross-Platform Podcast Promotion",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "No systematic cross-promotion between Versant podcasts or between podcasts and TV/DTC. A listener of one MS NOW podcast has no discovery path to another. TV viewers aren't directed to podcast content.",
@@ -4546,7 +4546,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "editorial-news",
     "parentProcessId": "base-layer-content",
     "matchRowName": "AI Content Quality Review & Editorial Governance",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "A dedicated AI review layer for all AI-generated editorial content — verifying factual accuracy, style compliance, potential sensitivity, and editorial standards before human editor sees it. This is the governance layer that makes 'human-led, AI-powered' real.",
     "impactTier": "High",
     "preState": {
@@ -4613,7 +4613,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "production",
     "parentProcessId": "post-production",
     "matchRowName": "AI Graphics & Thumbnail Generation",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "High",
     "preState": {
       "summary": "Graphic designers manually create thumbnails, social cards, lower thirds, bumpers, and platform-specific graphics for every piece of content across 10+ brands and 5+ platforms. Highly repetitive template-based work.",
@@ -4665,7 +4665,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "production",
     "parentProcessId": "post-production",
     "matchRowName": "AI Captioning & Accessibility Compliance",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "High",
     "preState": {
       "summary": "Captioning for 7+ linear networks plus digital content handled by mix of live captioners (broadcast) and post-production captioning services. FCC mandates captioning accuracy and timing. Volume is enormous.",
@@ -4723,7 +4723,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "production",
     "parentProcessId": "post-production",
     "matchRowName": "AI-Managed Transcoding & Multi-Platform Distribution",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "Medium",
     "preState": {
       "summary": "Content transcoded manually for each distribution platform — broadcast (HD, 4K), web (multiple bitrates), mobile, social (vertical, square), FAST, podcast audio extract. Each format has different specs.",
@@ -4779,7 +4779,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "production",
     "parentProcessId": "post-production",
     "matchRowName": "AI Audio Processing & Enhancement",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Audio engineers manually level, mix, and master audio for different output formats — broadcast, web, podcast, social clips. Each format has different loudness standards (broadcast: CALM Act compliance; podcast: -16 LUFS; social: varies).",
@@ -4830,7 +4830,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "production",
     "parentProcessId": "post-production",
     "matchRowName": "AI Content Archive Indexing & Search",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Decades of content archive (MS NOW, CNBC, Golf Channel, USA, E!, Syfy, Oxygen) poorly indexed. Finding historical footage requires manual search through tape logs or personal knowledge of librarians. Archivists are a single point of failure.",
@@ -4882,7 +4882,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "production",
     "parentProcessId": "studio-operations",
     "matchRowName": "AI Crew Scheduling & Assignment",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Production managers assign crew to shows via phone/text/email based on personal knowledge of who's available, skilled, and appropriate. Union rules (break times, overtime, consecutive days) add constraints.",
@@ -4934,7 +4934,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "production",
     "parentProcessId": "studio-operations",
     "matchRowName": "AI Equipment Tracking & Allocation",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Production equipment (cameras, lenses, audio kits, graphics systems, teleprompters) tracked informally — whiteboards, spreadsheets, or not tracked at all. Equipment occasionally 'missing' — actually in use by another production.",
@@ -4986,7 +4986,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "production",
     "parentProcessId": "studio-operations",
     "matchRowName": "AI Breaking News Studio Reallocation",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "impactTier": "Medium",
     "preState": {
       "summary": "When breaking news requires studio reallocation (e.g., MS NOW needs an extra studio for extended coverage), production managers manually negotiate with other shows, reassign crews, and coordinate the change — all under extreme time pressure.",
@@ -5042,7 +5042,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "production",
     "parentProcessId": "remote-production",
     "matchRowName": "AI Remote Production Connectivity Management",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Remote production connectivity (satellite uplink, fiber, bonded cellular) set up manually per event by transmission engineers. Connection quality monitored visually during event. Backup paths configured but failover is manual.",
@@ -5094,7 +5094,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "production",
     "parentProcessId": "remote-production",
     "matchRowName": "AI Remote Production Logistics",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Production logistics (crew travel, equipment shipping, venue coordination, permits, hotels, transportation) managed manually per event. Back-to-back events (golf tournaments, political primaries) multiply the coordination burden.",
@@ -5146,7 +5146,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "production",
     "parentProcessId": "remote-production",
     "matchRowName": "AI Remote Feed Quality Monitoring",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Remote feed quality monitored by control room technical director watching return feeds. Subtle quality issues (compression artifacts, audio sync drift, color shift) may not be caught until they're on-air.",
@@ -5197,7 +5197,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "programming-dev",
     "parentProcessId": "schedule-optimization",
     "matchRowName": "AI Autonomous FAST Channel Programming",
-    "aiPriority": "P1",
+    "briefRoutingTier": "P1",
     "description": "Autonomously programming 24/7 FAST channels from Versant's content library — especially critical as Free TV Networks acquisition adds more FAST/OTA channels. AI optimizes programming for audience patterns and ad avail maximization.",
     "impactTier": "Medium",
     "preState": {
@@ -5254,7 +5254,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "programming-dev",
     "parentProcessId": "schedule-optimization",
     "matchRowName": "AI Viewership Prediction",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
       "summary": "Viewership predictions based on programmer experience and historical averages. No systematic model. Each time slot decision is a judgment call.",
@@ -5307,7 +5307,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "programming-dev",
     "parentProcessId": "schedule-optimization",
     "matchRowName": "AI Cross-Brand Promotion Scheduling",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Cross-brand promotion (promoting MS NOW DTC on CNBC, promoting GolfPass on Golf Channel) is ad hoc. Promo slots allocated informally. No data on which promotions actually drive cross-brand conversion.",
@@ -5363,7 +5363,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "programming-dev",
     "parentProcessId": "content-development",
     "matchRowName": "AI Content Landscape & White Space Analysis",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Programming executives manually monitor competitor content strategies — watching competitors' networks, reading trade press, attending markets. No systematic competitive content mapping.",
@@ -5415,7 +5415,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "programming-dev",
     "parentProcessId": "content-development",
     "matchRowName": "AI Audience Demand Prediction for New Content",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Content greenlight decisions based on executive judgment, talent relationships, and limited audience research (focus groups, surveys). No quantitative demand prediction for proposed content.",
@@ -5467,7 +5467,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "programming-dev",
     "parentProcessId": "content-development",
     "matchRowName": "AI Multi-Platform Content ROI Projection",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Content investment ROI modeled in Excel with limited cross-platform view. Typically models linear ratings only, ignoring digital, social, DTC, licensing, and FAST value.",
@@ -5519,7 +5519,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "programming-dev",
     "parentProcessId": "content-acquisition",
     "matchRowName": "AI Content Market Scanning & Target Identification",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Content acquisition targets identified through agent relationships, market attendance (MIP, Realscreen), and industry connections. No systematic market scanning.",
@@ -5571,7 +5571,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "programming-dev",
     "parentProcessId": "content-acquisition",
     "matchRowName": "AI Multi-Platform Content Valuation",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Content valued in Excel with limited view — typically linear value only. Miss DTC, FAST, social amplification, podcast crossover, and international licensing value.",
@@ -5623,7 +5623,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "programming-dev",
     "parentProcessId": "content-acquisition",
     "matchRowName": "AI Comparable Deal Analysis & Benchmarking",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Deal benchmarking relies on dealmaker memory and limited trade reporting. No systematic comparable deal database. Hard to answer: 'Is this a fair price?'",
@@ -5675,7 +5675,7 @@ export const processBriefs: AIProcessBrief[] = [
     "towerSlug": "programming-dev",
     "parentProcessId": "content-acquisition",
     "matchRowName": "AI Portfolio Fit Assessment",
-    "aiPriority": "P2",
+    "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
       "summary": "Strategic fit assessment for content acquisitions is subjective — 'does this feel right for us?' No quantitative framework for portfolio fit.",

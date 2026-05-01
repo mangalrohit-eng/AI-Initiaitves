@@ -1,5 +1,6 @@
 import type {
   AiPriority,
+  Feasibility,
   Process,
   Tower,
   TowerProcessCriticality,
@@ -13,7 +14,7 @@ export type TowerId = Tower["id"];
 
 /**
  * The five canonical "why not AI" reasons. Kept verbatim from
- * `docs/context.md` §9 — every `reviewed-not-eligible` L4 must fall
+ * `docs/context.md` §9 — every `reviewed-not-eligible` L5 must fall
  * back to one of these strings (LLM paraphrase is rejected).
  */
 export type NotEligibleReason =
@@ -24,13 +25,20 @@ export type NotEligibleReason =
   | "Strategic exercise requiring executive judgment";
 
 /**
- * Provenance tag for a rich L4 record: where the verdict + curation came from.
+ * Provenance tag for a rich L5 record: where the verdict + curation came from.
  * Drives diagnostics + future "regenerate stale" sweeps.
  */
-export type L4ItemSource = "canonical" | "llm" | "fallback" | "manual";
+export type L5ItemSource = "canonical" | "llm" | "fallback" | "manual";
 
 /**
- * Lazily-generated short brief for L4s (legacy v1). Superseded by
+ * @deprecated Renamed to `L5ItemSource` in the 5-layer migration. Retained as
+ * an alias so legacy snapshots/imports keep compiling during the transition
+ * window.
+ */
+export type L4ItemSource = L5ItemSource;
+
+/**
+ * Lazily-generated short brief for L5 Activities (legacy v1). Superseded by
  * `generatedProcess` for the full four-lens `Process` view. Kept for
  * migration and for JSON round-trip tests; new generations should write
  * `GeneratedProcessCache` only.
@@ -64,23 +72,37 @@ export type GeneratedProcessCache = {
 };
 
 /**
- * Rich L4 record on `L3WorkforceRow`. Source of truth for AI Initiatives view —
- * each item carries its verdict (Stage 2 output) and, when eligible, its
- * curation (Stage 3 output). Phase 1 (this PR) ships the shape; the LLM
- * pipeline that populates it lands in PR 2. Until then, the selector falls
- * through to `l4Activities` strings or canonical-map L4s.
+ * Rich L5 Activity record on `L4WorkforceRow`. Source of truth for AI
+ * Initiatives view — each item carries its verdict (Stage 2 output) and,
+ * when eligible, its curation (Stage 3 output).
+ *
+ * AI initiatives attach to L5 Activities (the leaf). The dials-bearing L4
+ * Activity Group aggregates these leaves the same way the pre-migration L3
+ * Capability aggregated L4 Activities — only the layer numbers shifted.
  */
-export type L4Item = {
-  /** Stable id — hash of `(towerId + l2 + l3 + name)`. */
+export type L5Item = {
+  /** Stable id — hash of `(towerId + l2 + l3 + l4 + name)`. */
   id: string;
   name: string;
-  source: L4ItemSource;
+  source: L5ItemSource;
   /** ISO timestamp; undefined for canonical seeds. */
   generatedAt?: string;
   // ----- Verdict (Stage 2 output) -----
   aiCurationStatus: AiCurationStatus;
   aiEligible: boolean;
+  /**
+   * @deprecated Per-Activity P1/P2/P3 is no longer the program priority signal.
+   * Cross-tower priority comes from `computeProgramTiers()` via the 2x2.
+   * Retained here only as a back-compat input to `feasibility` derivation
+   * (P1 -> High, P2/P3 -> Low) when an explicit `feasibility` is missing.
+   */
   aiPriority?: AiPriority;
+  /**
+   * Binary ship-readiness signal — feeds the cross-tower 2x2. Optional
+   * because legacy snapshots predate the field; readers fall back to
+   * `aiPriority` and the rubric/heuristic fallback chain.
+   */
+  feasibility?: Feasibility;
   /** One-liner Versant-grounded rationale. Required (verdict reasoning). */
   aiRationale: string;
   /** Required when `aiCurationStatus === "reviewed-not-eligible"`. */
@@ -107,38 +129,54 @@ export type L4Item = {
 };
 
 /**
- * Pipeline state stamped onto `L3WorkforceRow.curationStage`. Used by the
+ * @deprecated Renamed to `L5Item` in the 5-layer migration (the rich-row
+ * record now lives on the L5 Activity, not the L4 row that holds the dials).
+ * Kept as an alias so files that haven't been swept yet still compile.
+ */
+export type L4Item = L5Item;
+
+/**
+ * Pipeline state stamped onto `L4WorkforceRow.curationStage`. Used by the
  * Capability Map UI to show progress pills + retry affordances.
  */
 export type CurationStage =
   | "idle"
   | "queued"
-  | "running-l4"
+  | "running-l5"
   | "running-verdict"
   | "running-curate"
   | "done"
   | "failed";
 
 /**
- * One L3 (sub-capability) row in the tower workforce footprint.
+ * One L4 Activity Group row in the tower workforce footprint.
  *
- * Tower leads upload a flat list at L3 granularity — one row per
- * (L2 pillar, L3 capability) — with onshore/offshore FTE and contractor
- * headcount, plus optional annual spend. The impact-lever step scores
- * each L3 once for offshore-movability and AI-impact headroom.
+ * Tower leads upload a flat list at L4 granularity — one row per
+ * (L2 Job Grouping, L3 Job Family, L4 Activity Group) — with onshore/
+ * offshore FTE and contractor headcount, plus optional annual spend. The
+ * impact-lever step scores each L4 once for offshore-movability and
+ * AI-impact headroom.
  *
- * `l4Activities` is a display-only list of activity names that sit under
- * the L3 (e.g., "Invoice processing", "Match-pay-and-extract"). It is:
+ * `l5Activities` is a display-only list of activity names that sit under
+ * the L4 (e.g., "Invoice processing", "Match-pay-and-extract"). It is:
  *   - seeded from the canonical capability map when the sample is loaded,
- *   - left empty after a tower-lead upload (the upload is L2/L3 only),
- *   - populated post-upload via the "Generate L4 activities" LLM action.
+ *   - left empty after a tower-lead upload (the upload is L2/L3/L4 only),
+ *   - populated post-upload via the "Generate L5 Activities" LLM action.
  *
  * The activity list is purely informational — it never feeds the math.
+ *
+ * Renamed from the pre-migration `L3WorkforceRow`. The dials, headcount,
+ * curation stage, and rationale strings continue to attach to this row —
+ * only the layer number shifted (L3 Capability → L4 Activity Group).
  */
-export type L3WorkforceRow = {
+export type L4WorkforceRow = {
   id: string;
+  /** L2 Job Grouping (NEW intermediate layer added in the 5-layer migration). */
   l2: string;
+  /** L3 Job Family (was L2 Pillar). */
   l3: string;
+  /** L4 Activity Group (was L3 Capability). Dials + opportunity sizing live on this row. */
+  l4: string;
   fteOnshore: number;
   fteOffshore: number;
   contractorOnshore: number;
@@ -146,34 +184,35 @@ export type L3WorkforceRow = {
   /** When present in file, used for $ pool; else derived from headcount × blended rates. */
   annualSpendUsd?: number;
   /**
-   * Tower-lead dial: 0–100 share of L3 work plausibly offshore-movable.
-   * When missing, the tower baseline is used in weighted rollups.
+   * Tower-lead dial: 0–100 share of L4 Activity Group work plausibly
+   * offshore-movable. When missing, the tower baseline is used in
+   * weighted rollups.
    */
   offshoreAssessmentPct?: number;
   /**
-   * Tower-lead dial: 0–100 AI improvement / automation headroom for the L3.
+   * Tower-lead dial: 0–100 AI improvement / automation headroom for the L4.
    */
   aiImpactAssessmentPct?: number;
   /**
-   * Legacy reference list of L4 activity labels (display only — not part of
+   * Legacy reference list of L5 Activity labels (display only — not part of
    * the math). Populated from the canonical map at seed time, or generated
-   * post-upload via the LLM "Generate L4 activities" action. Kept for
-   * back-compat; once the curation pipeline (PR 2) lands, this field is
-   * derived from `l4Items.name` and the rich `l4Items` array becomes the
-   * source of truth for Step 4.
+   * post-upload via the LLM "Generate L5 Activities" action. Kept for
+   * back-compat; once the curation pipeline runs, this field is derived
+   * from `l5Items[].name` and the rich `l5Items` array becomes the source
+   * of truth for Step 4.
    */
-  l4Activities?: string[];
+  l5Activities?: string[];
   /**
-   * Rich L4 records — each item carries its verdict + curation when the
-   * pipeline has run. Empty / undefined until the LLM pipeline (PR 2)
-   * populates it; selectors fall through to `l4Activities` and the
+   * Rich L5 Activity records — each item carries its verdict + curation
+   * when the pipeline has run. Empty / undefined until the LLM pipeline
+   * populates it; selectors fall through to `l5Activities` and the
    * canonical map until then.
    */
-  l4Items?: L4Item[];
+  l5Items?: L5Item[];
   /**
-   * Stable hash of `(l2 + l3 + sorted-list-of-l4-names)`. The pipeline's
+   * Stable hash of `(l2 + l3 + l4 + sorted-list-of-l5-names)`. The pipeline's
    * idempotency key — re-runs skip rows whose hash matches the last
-   * successful run. Distinct from per-item `L4Item.id`.
+   * successful run. Distinct from per-item `L5Item.id`.
    */
   curationContentHash?: string;
   /** Whole-row pipeline status. */
@@ -186,7 +225,7 @@ export type L3WorkforceRow = {
    * LLM-produced rationale for the offshore dial (≤15 words, Versant-grounded).
    * Populated by `clientInferTowerDefaults` runs. Falls back to the
    * deterministic `rowStarterRationale` text on heuristic runs. Read by
-   * `L3LeverRow`'s offshore popover.
+   * `L4LeverRow`'s offshore popover.
    */
   offshoreRationale?: string;
   /**
@@ -230,6 +269,14 @@ export type L3WorkforceRow = {
   };
 };
 
+/**
+ * @deprecated Renamed to `L4WorkforceRow` in the 5-layer migration. Retained
+ * as an alias so files that haven't been swept yet still compile. The rename
+ * reflects that the dials + sizing now sit on the L4 Activity Group row
+ * (was the L3 Capability row).
+ */
+export type L3WorkforceRow = L4WorkforceRow;
+
 /** Tower-lead anchor dialed once and held steady before stress-test on the summary page. */
 export type TowerBaseline = {
   baselineOffshorePct: number;
@@ -249,8 +296,18 @@ export type TowerAssessStatus = "empty" | "data" | "complete";
 export type TowerAssessReview = {
   capabilityMapConfirmedAt?: string;
   /**
-   * Set when the tower lead confirms the L1–L3 review from the journey bar on
+   * Set when the tower lead confirms the L1–L5 review from the journey bar on
    * the Capability Map. Locks map/headcount edits until explicit unlock.
+   *
+   * Renamed from `l1L3TreeValidatedAt` in the 5-layer migration. The
+   * v4→v5 migration carries the original timestamp into this field.
+   */
+  l1L5TreeValidatedAt?: string;
+  /**
+   * @deprecated Renamed to `l1L5TreeValidatedAt` in the 5-layer migration.
+   * Kept as an optional read-side field so v4 snapshots that haven't been
+   * migrated yet still surface the confirmation timestamp. Writers should
+   * only set `l1L5TreeValidatedAt`.
    */
   l1L3TreeValidatedAt?: string;
   headcountConfirmedAt?: string;
@@ -292,13 +349,13 @@ export function buildDefaultProgramLeadDeadlines(): Partial<
 }
 
 /**
- * Tower-lead decision on a single AI initiative (L4 activity).
+ * Tower-lead decision on a single AI initiative (L5 Activity).
  *
  *   - "approved"  — the lead has reviewed the AI idea and confirmed it makes
  *                   sense for this tower. Renders with a "Validated" pill.
  *   - "rejected"  — the lead has reviewed the AI idea and decided it does NOT
  *                   make sense. Filtered out of the AI Initiatives roadmap and
- *                   the L2 → L3 → L4 landscape, but preserved here so the lead
+ *                   the L2 → L5 landscape, but preserved here so the lead
  *                   can review and restore it later from the rejected drawer.
  *
  * `pending` is the implicit default — there's no entry in `initiativeReviews`
@@ -307,17 +364,28 @@ export function buildDefaultProgramLeadDeadlines(): Partial<
 export type InitiativeStatus = "approved" | "rejected";
 
 /**
- * Snapshot of the L4 activity at decision time. Captured so the rejected
- * drawer can render even if the L4 disappears from the live selector output
+ * Snapshot of the L5 Activity at decision time. Captured so the rejected
+ * drawer can render even if the L5 disappears from the live selector output
  * (e.g. dial moved to 0, capability map regenerated, name drift).
  */
 export type InitiativeReviewSnapshot = {
   name: string;
   aiRationale?: string;
+  /**
+   * @deprecated Captured on legacy snapshots. New snapshots write
+   * `feasibility` instead; the rejected drawer falls back to a generic
+   * status pill when neither is present.
+   */
   aiPriority?: AiPriority;
+  /** Binary ship-readiness at the time the lead made the decision. */
+  feasibility?: Feasibility;
+  /** L2 Job Grouping name at decision time. */
   l2Name: string;
+  /** L3 Job Family name at decision time. */
   l3Name: string;
-  /** L3 row id — lets the drawer deep-link to Step 2 if dial changes are needed. */
+  /** L4 Activity Group name at decision time. */
+  l4Name: string;
+  /** L4 row id — lets the drawer deep-link to Step 2/3 if dial changes are needed. */
   rowId: string;
 };
 
@@ -331,16 +399,16 @@ export type InitiativeReview = {
 };
 
 export type TowerAssessState = {
-  l3Rows: L3WorkforceRow[];
+  l4Rows: L4WorkforceRow[];
   baseline: TowerBaseline;
   status: TowerAssessStatus;
   lastUpdated?: string;
   /**
-   * Per-L4 tower-lead validate/reject decisions. Keyed by `InitiativeL4.id`.
+   * Per-L5 tower-lead validate/reject decisions. Keyed by `InitiativeL5.id`.
    * Strictly additive — older snapshots simply have this undefined and the
-   * AI Initiatives view treats every L4 as "pending review."
+   * AI Initiatives view treats every L5 as "pending review."
    *
-   * Rides the existing `AssessProgramV4` envelope, so decisions persist
+   * Rides the existing `AssessProgramV5` envelope, so decisions persist
    * to Postgres via `AssessSyncProvider` → `/api/assess` → `assess_workshop`.
    */
   initiativeReviews?: Record<string, InitiativeReview>;
@@ -357,8 +425,8 @@ export type ChecklistStepId =
  * Global assumptions for the Configure Impact Levers flow. These are the ONLY
  * knobs on the Assumptions tab and the ONLY rates the savings math reads.
  *
- * Every $ in the app is derived from these four rates plus per-L3 headcount
- * mix and per-L3 dials. No magic lever weights, no caps, no combine-mode
+ * Every $ in the app is derived from these four rates plus per-L4 headcount
+ * mix and per-L4 dials. No magic lever weights, no caps, no combine-mode
  * toggles — see `scenarioModel.ts` for the math.
  */
 export type GlobalAssessAssumptions = {
@@ -405,16 +473,18 @@ export const DEFAULT_OFFSHORE_ASSUMPTIONS: OffshoreAssumptions = {
 };
 
 /**
- * V4 program shape — current.
+ * V5 program shape — current.
  *
- * V4 collapses the per-L4 workforce footprint into per-L3 rows. The math now
- * runs at L3 granularity (headcount, dials, savings) and L4 activity names
- * are a display-only reference list on each L3 row. Migration from V3 lives
- * in `localStore.ts` (groups old `l4Rows` by L2+L3, sums headcount, cost-
- * weighted-averages percentages, and preserves L4 names in `l4Activities`).
+ * V5 inserts a new L2 Job Grouping layer between the L1 Function and the
+ * Job Family (was L2 Pillar). The math grain shifts from per-L3 Capability
+ * to per-L4 Activity Group rows (renamed `L3WorkforceRow` → `L4WorkforceRow`),
+ * and AI initiatives now attach to L5 Activities (was L4). Migration from
+ * V4 lives in `localStore.ts` (renames `l3Rows` → `l4Rows`, stamps `l2`
+ * with the tower function name from `towerFunctionNames.ts`, renames
+ * `l4Activities`/`l4Items` → `l5Activities`/`l5Items`).
  */
-export type AssessProgramV4 = {
-  version: 4;
+export type AssessProgramV5 = {
+  version: 5;
   towers: Partial<Record<TowerId, TowerAssessState>>;
   global: GlobalAssessAssumptions;
   /** Program admin: due-by dates per tower for Steps 1–4 (optional). */
@@ -427,11 +497,14 @@ export type AssessProgramV4 = {
   offshoreAssumptions?: OffshoreAssumptions;
 };
 
-/** Back-compat alias — every caller importing `AssessProgramV3` gets V4. */
-export type AssessProgramV3 = AssessProgramV4;
+/** Back-compat alias — every caller importing `AssessProgramV4` gets V5. */
+export type AssessProgramV4 = AssessProgramV5;
 
-/** Back-compat alias — every caller importing `AssessProgramV2` gets V4. */
-export type AssessProgramV2 = AssessProgramV4;
+/** Back-compat alias — every caller importing `AssessProgramV3` gets V5. */
+export type AssessProgramV3 = AssessProgramV5;
+
+/** Back-compat alias — every caller importing `AssessProgramV2` gets V5. */
+export type AssessProgramV2 = AssessProgramV5;
 
 export const defaultTowerBaseline: TowerBaseline = {
   baselineOffshorePct: 20,
@@ -440,15 +513,15 @@ export const defaultTowerBaseline: TowerBaseline = {
 
 export function defaultTowerState(): TowerAssessState {
   return {
-    l3Rows: [],
+    l4Rows: [],
     baseline: { ...defaultTowerBaseline },
     status: "empty",
   };
 }
 
-export function defaultAssessProgramV2(): AssessProgramV4 {
+export function defaultAssessProgramV2(): AssessProgramV5 {
   return {
-    version: 4,
+    version: 5,
     towers: {},
     global: { ...defaultGlobalAssessAssumptions },
     leadDeadlines: buildDefaultProgramLeadDeadlines(),

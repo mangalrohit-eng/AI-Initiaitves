@@ -5,7 +5,18 @@ import type {
   TowerId,
 } from "@/data/assess/types";
 
-export type InferDefaultsRow = { l2: string; l3: string };
+export type InferDefaultsRow = {
+  /** L2 Job Grouping (prompt context). */
+  l2: string;
+  /** L3 Job Family (prompt context). */
+  l3: string;
+  /**
+   * L4 Activity Group — the row whose dial pair (offshore + AI) is being
+   * scored. Optional only for back-compat: legacy v4 callers omit this and
+   * the server treats `l3` as the dial-row label.
+   */
+  l4?: string;
+};
 
 export type InferredDefault = {
   offshorePct: number;
@@ -186,14 +197,26 @@ export async function clientInferTowerDefaults(
   };
 }
 
-// ----- L4 activity generation ------------------------------------------
+// ----- L5 Activity generation ------------------------------------------
+// Wire type names retain the historic `L4` suffix to avoid re-versioning
+// the API surface mid-cutover. After the 5-layer migration the semantics
+// are: L2 = Job Grouping, L3 = Job Family, L4 = Activity Group (the row
+// being scored), and the returned `activities[]` are L5 Activity names.
 
 export type GenerateL4ActivitiesRow = {
+  /** L2 Job Grouping (prompt context). */
   l2: string;
+  /** L3 Job Family (prompt context). */
   l3: string;
   /**
-   * Optional qualitative feedback to steer the L4 list (per-L3 "Refine +
-   * regenerate" affordance on Step 4). Server clamps to ≤600 chars.
+   * L4 Activity Group — the row whose L5 Activities the server should
+   * generate. Optional only for back-compat: legacy v4 callers omit this
+   * and the server treats `l3` as the parent.
+   */
+  l4?: string;
+  /**
+   * Optional qualitative feedback to steer the activity list (per-row
+   * "Refine + regenerate" affordance on Step 4). Server clamps to ≤600 chars.
    */
   feedback?: string;
 };
@@ -201,6 +224,9 @@ export type GenerateL4ActivitiesRow = {
 export type GeneratedL4Group = {
   l2: string;
   l3: string;
+  /** L4 Activity Group; empty string for legacy v4 callers. */
+  l4: string;
+  /** L5 Activity names under the Activity Group. */
   activities: string[];
 };
 
@@ -213,13 +239,14 @@ export type GenerateL4ActivitiesResult = {
 };
 
 /**
- * Asks the server to generate plausible L4 activity names for each L3 row.
- * Used by the Capability Map page after a tower lead uploads an L2/L3 template
- * — the heuristic + LLM fill in the activity list so the map below the L3 has
- * something to display. Generated lists are persisted via `l4Activities`.
+ * Asks the server to generate plausible L5 Activity names for each L4
+ * Activity Group row. Used by the Capability Map page after a tower lead
+ * uploads an L2/L3/L4 template — the heuristic + LLM fill in the activity
+ * list so the map below each Activity Group has something concrete to
+ * display. Generated lists are persisted via `L4WorkforceRow.l5Activities`.
  *
- * On any LLM failure the server returns a deterministic canonical-map-derived
- * fallback so the action never blocks the program.
+ * On any LLM failure the server returns a deterministic canonical-map-
+ * derived fallback so the action never blocks the program.
  */
 export async function clientGenerateL4Activities(
   towerId: TowerId,
@@ -264,34 +291,59 @@ export async function clientGenerateL4Activities(
   };
 }
 
-// ----- L4 initiative curation (verdict + summary) ----------------------
+// ----- L5 Activity initiative curation (verdict + summary) -------------
+// Naming note: the wire types still use the historic `CurateInitiatives*`
+// / `CuratedL4` names so we don't have to re-version the API surface mid-
+// migration. After the 5-layer cutover the field semantics are:
+//   - `l2` -> Job Grouping (the dummy wrapper we stamp at seed time).
+//   - `l3` -> Job Family (was Pillar pre-migration).
+//   - `l4` -> Activity Group (was Capability pre-migration). REQUIRED for
+//             accurate scoring — without it the LLM and the deterministic
+//             rubric both misclassify the L5 leaves because they lose the
+//             most informative grandparent → parent → leaf context.
+//   - `l5Activities` -> L5 Activity names (was `l4Activities`).
+//   - `l5Items` -> per-L5-Activity curation results (was `l4Items`).
+// The deprecated `l4Activities` / `l4Items` aliases are retained
+// transitionally so any in-flight requests during the cutover still parse.
 
 export type CurateInitiativesRowInput = {
-  /** L3 row id — round-tripped so the client can match results back without name fuzzing. */
+  /** L4 Activity-Group row id — round-tripped so the client can match results back without name fuzzing. */
   rowId: string;
+  /** L2 Job Grouping label (for prompt context). */
   l2: string;
+  /** L3 Job Family label (for prompt context). */
   l3: string;
-  /** L4 activity names. The LLM scores one verdict + one summary per name. */
-  l4Activities: string[];
   /**
-   * Optional qualitative feedback to steer the curation (per-L3 "Refine +
+   * L4 Activity Group label (the dial-bearing row the L5 Activities sit
+   * under). Optional only for legacy callers that haven't been swept yet —
+   * server falls back to using `l3` as the parent if absent, which loses
+   * scoring fidelity.
+   */
+  l4?: string;
+  /** L5 Activity names. The LLM scores one verdict + one summary per name. */
+  l5Activities: string[];
+  /**
+   * Optional qualitative feedback to steer the curation (per-L4 "Refine +
    * regenerate" affordance on Step 4). Server clamps to ≤600 chars.
    */
   feedback?: string;
 };
 
 /**
- * Server-shaped per-L4 curation. Mirrors the rich `L4Item` fields the LLM
+ * Server-shaped per-L5 curation. Mirrors the rich `L5Item` fields the LLM
  * is allowed to fill — `id` / `source` / `name` are stamped client-side
  * after the response lands so the server can stay stateless. `briefSlug`
  * and `initiativeId` are NEVER set by the LLM (overlay-only).
+ *
+ * NOTE: kept the historic name `CuratedL4` to minimise the surface-area
+ * churn; the shape now describes a curated L5 Activity record.
  */
 export type CuratedL4 = Pick<
   L4Item,
   | "name"
   | "aiCurationStatus"
   | "aiEligible"
-  | "aiPriority"
+  | "feasibility"
   | "aiRationale"
   | "notEligibleReason"
   | "frequency"
@@ -303,7 +355,8 @@ export type CuratedL4 = Pick<
 
 export type CuratedRow = {
   rowId: string;
-  l4Items: CuratedL4[];
+  /** Per-L5-Activity curation results. */
+  l5Items: CuratedL4[];
 };
 
 export type CurateInitiativesSource = "llm" | "fallback";
@@ -370,10 +423,24 @@ export async function clientCurateInitiatives(
 
 export type CurateBriefInput = {
   towerId: TowerId;
+  /** L2 Job Grouping (5-layer map). */
   l2: string;
+  /** L3 Job Family (5-layer map). */
   l3: string;
+  /**
+   * L4 Activity Group — parent of the L5 Activity being briefed. Optional
+   * for back-compat with legacy V4 callers.
+   */
+  l4?: string;
+  /**
+   * Display label for the leaf being briefed. Under V5 this is the **L5
+   * Activity** name; field name preserved for wire-format back-compat.
+   */
   l4Name: string;
-  /** Stable L4 id for synthetic `Process.id` and cache keys. */
+  /**
+   * Stable id for the leaf being briefed (V5: L5 Activity id) — used for
+   * synthetic `Process.id` and cache keys.
+   */
   l4Id: string;
   aiRationale: string;
   agentOneLine?: string;

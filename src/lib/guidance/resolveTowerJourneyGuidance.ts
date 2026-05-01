@@ -8,7 +8,9 @@ import type {
 } from "./types";
 
 /**
- * Step 1 — per-tower capability map. Tier 0 = no data; 1 = L4 missing; 2 = done with L4, user edits/continue.
+ * Step 1 — per-tower capability map. Tier 0 = no data; 1 = L5 Activities
+ * missing on one or more L4 Activity Groups; 2 = done with L5 generation,
+ * user edits / continues.
  */
 export function resolveCapabilityMapGuidance(
   input: CapabilityMapGuidanceInput,
@@ -26,24 +28,24 @@ export function resolveCapabilityMapGuidance(
   if (blankL4Count > 0 && stale.l4Stale) {
     return {
       tier: 1,
-      title: "Run Generate L4 for every blank L3 before you open Step 2 or Step 4.",
+      title: "Run Generate L5 Activities for every L4 Activity Group with no leaves before you open Step 2 or Step 4.",
       staleKind: "l4",
       actionHref: "#generate-l4-toolbar",
-      actionLabel: "Jump to Generate L4",
+      actionLabel: "Jump to Generate L5",
     };
   }
   if (!input.l1L3JourneyStepComplete) {
     return {
       tier: 2,
-      title: "Review this tower’s L1–L3 tree and headcount, then confirm below.",
+      title: "Review this tower’s L1–L4 hierarchy and headcount, then confirm below.",
       staleKind: null,
-      actionLabel: "Confirm L1–L3 reviewed",
+      actionLabel: "Confirm L1–L4 reviewed",
       actionKind: "confirm",
     };
   }
   return {
     tier: 2,
-    title: "Open Configure Impact Levers to set offshore and AI for each L3.",
+    title: "Open Configure Impact Levers to set offshore and AI for each L4 Activity Group.",
     staleKind: null,
     actionHref: getTowerHref(towerId, "impact-levers"),
     actionLabel: "Configure Impact Levers",
@@ -70,7 +72,7 @@ export function resolveImpactLeversGuidance(
     return {
       tier: 1,
       title:
-        "Set offshore and AI for every L3 — this tower is still on upload-default levers (use the panel below or set sliders row by row).",
+        "Set offshore and AI for every L4 Activity Group — this tower is still on upload-default levers (use the panel below or set sliders row by row).",
       staleKind: "dials",
       actionHref: "#stale-dials-panel",
       actionLabel: "Jump to dial tools",
@@ -107,7 +109,7 @@ export function resolveAiInitiativesGuidance(
   if (stale.missingL4ForRefresh) {
     return {
       tier: 1,
-      title: `Open ${towerName} on the Capability Map and run Generate L4 for blank rows — curation cannot refresh until L4 exists.`,
+      title: `Open ${towerName} on the Capability Map and run Generate L5 Activities for blank L4 Activity Group rows — curation cannot refresh until L5 Activities exist.`,
       staleKind: "curation",
       actionHref: getTowerHref(towerId, "capability-map"),
       actionLabel: "Open Capability Map",
@@ -116,7 +118,7 @@ export function resolveAiInitiativesGuidance(
   if (stale.initiativesStale) {
     return {
       tier: 1,
-      title: "Run Refresh AI guidance so the roadmap and dollars match your latest L2–L4 list.",
+      title: "Run Refresh AI guidance so the roadmap and dollars match your latest L2–L5 list.",
       staleKind: "curation",
       actionHref: "#stale-curation-panel",
       actionLabel: "Jump to refresh",
@@ -125,7 +127,7 @@ export function resolveAiInitiativesGuidance(
   if (pendingReviewCount > 0) {
     return {
       tier: 2,
-      title: `Validate or reject each L4 below — ${pendingReviewCount} still pending in the header chip.`,
+      title: `Validate or reject each L5 Activity below — ${pendingReviewCount} still pending in the header chip.`,
       staleKind: null,
     };
   }
@@ -141,7 +143,7 @@ export function hubCapabilityMapLine(hasAnyTowerData: boolean): ResolvedJourneyG
   if (!hasAnyTowerData) {
     return {
       tier: 0,
-      title: "Load the illustrative sample or pick a tower below, then upload a map and run Generate L4 on any blank L3.",
+      title: "Load the illustrative sample or pick a tower below, then upload a map and run Generate L5 Activities on any blank L4 Activity Group.",
       staleKind: null,
       actionHref: "#tower-list",
       actionLabel: "Jump to towers",
@@ -216,7 +218,7 @@ export function towersPageLine(
   }
   return {
     tier: 2,
-    title: "Select a tower to read the P1 / P2 / P3 AI roadmap, agent graph, and 4-lens (work, workforce, workbench, digital core) for every named L4 initiative.",
+    title: "Select a tower to read its feasibility roster (Ship-ready vs. Investigate), agent graph, and 4-lens (work, workforce, workbench, digital core) for every named L4 initiative. Final P1 / P2 / P3 sequencing is set on the Cross-Tower AI Plan.",
     staleKind: null,
   };
 }

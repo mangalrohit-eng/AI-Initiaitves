@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowUpRight, CalendarClock } from "lucide-react";
-import type { Tower } from "@/data/types";
+import { ArrowUpRight, CalendarClock, Compass, Rocket } from "lucide-react";
+import type { Tower, Feasibility } from "@/data/types";
 import { cn, slugify } from "@/lib/utils";
-import { TIER_META, priorityTier, type Tier } from "@/lib/priority";
+import { feasibilityChip } from "@/lib/feasibilityChip";
 import { useInitiativeReviews } from "@/lib/initiatives/useInitiativeReviews";
 import type { InitiativeL3, InitiativeL4 } from "@/lib/initiatives/select";
 import type { UseInitiativeReviewsResult } from "@/lib/initiatives/useInitiativeReviews";
@@ -14,9 +14,30 @@ import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
 import { InitiativeReviewActions } from "./InitiativeReviewActions";
 
+/**
+ * Per-tower feasibility roster.
+ *
+ * Step 4 deliberately does NOT show P1/P2/P3 priority chips — program
+ * priority is owned by the cross-tower 2x2 (feasibility × parent-L4
+ * Activity Group business impact) and lives on the Cross-Tower AI Plan
+ * page. Instead, we
+ * surface the binary feasibility signal locally so a tower lead can scan
+ * for ship-ready bets vs. ones that need more investigation, and trust
+ * that the program tiering will reconcile across towers downstream.
+ */
+
 type RoadmapItem = {
   l4: InitiativeL4;
   l3: InitiativeL3;
+};
+
+type FeasibilityColumn = {
+  key: Feasibility;
+  title: string;
+  subtitle: string;
+  items: RoadmapItem[];
+  iconBg: string;
+  Icon: typeof Rocket;
 };
 
 function RoadmapCard({
@@ -105,7 +126,7 @@ function RoadmapCard({
         {l4.isPlaceholder ? (
           <span
             className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5"
-            title="AI couldn't identify L4 activities that are candidates for AI here. Regenerate the L4 list on Step 1, or reduce the AI dial for this L3 to zero on Step 2."
+            title="AI couldn't identify L5 Activities that are candidates for AI here. Regenerate the L5 Activity list on Step 1, or reduce the AI dial for this L4 Activity Group to zero on Step 2."
           >
             No AI candidates
           </span>
@@ -149,17 +170,20 @@ function RoadmapCard({
 
 export function AiRoadmap({ tower }: { tower: Tower }) {
   const { result, reviews, actions } = useInitiativeReviews(tower);
-  const grouped: Record<Tier, RoadmapItem[]> = { P1: [], P2: [], P3: [] };
+
+  const grouped: Record<Feasibility, RoadmapItem[]> = { High: [], Low: [] };
   for (const l2 of result.l2s) {
     for (const l3 of l2.l3s) {
       for (const l4 of l3.l4s) {
-        const tier = priorityTier(l4.aiPriority);
-        if (!tier) continue;
-        grouped[tier].push({ l4, l3 });
+        if (l4.isPlaceholder) continue;
+        if (!l4.feasibility) continue;
+        grouped[l4.feasibility].push({ l4, l3 });
       }
     }
   }
-  const totalAi = grouped.P1.length + grouped.P2.length + grouped.P3.length;
+
+  const totalAi = grouped.High.length + grouped.Low.length;
+
   if (totalAi === 0) {
     const { queuedRowCount, totalRowCount } = result.diagnostics;
     const allQueued = totalRowCount > 0 && queuedRowCount === totalRowCount;
@@ -168,7 +192,7 @@ export function AiRoadmap({ tower }: { tower: Tower }) {
       return (
         <div className="rounded-2xl border border-accent-amber/40 bg-accent-amber/5 px-5 py-8 text-center">
           <p className="font-display text-sm font-semibold text-forge-ink">
-            Roadmap is queued for refresh.
+            Roster is queued for refresh.
           </p>
           <p className="mt-2 text-xs leading-relaxed text-forge-subtle">
             Click{" "}
@@ -179,9 +203,9 @@ export function AiRoadmap({ tower }: { tower: Tower }) {
             <span className="font-semibold text-accent-purple-dark">
               Regenerate AI guidance
             </span>{" "}
-            if you are rescoring capabilities with an AI dial above zero without
-            changing the map. Roadmap populates once each L4 is sequenced into a
-            P1 / P2 / P3 window.
+            if you are rescoring Activity Groups with an AI dial above zero
+            without changing the map. The roster populates once each L5 Activity
+            carries a feasibility verdict.
           </p>
         </div>
       );
@@ -193,78 +217,114 @@ export function AiRoadmap({ tower }: { tower: Tower }) {
           <span className="font-semibold text-forge-body">
             Step 1 (Capability Map)
           </span>{" "}
-          and upload the tower&rsquo;s L1–L3 tree + headcount file to begin.
+          and upload the tower&rsquo;s L1–L4 hierarchy + headcount file to begin.
         </div>
       );
     }
     return (
       <div className="rounded-2xl border border-dashed border-forge-border bg-forge-well/40 px-5 py-8 text-center text-sm text-forge-subtle">
-        No L4 activities have been priority-tagged yet. Open{" "}
+        No L5 Activities have been scored for feasibility yet. Open{" "}
         <span className="font-semibold text-forge-body">
           Step 2 (Configure Impact Levers)
         </span>{" "}
-        and raise the AI dial on the capabilities you want sequenced into the
-        roadmap.
+        and raise the AI dial on the Activity Groups you want surfaced into
+        the cross-tower 2x2.
       </div>
     );
   }
 
+  const columns: FeasibilityColumn[] = [
+    {
+      key: "High",
+      title: "Ship-ready",
+      subtitle:
+        "High feasibility — proven Versant platform / pattern; first-half-year ship.",
+      items: grouped.High,
+      iconBg: "from-accent-teal to-emerald-500",
+      Icon: Rocket,
+    },
+    {
+      key: "Low",
+      title: "Investigate",
+      subtitle:
+        "Lower feasibility — needs platform stand-up, deeper integration, or change management.",
+      items: grouped.Low,
+      iconBg: "from-slate-500 to-slate-700",
+      Icon: Compass,
+    },
+  ];
+
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      {(Object.keys(TIER_META) as Tier[]).map((tier) => {
-        const meta = TIER_META[tier];
-        const items = grouped[tier];
-        const Icon = meta.icon;
-        return (
-          <div
-            key={tier}
-            className={cn("flex flex-col rounded-2xl border p-4", meta.ring)}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+    <div className="space-y-3">
+      <p className="rounded-xl border border-forge-border bg-forge-well/40 px-3 py-2 text-[11px] leading-relaxed text-forge-subtle">
+        <span className="font-mono text-accent-purple-dark">&gt;</span>{" "}
+        Per-tower roster groups by{" "}
+        <span className="font-semibold text-forge-body">feasibility</span>.
+        Final program priority (P1 / P2 / P3) is set on the{" "}
+        <span className="font-semibold text-forge-body">Cross-Tower AI Plan</span>{" "}
+        via the feasibility × business-impact 2x2 — that view reconciles
+        sequencing across all 13 towers.
+      </p>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {columns.map((col) => {
+          const chip = feasibilityChip(col.key);
+          const Icon = col.Icon;
+          return (
+            <div
+              key={col.key}
+              className="flex flex-col rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br text-white shadow-sm",
+                      col.iconBg,
+                    )}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div>
+                    <div className="font-display text-sm font-semibold text-forge-ink">
+                      {col.title}
+                    </div>
+                    <div className="text-[11px] text-forge-subtle">
+                      {col.subtitle}
+                    </div>
+                  </div>
+                </div>
                 <span
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br text-white shadow-sm",
-                    meta.gradient,
+                    "rounded-full border px-2 py-0.5 text-[10px] font-mono tabular-nums",
+                    chip.badge,
                   )}
                 >
-                  <Icon className="h-4 w-4" />
+                  {col.items.length}
                 </span>
-                <div>
-                  <div className="font-display text-sm font-semibold text-forge-ink">
-                    {tier} — {meta.label}
-                  </div>
-                  <div className="text-[11px] text-forge-subtle">
-                    {meta.window}
-                  </div>
-                </div>
               </div>
-              <div className="rounded-full border border-forge-border bg-forge-surface px-2 py-0.5 text-[11px] font-mono text-forge-body">
-                {items.length}
-              </div>
-            </div>
 
-            <div className="mt-4 space-y-3">
-              {items.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-forge-border bg-forge-surface/60 p-4 text-center text-xs text-forge-hint">
-                  No activities sequenced into this window.
-                </div>
-              ) : (
-                items.map((item, i) => (
-                  <RoadmapCard
-                    key={item.l4.id}
-                    tower={tower}
-                    item={item}
-                    index={i}
-                    review={reviews[item.l4.id]}
-                    actions={actions}
-                  />
-                ))
-              )}
+              <div className="mt-4 space-y-3">
+                {col.items.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-forge-border bg-forge-surface/60 p-4 text-center text-xs text-forge-hint">
+                    No activities in this band yet.
+                  </div>
+                ) : (
+                  col.items.map((item, i) => (
+                    <RoadmapCard
+                      key={item.l4.id}
+                      tower={tower}
+                      item={item}
+                      index={i}
+                      review={reviews[item.l4.id]}
+                      actions={actions}
+                    />
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

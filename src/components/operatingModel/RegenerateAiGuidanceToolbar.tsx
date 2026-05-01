@@ -57,9 +57,10 @@ function applyRegenerateToast(toast: ReturnType<typeof useToast>, summary: RunSu
 }
 
 /**
- * Secondary Step 4 action: re-run AI curation for all L3 rows that appear on
- * AI Initiatives (modeled AI dial &gt; 0) with L4 activities, without requiring
- * a new capability map upload. Lives below StaleCurationBanner, above sub-tabs.
+ * Secondary Step 4 action: re-run AI curation for all L4 Activity Group rows
+ * that appear on AI Initiatives (modeled AI dial &gt; 0) with L5 Activities,
+ * without requiring a new capability map upload. Lives below StaleCurationBanner,
+ * above sub-tabs.
  */
 export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
   const toast = useToast();
@@ -71,7 +72,7 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
     return subscribe("assessProgram", () => setProgram(getAssessProgram()));
   }, []);
 
-  const rows = program.towers[towerId]?.l3Rows ?? [];
+  const rows = program.towers[towerId]?.l4Rows ?? [];
   const inFlight = hasInFlightRows(rows);
   const { rowIds } = regenerableRowsForStep4(program, towerId);
 
@@ -88,7 +89,7 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
       toast.error({
         title: "Nothing to regenerate",
         description:
-          "No capabilities with AI dial above zero and L4 activities. Open Configure Impact Levers to raise the dial.",
+          "No Activity Groups with AI dial above zero and L5 Activities. Open Configure Impact Levers to raise the dial.",
       });
       setConfirmOpen(false);
       return;
@@ -96,8 +97,8 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
     const plan = chunkRowsForCurationApi(freshRows);
     if (plan.oversizeRowIds.length > 0) {
       toast.error({
-        title: "Some capabilities exceed the batch limit",
-        description: `${plan.oversizeRowIds.length} L3 row(s) have more than 100 L4 activities and cannot be rescored in one request. Shorten the L4 list on Step 1 (Capability Map) or split the row.`,
+        title: "Some Activity Groups exceed the batch limit",
+        description: `${plan.oversizeRowIds.length} Activity Group row(s) have more than 100 L5 Activities and cannot be rescored in one request. Shorten the L5 Activity list on Step 1 (Capability Map) or split the row.`,
       });
     }
     if (plan.batches.length === 0) {
@@ -141,7 +142,7 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
           title={
             inFlight
               ? "Curation in progress"
-              : "Re-run AI eligibility and priority scoring for capabilities with AI dial above zero"
+              : "Re-run AI eligibility and priority scoring for Activity Groups with AI dial above zero"
           }
           className={cn(
             "inline-flex items-center gap-2 rounded-lg border border-accent-purple/50 bg-transparent px-4 py-2 text-sm font-semibold text-forge-body transition",
@@ -174,13 +175,13 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
             <p>
               This re-runs Versant-grounded AI eligibility and priority scoring for{" "}
               <span className="font-mono text-accent-purple-dark">{rowIds.length}</span>{" "}
-              capabilities where the AI dial is above zero and L4 activities
-              exist. Cached L4 verdicts for those rows are replaced.
+              Activity Groups where the AI dial is above zero and L5 Activities
+              exist. Cached L5 verdicts for those rows are replaced.
             </p>
             <p>
               When the amber banner shows a capability map change, use{" "}
               <span className="font-semibold text-forge-ink">Refresh AI guidance</span>{" "}
-              first. Regenerate skips capabilities at zero AI dial — open{" "}
+              first. Regenerate skips Activity Groups at zero AI dial — open{" "}
               <Link
                 href={impactLeversHref}
                 className="font-semibold text-accent-purple-dark underline-offset-2 hover:underline"

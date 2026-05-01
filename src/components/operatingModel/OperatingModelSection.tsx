@@ -16,7 +16,17 @@ export function OperatingModelSection({
 }) {
   const { result, reviews, actions } = useInitiativeReviews(tower);
 
-  const totalCapabilities = result.l2s.reduce((s, l2) => s + l2.l3s.length, 0);
+  // V5 hierarchy counters: rows in `l2.l3s` are workforce rows = L4 Activity
+  // Groups. Distinct L3 Job Families are inferred by deduping the row's
+  // parent l3.id. Curated counts come straight from the selector.
+  const totalActivityGroups = result.l2s.reduce(
+    (s, l2) => s + l2.l3s.length,
+    0,
+  );
+  const totalJobFamilies = result.l2s.reduce(
+    (s, l2) => s + new Set(l2.l3s.map((r) => r.l3.id)).size,
+    0,
+  );
   const totalCurated = result.l2s.reduce((s, l2) => s + l2.curatedL4Count, 0);
   const totalPending = result.l2s.reduce(
     (s, l2) => s + l2.placeholderL4Count,
@@ -29,28 +39,33 @@ export function OperatingModelSection({
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="font-display text-xl font-semibold text-forge-ink">
-              L2–L4 capability tree
+              L2–L5 capability hierarchy
             </h2>
             <p className="mt-1 text-sm text-forge-subtle">
               <span className="font-medium text-forge-ink">
                 {result.l2s.length}
               </span>{" "}
-              work {result.l2s.length === 1 ? "category" : "categories"} ·{" "}
+              Job {result.l2s.length === 1 ? "Grouping" : "Groupings"} ·{" "}
               <span className="font-medium text-forge-ink">
-                {totalCapabilities}
+                {totalJobFamilies}
               </span>{" "}
-              capabilities in scope ·{" "}
+              Job {totalJobFamilies === 1 ? "Family" : "Families"} ·{" "}
+              <span className="font-medium text-forge-ink">
+                {totalActivityGroups}
+              </span>{" "}
+              Activity {totalActivityGroups === 1 ? "Group" : "Groups"} in
+              scope ·{" "}
               <span className="font-medium text-accent-purple-dark">
                 {totalCurated}
               </span>{" "}
-              AI-eligible activities
+              AI-eligible L5 Activit{totalCurated === 1 ? "y" : "ies"}
               {totalPending > 0 ? (
                 <>
                   {" "}
                   ·{" "}
                   <span
                     className="text-forge-body"
-                    title="Capabilities where AI couldn't identify candidate L4 activities. Expand an L3 row for remediation links."
+                    title="Activity Groups where AI couldn't identify candidate L5 Activities. Expand an Activity Group card for remediation links."
                   >
                     {totalPending} need manual review
                   </span>
@@ -59,9 +74,10 @@ export function OperatingModelSection({
             </p>
           </div>
           <p className="max-w-xl text-xs text-forge-subtle">
-            L2 sub-functions include every L3 with its AI dial above zero on Step
-            2. Levels L2–L4 are labeled for traceability with Step 1 and the
-            Priority roadmap tab.
+            Job Families (L3) bucket every Activity Group (L4) with its AI
+            dial above zero on Step 2. Expand an L4 Activity Group card for
+            its L5 Activities. Levels L3–L5 are labeled for traceability
+            with Step 1 and the Feasibility roster tab.
           </p>
         </div>
 
@@ -85,12 +101,12 @@ export function OperatingModelSection({
           <div className="flex items-end justify-between gap-3">
             <div>
               <h3 className="font-display text-lg font-semibold text-forge-ink">
-                AI transformation roadmap
+                Feasibility roster
               </h3>
               <p className="mt-1 text-sm text-forge-subtle">
-                Every AI-eligible L4 activity across the tower, sequenced by
-                priority. Each card links to the full four-lens initiative
-                detail or the lightweight pre/post brief.
+                Every AI-eligible L5 Activity across the tower, grouped by
+                feasibility. Final program priority lives on the Cross-Tower
+                AI Plan via the feasibility × business-impact 2x2.
               </p>
             </div>
           </div>
@@ -112,8 +128,9 @@ export function OperatingModelSection({
  *                       Refresh CTA; this pane just confirms why the panel
  *                       is empty so the user doesn't misread the state as
  *                       "no AI opportunity."
- *  - `dials-at-zero`  — rows exist and were curated, but no L3 has its AI
- *                       dial > 0. Direct to Step 2 to raise dials.
+ *  - `dials-at-zero`  — rows exist and were curated, but no L4 Activity
+ *                       Group has its AI dial > 0. Direct to Step 2 to
+ *                       raise dials.
  */
 function EmptyL2State({
   queuedRowCount,
@@ -137,8 +154,8 @@ function EmptyL2State({
           AI initiatives are queued for refresh.
         </p>
         <p className="mt-2 text-xs leading-relaxed text-forge-subtle">
-          The capability map was just uploaded — every L3 is waiting for a
-          fresh AI eligibility scoring. Click{" "}
+          The capability map was just uploaded — every Activity Group is
+          waiting for a fresh AI eligibility scoring. Click{" "}
           <span className="font-semibold text-accent-amber">
             Refresh AI guidance
           </span>{" "}
@@ -154,17 +171,17 @@ function EmptyL2State({
         <span className="font-semibold text-forge-body">
           Step 1 (Capability Map)
         </span>{" "}
-        and upload the tower&rsquo;s L1–L3 tree + headcount file to start.
+        and upload the tower&rsquo;s L1–L4 hierarchy + headcount file to start.
       </div>
     );
   }
   return (
     <div className="rounded-2xl border border-dashed border-forge-border bg-forge-well/40 px-5 py-8 text-center text-sm text-forge-subtle">
-      No L3 capability has an AI dial above zero on this tower. Open{" "}
+      No L4 Activity Group has an AI dial above zero on this tower. Open{" "}
       <span className="font-semibold text-forge-body">
         Step 2 (Configure Impact Levers)
       </span>{" "}
-      and raise the AI dial on the capabilities you want to bring into the
+      and raise the AI dial on the Activity Groups you want to bring into the
       AI Initiatives view.
     </div>
   );

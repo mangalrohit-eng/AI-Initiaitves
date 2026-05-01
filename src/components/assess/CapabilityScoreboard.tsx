@@ -29,11 +29,11 @@ type Props = {
 /**
  * Top-of-page metrics strip for the Capability Map module.
  *
- * Program variant — used on the hub: sums L1/L2/L3/L4 across contributing
+ * Program variant — used on the hub: sums L1/L2/L3/L4/L5 across contributing
  * towers and shows confirmation progress.
  *
  * Tower variant — used on each tower page: shows the same counts for that
- * tower plus footprint coverage (how many L3 capabilities have any headcount
+ * tower plus footprint coverage (how many L4 Activity Groups have any headcount
  * or spend).
  */
 export function CapabilityScoreboard(props: Props) {
@@ -91,13 +91,13 @@ export function CapabilityScoreboard(props: Props) {
         />
         <Tile
           icon={<ListTree className="h-3.5 w-3.5" />}
-          label="L2 capabilities"
+          label="Job Groupings"
           value={counts.l2}
-          subtle="across program"
+          subtle="L2 across program"
         />
         <Tile
           icon={<Network className="h-3.5 w-3.5" />}
-          label="L3 + L4 nodes"
+          label="L3 / L4 / L5 nodes"
           value={
             <span className="inline-flex items-baseline gap-1.5">
               <span>{counts.l3.toLocaleString()}</span>
@@ -105,13 +105,16 @@ export function CapabilityScoreboard(props: Props) {
               <span className="text-forge-hint">·</span>
               <span>{counts.l4.toLocaleString()}</span>
               <span className="text-xs font-medium text-forge-hint">L4</span>
+              <span className="text-forge-hint">·</span>
+              <span>{counts.l5.toLocaleString()}</span>
+              <span className="text-xs font-medium text-forge-hint">L5</span>
             </span>
           }
-          subtle="in current scope"
+          subtle="Job Family · Activity Group · Activity"
         />
         <Tile
           icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-          label="L1–L3 confirmed"
+          label="L1–L4 confirmed"
           value={`${completed}/${towers.length}`}
           subtle={
             leadSignOff > 0
@@ -144,28 +147,28 @@ export function CapabilityScoreboard(props: Props) {
       />
       <Tile
         icon={<ListTree className="h-3.5 w-3.5" />}
-        label="L2 + L3 capabilities"
+        label="Job Family · Activity Group"
         value={
           <span className="inline-flex items-baseline gap-1.5">
-            <span>{counts.l2}</span>
-            <span className="text-xs font-medium text-forge-hint">L2</span>
-            <span className="text-forge-hint">·</span>
             <span>{counts.l3}</span>
             <span className="text-xs font-medium text-forge-hint">L3</span>
+            <span className="text-forge-hint">·</span>
+            <span>{counts.l4}</span>
+            <span className="text-xs font-medium text-forge-hint">L4</span>
           </span>
         }
-        subtle="assessed unit"
+        subtle="Job Family · Activity Group"
       />
       <Tile
         icon={<Network className="h-3.5 w-3.5" />}
-        label="L4 activities"
-        value={counts.l4}
+        label="L5 Activities"
+        value={counts.l5}
         subtle="display only"
       />
       <Tile
         icon={<CheckCircle2 className="h-3.5 w-3.5" />}
         label="Headcount coverage"
-        value={`${coverage.confirmedL3s}/${coverage.totalL3s || counts.l3}`}
+        value={`${coverage.confirmedL3s}/${coverage.totalL3s || counts.l4}`}
         subtle={coverage.confirmedL3s > 0 ? "with headcount or spend" : "upload a capability map"}
         accent={coverage.confirmedL3s > 0 ? "green" : undefined}
       />

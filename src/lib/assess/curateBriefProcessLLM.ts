@@ -1,6 +1,14 @@
 /**
  * Server-only OpenAI helper: full `Process` JSON for the lazy LLM brief route.
- * Caches on `L4Item.generatedProcess`. See `curate-brief` API route for fallback.
+ * Caches on `L4Item.generatedProcess` (the alias retained on the V5 row that
+ * actually points at an L5 Activity record). See `curate-brief` API route for
+ * fallback.
+ *
+ * 5-layer context: under `AssessProgramV5` the AI initiative attaches at L5
+ * Activity (formerly L4). The `l4Name` / `l4Id` fields on `CurateBriefLLMInput`
+ * are kept verbatim for back-compat but semantically describe the **L5
+ * Activity** being briefed. The new optional `l4` field carries the parent
+ * **L4 Activity Group** so the LLM has both rungs of context.
  */
 
 import type {
@@ -46,10 +54,25 @@ export const TOWER_BRAND_HINT: Record<TowerId, string> = {
 
 export type CurateBriefLLMInput = {
   towerId: TowerId;
+  /** L2 Job Grouping (5-layer map). */
   l2: string;
+  /** L3 Job Family (5-layer map). */
   l3: string;
+  /**
+   * L4 Activity Group — parent of the L5 Activity being briefed. Optional
+   * for back-compat with legacy V4 callers; when absent the LLM relies on
+   * the L3 / L4 (= V4 leaf) labels alone.
+   */
+  l4?: string;
+  /**
+   * Display label for the leaf being briefed. Under V5 this is the **L5
+   * Activity** name; field name preserved for wire-format back-compat.
+   */
   l4Name: string;
-  /** Stable L4 id — used for synthetic `Process.id`. */
+  /**
+   * Stable id for the leaf being briefed (V5: L5 Activity id) — used for
+   * synthetic `Process.id`.
+   */
   l4Id: string;
   aiRationale: string;
   agentOneLine?: string;
@@ -738,6 +761,10 @@ function buildSystemPrompt(towerId: TowerId): string {
   return [
     "You are a senior Versant operating partner. Output ONE JSON object only (the root fields of a 'Process' initiative). Every string must be Versant-specific. Declarative voice. No emojis. No hedging (no 'may', 'could', 'leverage AI').",
     "",
+    "Hierarchy context (5-layer Versant capability map):",
+    "  L1 Function > L2 Job Grouping > L3 Job Family > L4 Activity Group > L5 Activity.",
+    "  The brief you author IS the deep-dive for ONE L5 Activity (the 'leaf' in the user prompt). Anchor the work, workforce, workbench, and digital-core lenses in that L5 Activity, with the L4 Activity Group as immediate parent context.",
+    "",
     "Content policy (strict):",
     "  - Do not state dollar amounts, revenue, or Versant-specific financial figures unless they appear verbatim in the user prompt. Use 'TBD — subject to discovery' for unknowns.",
     "  - Do not present operational numbers (days, %, error rates, touchpoint counts) as facts about **this** client. If you use numbers in work.pre / work.post (avgCycleTime, errorRate, step durations, touchpoints), prefix or suffix so they read as **illustrative / industry-typical**, not a Versant forecast — e.g. 'Indicative: …' or 'Example range (not client-specific)'.",
@@ -756,12 +783,21 @@ function buildSystemPrompt(towerId: TowerId): string {
 }
 
 function buildUserPrompt(input: CurateBriefLLMInput): string {
+  // Versant capability maps are 5 layers:
+  //   L1 Function > L2 Job Grouping > L3 Job Family > L4 Activity Group > L5 Activity
+  // The leaf being briefed is the **L5 Activity** (carried on the `l4Name` /
+  // `l4Id` fields for wire back-compat). When the optional `l4` Activity
+  // Group context is supplied, surface it explicitly so the model anchors
+  // the brief in the right rung of the hierarchy.
+  const hasL4 = typeof input.l4 === "string" && input.l4.trim().length > 0;
+  const leafLabel = hasL4 ? "L5 Activity" : "leaf";
   return [
-    "Author a complete Process for this L4. Operational metrics in work states must be labeled indicative / not client-specific if numeric.",
-    `l4Id: ${input.l4Id} (set Process.id to something stable like "llm-${input.l4Id}" or a slug derived from the name).`,
-    `L2: ${truncate(input.l2)}`,
-    `L3: ${truncate(input.l3)}`,
-    `L4 name: ${truncate(input.l4Name, 200)}`,
+    `Author a complete Process for this ${leafLabel}. Operational metrics in work states must be labeled indicative / not client-specific if numeric.`,
+    `Stable id: ${input.l4Id} (set Process.id to something stable like "llm-${input.l4Id}" or a slug derived from the name).`,
+    `L2 Job Grouping: ${truncate(input.l2)}`,
+    `L3 Job Family: ${truncate(input.l3)}`,
+    hasL4 ? `L4 Activity Group: ${truncate(input.l4 as string, 200)}` : "",
+    `${hasL4 ? "L5 Activity" : "L4"} name (the leaf being briefed): ${truncate(input.l4Name, 200)}`,
     `Card rationale: ${truncate(input.aiRationale, 400)}`,
     input.agentOneLine ? `Agent one-liner: ${truncate(input.agentOneLine, 280)}` : "",
     input.primaryVendor ? `Primary vendor: ${input.primaryVendor}` : "",

@@ -32,7 +32,7 @@ export function ScreenGuidanceBar({
   onConfirm?: () => void;
   onUnlock?: () => void;
   /**
-   * When the tower lead has marked L1–L3 as reviewed (lock). Shows an
+   * When the tower lead has marked L1–L4 as reviewed (lock). Shows an
    * secondary Unlock control on the Capability Map.
    */
   mapStepLocked?: boolean;

@@ -36,7 +36,7 @@ type RowStatus = "not-started" | "in-progress" | "map-confirmed" | "complete";
 
 function rowStatus(program: AssessProgramV2, towerId: TowerId): RowStatus {
   const t = program.towers[towerId];
-  if (!t || !t.l3Rows.length) return "not-started";
+  if (!t || !t.l4Rows.length) return "not-started";
   if (t.status === "complete") return "complete";
   if (isCapabilityMapJourneyStepDone(t)) return "map-confirmed";
   return "in-progress";
@@ -45,7 +45,7 @@ function rowStatus(program: AssessProgramV2, towerId: TowerId): RowStatus {
 function statusCopy(s: RowStatus): { label: string; className: string } {
   if (s === "complete") return { label: "Reviewed by Tower Lead", className: "text-accent-green" };
   if (s === "map-confirmed")
-    return { label: "L1–L3 confirmed", className: "text-accent-green" };
+    return { label: "L1–L4 confirmed", className: "text-accent-green" };
   if (s === "in-progress")
     return { label: "Pending map confirmation", className: "text-accent-amber" };
   return { label: "Not started", className: "text-forge-subtle" };
@@ -54,9 +54,12 @@ function statusCopy(s: RowStatus): { label: string; className: string } {
 /**
  * Step 1 hub — Capability Map.
  *
- * Confirm the L1 to L4 tree and the headcount per tower. The hub
- * shows the program-wide capability scoreboard at the top, a focused "next
- * tower" CTA, and a tight tower list. Templates / backup / admin re-seed have
+ * Confirm the 5-layer L1–L5 hierarchy and the headcount per tower. Tower
+ * leads upload L2/L3/L4 (Job Grouping / Job Family / Activity Group) plus
+ * headcount and the LLM generates the L5 Activity list underneath each
+ * Activity Group. The hub shows the program-wide capability scoreboard at
+ * the top, a focused "next tower" CTA, and a tight tower list. Templates
+ * / backup / admin re-seed have
  * been demoted to `ProgramToolsDrawer` at the bottom so the page stays
  * focused on the assessment loop.
  */
@@ -171,7 +174,7 @@ export function CapabilityMapHubClient() {
             &gt; Towers ({towers.length}){minePicked ? " · my towers first" : ""}
           </h2>
           <span className="font-mono text-[11px] tabular-nums text-forge-hint">
-            {mapConfirmed} L1–L3 confirmed · {inProgress} in progress · {notStarted} not started
+            {mapConfirmed} L1–L4 confirmed · {inProgress} in progress · {notStarted} not started
           </span>
         </div>
         <ul

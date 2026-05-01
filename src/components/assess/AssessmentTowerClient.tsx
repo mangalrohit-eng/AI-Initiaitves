@@ -7,7 +7,7 @@ import { PageShell } from "@/components/PageShell";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { TowerJourneyStepper } from "@/components/layout/TowerJourneyStepper";
 import { Term } from "@/components/help/Term";
-import { L3LeverRow } from "@/components/assess/L3LeverRow";
+import { L4LeverRow } from "@/components/assess/L3LeverRow";
 import { AssessmentScoreboard } from "@/components/assess/AssessmentScoreboard";
 import { StaleDialsBanner } from "@/components/assess/StaleDialsBanner";
 import { ScreenGuidanceBar } from "@/components/guidance/ScreenGuidanceBar";
@@ -41,8 +41,9 @@ type Props = { towerId: TowerId; towerName: string };
 /**
  * Tower-scoped Configure Impact Levers page. Step 2 of the assessment:
  *
- *   - One slider card per L3 capability (offshore + AI sliders, live modeled $).
- *     Tower leads dial impact at L3 granularity — that's where the math runs.
+ *   - One slider card per L4 Activity Group (offshore + AI sliders, live
+ *     modeled $). Tower leads dial impact at L4 Activity Group granularity
+ *     — that's where the math runs in the 5-layer V5 capability map.
  *   - Top-of-page scoreboard (pool, weighted dials, modeled $).
  *   - Single tower-lead sign-off button to anchor the impact estimate summary.
  *
@@ -72,13 +73,13 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
     return arr;
   })();
 
-  /** Patch a single L3 row by id. */
+  /** Patch a single L4 Activity Group row by id. */
   const patchL3 = React.useCallback(
     (rowId: string, patch: Partial<L3WorkforceRow>) => {
       const cur = getAssessProgram().towers[towerId];
       if (!cur) return;
       setTowerAssess(towerId, {
-        l3Rows: cur.l3Rows.map((r) => (r.id === rowId ? { ...r, ...patch } : r)),
+        l4Rows: cur.l4Rows.map((r) => (r.id === rowId ? { ...r, ...patch } : r)),
         status: cur.status === "empty" ? "data" : cur.status,
       });
     },
@@ -96,14 +97,20 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
   const applyDefaults = React.useCallback(
     async (mode: "fillBlanks" | "overwriteAll"): Promise<ApplyDefaultsOutcome> => {
       if (!rows.length) throw new Error("Load a capability map & headcount first.");
-      const apiInputs = rows.map((r) => ({ l2: r.l2, l3: r.l3 }));
+      // Dials live on L4 (Activity Group). Send the full L2/L3/L4 path so
+      // the LLM has both Job Family and Activity Group context.
+      const apiInputs = rows.map((r) => ({
+        l2: r.l2,
+        l3: r.l3,
+        l4: r.l4,
+      }));
       const apiRes = await clientInferTowerDefaults(towerId, apiInputs);
 
       // `inferred` carries one tuple per row: the new dial values plus the
       // optional Versant-grounded rationales (LLM only). Heuristic and "wrong
       // length" fallbacks substitute the deterministic `rowStarterRationale`
       // text and tag the row with `dialsRationaleSource: "heuristic"` so the
-      // L3LeverRow chip reads "heuristic" — never "AI-scored".
+      // L4LeverRow chip reads "heuristic" — never "AI-scored".
       let source: InferDefaultsSource;
       let warning: string | undefined;
       let inferred: {
@@ -191,7 +198,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
 
       const w = weightedTowerLevers(nextRows, tState.baseline, global);
       setTowerAssess(towerId, {
-        l3Rows: nextRows,
+        l4Rows: nextRows,
         baseline: {
           baselineOffshorePct: Math.round(w.offshorePct),
           baselineAIPct: Math.round(w.aiPct),
@@ -225,7 +232,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
   const overwriteAllOp = useAsyncOp<ApplyDefaultsOutcome, []>({
     run: () => applyDefaults("overwriteAll"),
     messages: {
-      loadingTitle: "Re-scoring every L3...",
+      loadingTitle: "Re-scoring every L4 Activity Group...",
       loadingDescription: "Trying AI inference, falling back to heuristic if unavailable.",
       successTitle: ({ changedRows, changedCells }) =>
         `Re-seeded ${changedRows} row${changedRows === 1 ? "" : "s"} (${changedCells} cell${changedCells === 1 ? "" : "s"})`,
@@ -262,7 +269,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
     }
   };
 
-  // Reset both overrides on a single L3 row back to the tower baseline.
+  // Reset both overrides on a single L4 Activity Group row back to the tower baseline.
   const resetOverridesForRow = (row: L3WorkforceRow) => {
     patchL3(row.id, {
       offshoreAssessmentPct: undefined,
@@ -312,8 +319,8 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-forge-body">
               Dial <Term termKey="offshore dial">offshore</Term> and{" "}
-              <Term termKey="ai impact dial">AI impact</Term> per L3 capability. The
-              impact updates live against each capability&apos;s annual pool.
+              <Term termKey="ai impact dial">AI impact</Term> per L4 Activity Group.
+              The impact updates live against each Activity Group&apos;s annual pool.
             </p>
           </div>
           <Link
@@ -384,9 +391,9 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
                   onClick={() => setReseedDialogOpen(true)}
                   disabled={overwriteAllOp.state === "loading"}
                   className="rounded-md border border-forge-border px-2.5 py-1 text-xs text-forge-body hover:border-accent-purple/30 disabled:opacity-60"
-                  title="Re-score every L3 from scratch (replaces explicit overrides)"
+                  title="Re-score every Activity Group from scratch (replaces explicit overrides)"
                 >
-                  {overwriteAllOp.state === "loading" ? "Re-scoring..." : "Re-score every L3"}
+                  {overwriteAllOp.state === "loading" ? "Re-scoring..." : "Re-score every Activity Group"}
                 </button>
               </div>
             </div>
@@ -394,7 +401,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
             <div className="mt-5 space-y-2">
               {rows.map((r) => (
                 <div key={r.id} className="group">
-                  <L3LeverRow
+                  <L4LeverRow
                     row={r}
                     towerId={towerId}
                     baseline={tState.baseline}
@@ -407,7 +414,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
                       onClick={() => resetOverridesForRow(r)}
                       className="underline-offset-2 hover:text-forge-subtle hover:underline"
                     >
-                      Clear both overrides on this L3
+                      Clear both overrides on this Activity Group
                     </button>
                   </div>
                 </div>
@@ -490,10 +497,10 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
           setReseedDialogOpen(false);
           await overwriteAllOp.fire();
         }}
-        title={`Re-apply starter defaults to every L3 in ${towerName}?`}
+        title={`Re-apply starter defaults to every L4 Activity Group in ${towerName}?`}
         description={
           <>
-            Every L3&apos;s offshore% and AI% will be replaced. Explicit overrides will be lost.
+            Every Activity Group&apos;s offshore% and AI% will be replaced. Explicit overrides will be lost.
           </>
         }
         confirmLabel="Yes, replace"
@@ -607,7 +614,7 @@ function TowerLeadSignoff({
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-forge-body">
             {isComplete
               ? `${towerName} is anchored in the impact estimate. Reopen anytime if the offshore or AI dials need to change.`
-              : `Once you've reviewed and adjusted the offshore and AI dials per L3 for ${towerName}, mark the tower reviewed. The impact estimate locks your roll-up and the AI Initiatives handoff appears below.`}
+              : `Once you've reviewed and adjusted the offshore and AI dials per L4 Activity Group for ${towerName}, mark the tower reviewed. The impact estimate locks your roll-up and the AI Initiatives handoff appears below.`}
           </p>
         </div>
         <div className="flex flex-shrink-0 items-center">

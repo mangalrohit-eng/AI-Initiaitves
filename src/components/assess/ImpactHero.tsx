@@ -158,7 +158,7 @@ export function ImpactHero({
             )
           ) : (
             <p className="mt-2 max-w-md text-sm text-forge-subtle">
-              Confirm the capability map, set headcount, and dial offshore + AI per L3 — the
+              Confirm the capability map, set headcount, and dial offshore + AI per L4 Activity Group — the
               impact lights up here as you go.
             </p>
           )}

@@ -92,12 +92,29 @@ export type WaveNumber = 1 | 2 | 3;
 export type Tier = "HIGH" | "MEDIUM" | "LOW";
 export type TsaTag = "Hr-Payroll" | "Tech-Infra" | "Finance" | "None";
 
-export type OffshoreL3Row = {
+/**
+ * One assessment-row entry in the Step-5 Offshore Plan view.
+ *
+ * Under the 5-layer capability map (`AssessProgramV5`) one row corresponds to
+ * an L4 Activity Group (formerly an L3 Capability under V4). The type name
+ * mirrors the rung being classified: `OffshoreL4Row`. The historic
+ * `OffshoreL3Row` alias is kept for back-compat with consumers that haven't
+ * been renamed yet.
+ */
+export type OffshoreL4Row = {
   rowId: string;
   towerId: TowerId;
   towerName: string;
+  /** L2 Job Grouping. */
   l2: string;
+  /** L3 Job Family. */
   l3: string;
+  /**
+   * L4 Activity Group — the row being classified into a lane. Optional only
+   * because legacy V4 programs hydrated through migration may transiently
+   * leave this blank; in practice it is always populated for V5 programs.
+   */
+  l4: string;
   /** Headcount lens — the leadership-facing answer. */
   todayFteOnshore: number;
   todayFteOffshore: number;
@@ -153,9 +170,19 @@ export type OffshoreTowerSummary = {
   carveOutFlags: CarveOutFlag[];
   recommendedScope: string;
   retainedSpineSummary: string;
-  /** All L3 rows in this tower, classified — drives the Scope-by-tower drawer. */
-  rows: OffshoreL3Row[];
+  /**
+   * All L4 Activity Group rows in this tower, classified — drives the
+   * Scope-by-tower drawer. Field name preserved for API stability; under
+   * V5 each entry is an `OffshoreL4Row`.
+   */
+  rows: OffshoreL4Row[];
 };
+
+/**
+ * @deprecated Renamed to `OffshoreL4Row` after the 5-layer migration. Re-
+ * exported as an alias so existing imports keep compiling during cutover.
+ */
+export type OffshoreL3Row = OffshoreL4Row;
 
 export type OffshoreWaveBucket = {
   wave: WaveNumber;
@@ -342,7 +369,7 @@ export function selectOffshorePlan(
   for (const tower of towers) {
     const towerId = tower.id as TowerId;
     const state = program.towers[towerId];
-    if (!state || state.l3Rows.length === 0) continue;
+    if (!state || state.l4Rows.length === 0) continue;
 
     const baseline = state.baseline;
     const towerDefault = TOWER_DEFAULT_CARVE_OUT[towerId];
@@ -357,9 +384,9 @@ export function selectOffshorePlan(
     let towerPool = 0;
     let towerMovableSpend = 0;
     let towerOffshoreUsd = 0;
-    const rows: OffshoreL3Row[] = [];
+    const rows: OffshoreL4Row[] = [];
 
-    for (const r of state.l3Rows) {
+    for (const r of state.l4Rows) {
       const classification = classifyRow(r, towerDefault, llmLanes);
       const destination = chooseDestination(
         classification.carveOut,
@@ -394,12 +421,13 @@ export function selectOffshorePlan(
       const retainedFte = Math.max(0, r.fteOnshore - movableFte);
       const retainedCtr = Math.max(0, r.contractorOnshore - movableCtr);
 
-      const row: OffshoreL3Row = {
+      const row: OffshoreL4Row = {
         rowId: r.id,
         towerId,
         towerName: tower.name,
         l2: r.l2,
         l3: r.l3,
+        l4: r.l4,
         todayFteOnshore: r.fteOnshore,
         todayFteOffshore: r.fteOffshore,
         todayCtrOnshore: r.contractorOnshore,
@@ -715,7 +743,7 @@ const TOWER_RETAINED_SPINE: Record<TowerId, string> = {
  * heuristics — if no row in the tower carries an SOX reason, the SOX chip
  * doesn't appear (consistent with the user's actual decisions).
  */
-function deriveCarveOutFlags(rows: OffshoreL3Row[]): CarveOutFlag[] {
+function deriveCarveOutFlags(rows: OffshoreL4Row[]): CarveOutFlag[] {
   const flags = new Set<CarveOutFlag>();
   for (const r of rows) {
     if (r.carveOutReason) flags.add(r.carveOutReason);
@@ -1014,8 +1042,8 @@ function computeInputHash(
   for (const tower of towers) {
     const towerId = tower.id as TowerId;
     const state = program.towers[towerId];
-    if (!state || state.l3Rows.length === 0) continue;
-    for (const r of state.l3Rows) {
+    if (!state || state.l4Rows.length === 0) continue;
+    for (const r of state.l4Rows) {
       sigs.push({
         t: towerId,
         r: r.id,

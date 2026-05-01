@@ -22,7 +22,8 @@ const MONTH_GUARDRAILS: { month: number; tag: TsaTag; label: string }[] = [
  * card summarizes scope, headcount, gate criteria, and named gatekeeper.
  *
  * Wave headcount sums reconcile to the "Migrating to GCC India" KPI tile —
- * deterministic from per-L3 wave assignment in `selectOffshorePlan`.
+ * deterministic from per-L4 Activity Group wave assignment in
+ * `selectOffshorePlan`.
  */
 export function WaveRoadmapTab({ plan }: { plan: OffshorePlanResult }) {
   return (

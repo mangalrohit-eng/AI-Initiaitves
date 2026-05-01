@@ -47,9 +47,9 @@ import { cn } from "@/lib/utils";
 /**
  * Step-3 — Impact Estimate.
  *
- * One job: show what the per-L3 dials roll up to, program-wide and per
- * tower. No scenario presets, no per-tower stress-test sliders, no inline
- * lever-weight editors. To change a dial, the user opens the per-tower
+ * One job: show what the per-L4 Activity Group dials roll up to, program-wide
+ * and per tower. No scenario presets, no per-tower stress-test sliders, no
+ * inline lever-weight editors. To change a dial, the user opens the per-tower
  * Configure Impact Levers page. To change a rate, they open Assumptions.
  */
 export function AssessmentSummaryClient() {
@@ -75,7 +75,7 @@ export function AssessmentSummaryClient() {
   const withData = React.useMemo(
     () =>
       towers.filter(
-        (t) => (program.towers[t.id as TowerId]?.l3Rows.length ?? 0) > 0,
+        (t) => (program.towers[t.id as TowerId]?.l4Rows.length ?? 0) > 0,
       ),
     [program],
   );
@@ -162,7 +162,7 @@ export function AssessmentSummaryClient() {
             </h1>
             {!presentMode ? (
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
-                Roll-up of every tower&apos;s per-L3 offshore + AI dials at the current{" "}
+                Roll-up of every tower&apos;s per-L4 Activity Group offshore + AI dials at the current{" "}
                 <Link href="/assumptions" className="text-accent-purple-dark underline">
                   blended rates
                 </Link>
@@ -269,14 +269,14 @@ export function AssessmentSummaryClient() {
                 Sensitivity
               </span>
               <span className="ml-2">
-                +10 pts on every L3 offshore dial &asymp;{" "}
+                +10 pts on every L4 Activity Group offshore dial &asymp;{" "}
                 <span className="font-mono text-accent-green">
                   {formatMoney(sens.dOff10, { decimals: sens.dOff10 >= 1_000_000 ? 1 : 0 })}
                 </span>
               </span>
               <span className="mx-2 text-forge-hint">·</span>
               <span>
-                +10 pts on every L3 AI dial &asymp;{" "}
+                +10 pts on every L4 Activity Group AI dial &asymp;{" "}
                 <span className="font-mono text-accent-green">
                   {formatMoney(sens.dAi10, { decimals: sens.dAi10 >= 1_000_000 ? 1 : 0 })}
                 </span>
@@ -355,8 +355,8 @@ function ImpactSummaryTowerRow({
   const o = towerOutcomeForState(towerId, program);
   const st = program.towers[towerId];
   if (!o || !st) return null;
-  const pool = towerPoolUsd(st.l3Rows, program.global);
-  const l2c = l2Concentration(st.l3Rows, program.global);
+  const pool = towerPoolUsd(st.l4Rows, program.global);
+  const l2c = l2Concentration(st.l4Rows, program.global);
   const isComplete = st.status === "complete";
   const step3Done = st.impactEstimateValidatedAt != null;
 

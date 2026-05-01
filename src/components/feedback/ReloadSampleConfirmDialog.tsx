@@ -117,7 +117,7 @@ export function ReloadSampleConfirmDialog({
               adjustments (offshore and AI percentages).
             </li>
             <li>
-              <span className="text-forge-subtle">·</span> Generated/regenerated L4 activity
+              <span className="text-forge-subtle">·</span> Generated/regenerated L5 Activity
               lists from your current map.
             </li>
             <li>

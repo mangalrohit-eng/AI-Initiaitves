@@ -32,9 +32,9 @@ function dialStatus(
   towerId: TowerId,
 ): DialStatus {
   const t = program.towers[towerId];
-  if (!t || !t.l3Rows.length) return "no-footprint";
-  const hasOff = t.l3Rows.some((r) => r.offshoreAssessmentPct != null);
-  const hasAi = t.l3Rows.some((r) => r.aiImpactAssessmentPct != null);
+  if (!t || !t.l4Rows.length) return "no-footprint";
+  const hasOff = t.l4Rows.some((r) => r.offshoreAssessmentPct != null);
+  const hasAi = t.l4Rows.some((r) => r.aiImpactAssessmentPct != null);
   return hasOff || hasAi ? "dialed" : "default-only";
 }
 
@@ -45,9 +45,9 @@ export function useGuidanceCapabilityMap(towerId: TowerId): ResolvedJourneyGuida
     return subscribe("assessProgram", () => setProgram(getAssessProgram()));
   }, []);
   return React.useMemo(() => {
-    const rows = program.towers[towerId]?.l3Rows ?? [];
+    const rows = program.towers[towerId]?.l4Rows ?? [];
     const blankL4Count = rows.filter(
-      (r) => !r.l4Activities || r.l4Activities.length === 0,
+      (r) => !r.l5Activities || r.l5Activities.length === 0,
     ).length;
     const stale = getTowerStaleState(program.towers[towerId]);
     return resolveCapabilityMapGuidance({
@@ -72,7 +72,7 @@ export function useGuidanceImpactLevers(
     return subscribe("assessProgram", () => setProgram(getAssessProgram()));
   }, []);
   return React.useMemo(() => {
-    const rows = program.towers[towerId]?.l3Rows ?? [];
+    const rows = program.towers[towerId]?.l4Rows ?? [];
     const stale = getTowerStaleState(program.towers[towerId]);
     const isTowerLeadComplete = program.towers[towerId]?.status === "complete";
     return resolveImpactLeversGuidance({
@@ -133,7 +133,7 @@ export function useGuidanceCapabilityMapHub(): ResolvedJourneyGuidance {
   }, []);
   return React.useMemo(() => {
     const hasAny = towers.some(
-      (t) => (program.towers[t.id as TowerId]?.l3Rows.length ?? 0) > 0,
+      (t) => (program.towers[t.id as TowerId]?.l4Rows.length ?? 0) > 0,
     );
     return hubCapabilityMapLine(hasAny);
   }, [program]);
@@ -179,7 +179,7 @@ export function useGuidanceImpactEstimateSummary(): ResolvedJourneyGuidance {
   }, []);
   return React.useMemo(() => {
     const hasFootprint = towers.some(
-      (t) => (program.towers[t.id as TowerId]?.l3Rows.length ?? 0) > 0,
+      (t) => (program.towers[t.id as TowerId]?.l4Rows.length ?? 0) > 0,
     );
     return impactEstimateSummaryLine(hasFootprint);
   }, [program]);
@@ -207,7 +207,7 @@ export function useGuidanceTowersList(): ResolvedJourneyGuidance {
       : [...towers];
     for (const t of orderedTowers) {
       const tid = t.id as TowerId;
-      const rows = program.towers[tid]?.l3Rows ?? [];
+      const rows = program.towers[tid]?.l4Rows ?? [];
       if (rows.length === 0) continue;
       const stale = getTowerStaleState(program.towers[tid]);
       if (stale.initiativesStale) {

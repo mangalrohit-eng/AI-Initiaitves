@@ -113,7 +113,7 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     tagline:
       "The 24-month AI plan across the 13 Versant towers — ranked initiatives, three-horizon roadmap, architecture, modeled value buildup.",
     shortDescription:
-      "Consolidates the capability map, impact-lever dials, and tower-level AI initiatives into a single executive narrative. Ranked initiatives, P1/P2/P3 phasing, vendor stack convergence, and 24-month modeled run-rate. Numerics stay deterministic; plan narrative is authored by GPT-5.5.",
+      "Consolidates the capability map, impact-lever dials, and tower-level AI initiatives into a single executive narrative. Tier comes from a deterministic 2x2 over feasibility × parent-L4 Activity Group business impact: P1 Quick Wins, P2 Fill-ins, P3 Strategic Builds, with the Deprioritized pile surfaced for context. Vendor stack convergence and 24-month modeled run-rate sit alongside. Numerics stay deterministic; plan narrative is authored by GPT-5.5.",
     path: "/program/cross-tower-ai-plan",
     iconId: "network",
     order: 45,

@@ -86,8 +86,8 @@ function CarveOutsSection({ carveOuts }: { carveOuts: OffshoreCarveOut[] }) {
             <span className="font-semibold text-forge-ink">
               No carve-outs are currently configured.
             </span>{" "}
-            Every L3 row is in scope for offshore (subject to the LLM lane
-            classifier and the Step-2 dial). The four cards below describe
+            Every L4 Activity Group row is in scope for offshore (subject to
+            the LLM lane classifier and the Step-2 dial). The four cards below describe
             the boundaries Accenture will respect when you do configure
             carve-outs in the{" "}
             <span className="font-medium text-accent-purple-dark">
@@ -223,8 +223,8 @@ function CarveOutCard({ carveOut }: { carveOut: OffshoreCarveOut }) {
               Status:
             </span>{" "}
             <span>
-              No L3 rows currently flagged with this reason. Set in the
-              Assumptions tab to activate.
+              No L4 Activity Group rows currently flagged with this reason.
+              Set in the Assumptions tab to activate.
             </span>
           </div>
         )}

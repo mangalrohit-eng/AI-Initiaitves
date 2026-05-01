@@ -61,7 +61,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
   }, []);
 
   const tState = program.towers[towerId] ?? { ...defaultTowerState() };
-  const rows = tState.l3Rows;
+  const rows = tState.l4Rows;
   const global = program.global;
   const isComplete = tState.status === "complete";
 
@@ -76,7 +76,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       const cur = getAssessProgram().towers[towerId] ?? defaultTowerState();
       if (isL1L3TreeLocked(cur)) return;
       setTowerAssess(towerId, {
-        l3Rows: cur.l3Rows.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+        l4Rows: cur.l4Rows.map((r) => (r.id === id ? { ...r, ...patch } : r)),
         status: cur.status === "empty" ? "data" : cur.status,
       });
     },
@@ -103,10 +103,11 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       // returns to "Pending" without needing extra disable logic on Step 2.
       const queuedRows = markRowsQueuedOnUpload(res.rows);
       setTowerAssess(towerId, {
-        l3Rows: queuedRows,
+        l4Rows: queuedRows,
         baseline: { ...defaultTowerBaseline },
         status: "data",
         capabilityMapConfirmedAt: new Date().toISOString(),
+        l1L5TreeValidatedAt: undefined,
         l1L3TreeValidatedAt: undefined,
         headcountConfirmedAt: undefined,
         offshoreConfirmedAt: undefined,
@@ -131,16 +132,17 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
   const sampleLoadOp = useAsyncOp<{ rows: number; wasReload: boolean }, []>({
     run: async () => {
       const hadRows =
-        (getAssessProgram().towers[towerId]?.l3Rows ?? []).length > 0;
+        (getAssessProgram().towers[towerId]?.l4Rows ?? []).length > 0;
       const seed = getTowerSeedState(towerId);
       // Sample loads are seed data, NOT a tower-lead authored map. Clear
       // confirmations, downstream step stamps, and initiative review keys so
       // the journey and AI Initiatives view stay consistent with a fresh seed.
       setTowerAssess(towerId, {
-        l3Rows: seed.l3Rows,
+        l4Rows: seed.l4Rows,
         baseline: seed.baseline,
         status: seed.status,
         capabilityMapConfirmedAt: undefined,
+        l1L5TreeValidatedAt: undefined,
         l1L3TreeValidatedAt: undefined,
         headcountConfirmedAt: undefined,
         offshoreConfirmedAt: undefined,
@@ -150,7 +152,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
         initiativeReviews: {},
       });
       if (sync?.canSync) await sync.flushSave();
-      return { rows: seed.l3Rows.length, wasReload: hadRows };
+      return { rows: seed.l4Rows.length, wasReload: hadRows };
     },
     messages: {
       loadingTitle: `Loading sample for ${towerName}`,
@@ -177,7 +179,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       }
       const w = weightedTowerLevers(result.rows, tState.baseline, global);
       setTowerAssess(towerId, {
-        l3Rows: result.rows,
+        l4Rows: result.rows,
         baseline: {
           baselineOffshorePct: Math.round(w.offshorePct),
           baselineAIPct: Math.round(w.aiPct),
@@ -205,7 +207,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       const result = applyTowerStarterDefaults(rows, towerId, "overwriteAll");
       const w = weightedTowerLevers(result.rows, tState.baseline, global);
       setTowerAssess(towerId, {
-        l3Rows: result.rows,
+        l4Rows: result.rows,
         baseline: {
           baselineOffshorePct: Math.round(w.offshorePct),
           baselineAIPct: Math.round(w.aiPct),
@@ -273,23 +275,35 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     });
   }, [rows.length, sync, toast, towerId, towerName]);
 
-  const markL1L3TreeValidated = React.useCallback(async () => {
+  const markL1L5TreeValidated = React.useCallback(async () => {
     setTowerAssess(towerId, {
-      l1L3TreeValidatedAt: new Date().toISOString(),
+      l1L5TreeValidatedAt: new Date().toISOString(),
+      // Clear the legacy V4 alias so a freshly confirmed map only carries
+      // the canonical V5 timestamp.
+      l1L3TreeValidatedAt: undefined,
     });
     if (sync?.canSync) await sync.flushSave();
     const n = stepCompletionNudge(1, towerName);
     toast.success({ title: n.title, description: n.description, durationMs: 6500 });
   }, [sync, toast, towerId, towerName]);
 
-  const clearL1L3TreeValidation = React.useCallback(async () => {
-    setTowerAssess(towerId, { l1L3TreeValidatedAt: undefined });
+  const clearL1L5TreeValidation = React.useCallback(async () => {
+    setTowerAssess(towerId, {
+      l1L5TreeValidatedAt: undefined,
+      l1L3TreeValidatedAt: undefined,
+    });
     if (sync?.canSync) await sync.flushSave();
     toast.info({
       title: "Capability map unlocked for editing",
-      description: "You can change headcount, upload a new map, or adjust L4 activities. Confirm again when ready to proceed.",
+      description:
+        "You can change headcount, upload a new map, or adjust L5 Activities. Confirm again when ready to proceed.",
     });
   }, [sync, toast, towerId]);
+
+  /** @deprecated Renamed to `markL1L5TreeValidated` in the 5-layer migration. */
+  const markL1L3TreeValidated = markL1L5TreeValidated;
+  /** @deprecated Renamed to `clearL1L5TreeValidation` in the 5-layer migration. */
+  const clearL1L3TreeValidation = clearL1L5TreeValidation;
 
   return {
     program,
@@ -308,7 +322,11 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     overwriteAllOp,
     doMarkComplete,
     doUnmarkComplete,
+    markL1L5TreeValidated,
+    clearL1L5TreeValidation,
+    /** @deprecated Renamed to `markL1L5TreeValidated` in the 5-layer migration. */
     markL1L3TreeValidated,
+    /** @deprecated Renamed to `clearL1L5TreeValidation` in the 5-layer migration. */
     clearL1L3TreeValidation,
   };
 }

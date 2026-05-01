@@ -2,7 +2,7 @@ import { getCapabilityMapForTower } from "@/data/capabilityMap/maps";
 import type { CapabilityMapDefinition } from "@/data/capabilityMap/types";
 import { towers } from "@/data/towers";
 import { weightedTowerLevers } from "@/lib/assess/scenarioModel";
-import type { AssessProgramV2, L3WorkforceRow, TowerAssessState, TowerId } from "./types";
+import type { AssessProgramV2, L4WorkforceRow, TowerAssessState, TowerId } from "./types";
 import {
   buildDefaultProgramLeadDeadlines,
   defaultGlobalAssessAssumptions,
@@ -63,14 +63,19 @@ const TOWER_HEADCOUNT: Record<TowerId, { fte: number; contractor: number }> = {
 };
 
 /**
- * Per-tower L2-level FTE allocation — keyed by capability-map L2 name. When
- * present, FTE is concentrated in the listed L2s (then evenly spread across
- * the L3 rows within each L2). When a tower is omitted here, FTE falls back
- * to an even spread across all L3 rows.
+ * Per-tower L3-level FTE allocation — keyed by capability-map L3 (Job Family)
+ * name. When present, FTE is concentrated in the listed Job Families (then
+ * evenly spread across the L4 Activity Group rows within each Job Family).
+ * When a tower is omitted here, FTE falls back to an even spread across all
+ * L4 rows.
+ *
+ * Pre-migration this was keyed by L2 (Pillar) names — same string values,
+ * since the 5-layer migration renamed Pillar → Job Family (L2 → L3) without
+ * splitting any names.
  *
  * Sums for each tower must equal `TOWER_HEADCOUNT[towerId].fte`.
  */
-const TOWER_L2_HEADCOUNT: Partial<Record<TowerId, Record<string, number>>> = {
+const TOWER_L3_HEADCOUNT: Partial<Record<TowerId, Record<string, number>>> = {
   finance: {
     "Record to Report": 40,
     "Treasury & Capital": 16,
@@ -147,14 +152,15 @@ const TOWER_L2_HEADCOUNT: Partial<Record<TowerId, Record<string, number>>> = {
 };
 
 /**
- * Per-tower hint of which L2 buckets house the bulk of contractor labor (used to seed
- * starter contractor counts in the right places). Optional — falls back to round-robin
- * across all rows if not provided or no rows match.
+ * Per-tower hint of which L3 (Job Family) buckets house the bulk of contractor
+ * labor (used to seed starter contractor counts in the right places). Optional
+ * — falls back to round-robin across all rows if not provided or no rows match.
  *
- * Currently unused while contractor counts are 0 across the board, but retained so
- * tower-lead uploads of contractor data continue to land in the right L2 buckets.
+ * Currently unused while contractor counts are 0 across the board, but retained
+ * so tower-lead uploads of contractor data continue to land in the right Job
+ * Family buckets.
  */
-const CONTRACTOR_L2_HINT: Partial<Record<TowerId, string[]>> = {
+const CONTRACTOR_L3_HINT: Partial<Record<TowerId, string[]>> = {
   hr: ["HR Services"],
   finance: ["Procurement & Vendor Management", "Record to Report"],
   "tech-engineering": ["Software Engineering", "AI / ML Platform"],
@@ -171,24 +177,32 @@ const CONTRACTOR_L2_HINT: Partial<Record<TowerId, string[]>> = {
 };
 
 /**
- * Walk a capability map definition into per-L3 workforce rows. Each row gets
- * the canonical L4 names (display-only `l4Activities`) but no headcount yet.
- * Headcount and dials are layered on by `applyHeadcountToRows` / `withL3Defaults`.
+ * Walk a capability map definition into per-L4 (Activity Group) workforce
+ * rows. Each row gets the canonical L5 Activity names (display-only
+ * `l5Activities`) but no headcount yet. Headcount and dials are layered on
+ * by `applyHeadcountToRows` / `withL3Defaults`.
+ *
+ * In the 5-layer model the dummy L2 wrapper is a single Job Grouping per
+ * tower (named after the function), so every row in the same map shares the
+ * same `l2` value.
  */
-function flattenCapabilityMap(map: CapabilityMapDefinition): L3WorkforceRow[] {
-  const rows: L3WorkforceRow[] = [];
+function flattenCapabilityMap(map: CapabilityMapDefinition): L4WorkforceRow[] {
+  const rows: L4WorkforceRow[] = [];
   for (const l2 of map.l2) {
     for (const l3 of l2.l3) {
-      rows.push({
-        id: l3.id,
-        l2: l2.name,
-        l3: l3.name,
-        fteOnshore: 0,
-        fteOffshore: 0,
-        contractorOnshore: 0,
-        contractorOffshore: 0,
-        l4Activities: l3.l4.map((x) => x.name),
-      });
+      for (const l4 of l3.l4) {
+        rows.push({
+          id: l4.id,
+          l2: l2.name,
+          l3: l3.name,
+          l4: l4.name,
+          fteOnshore: 0,
+          fteOffshore: 0,
+          contractorOnshore: 0,
+          contractorOffshore: 0,
+          l5Activities: l4.l5.map((x) => x.name),
+        });
+      }
     }
   }
   return rows;
@@ -203,34 +217,36 @@ function evenSpread(total: number, n: number): number[] {
 }
 
 /**
- * Distribute FTE across L3 rows. When `l2Headcount` is provided (preferred —
- * used to honor the modeled per-L2 allocation from `TOWER_L2_HEADCOUNT`), FTE
- * is concentrated in the named L2s and then evenly spread across the L3 rows
- * within each L2. Otherwise FTE falls back to an even spread across every row.
+ * Distribute FTE across L4 Activity Group rows. When `l3Headcount` is
+ * provided (preferred — used to honor the modeled per-Job-Family allocation
+ * from `TOWER_L3_HEADCOUNT`; map name retained for back-compat), FTE is
+ * concentrated in the named Job Families and then evenly spread across the
+ * L4 Activity Group rows within each Job Family. Otherwise FTE falls back to
+ * an even spread across every row.
  *
- * Contractor counts use the `contractorL2Hint` to concentrate in the right L2
- * buckets. With contractor=0 in the seed, this is a no-op today but kept so
- * tower-lead uploads land contractor headcount correctly.
+ * Contractor counts use the `contractorL3Hint` to concentrate in the right
+ * Job Family buckets. With contractor=0 in the seed, this is a no-op today
+ * but kept so tower-lead uploads land contractor headcount correctly.
  */
 function applyHeadcountToRows(
-  rows: L3WorkforceRow[],
+  rows: L4WorkforceRow[],
   fte: number,
   contractor: number,
-  contractorL2Hint?: string[],
-  l2Headcount?: Record<string, number>,
-): L3WorkforceRow[] {
+  contractorL3Hint?: string[],
+  l3Headcount?: Record<string, number>,
+): L4WorkforceRow[] {
   if (rows.length === 0) return rows;
 
-  if (l2Headcount && Object.keys(l2Headcount).length > 0) {
-    const indicesByL2 = new Map<string, number[]>();
+  if (l3Headcount && Object.keys(l3Headcount).length > 0) {
+    const indicesByL3 = new Map<string, number[]>();
     for (let i = 0; i < rows.length; i++) {
-      const l2 = rows[i].l2;
-      if (!indicesByL2.has(l2)) indicesByL2.set(l2, []);
-      indicesByL2.get(l2)!.push(i);
+      const l3 = rows[i].l3;
+      if (!indicesByL3.has(l3)) indicesByL3.set(l3, []);
+      indicesByL3.get(l3)!.push(i);
     }
     let assigned = 0;
-    for (const [l2, count] of Object.entries(l2Headcount)) {
-      const indices = indicesByL2.get(l2);
+    for (const [l3, count] of Object.entries(l3Headcount)) {
+      const indices = indicesByL3.get(l3);
       if (!indices || indices.length === 0) continue;
       const spread = evenSpread(count, indices.length);
       for (let k = 0; k < indices.length; k++) {
@@ -255,9 +271,9 @@ function applyHeadcountToRows(
 
   if (contractor > 0) {
     const hintRows: number[] = [];
-    if (contractorL2Hint && contractorL2Hint.length > 0) {
+    if (contractorL3Hint && contractorL3Hint.length > 0) {
       for (let i = 0; i < rows.length; i++) {
-        if (contractorL2Hint.includes(rows[i].l2)) hintRows.push(i);
+        if (contractorL3Hint.includes(rows[i].l3)) hintRows.push(i);
       }
     }
     const targetRows =
@@ -272,9 +288,10 @@ function applyHeadcountToRows(
 }
 
 /**
- * Apply Versant-aware starter offshore% / AI% to every L3 row. Rounded to the
- * nearest 5 so seeded sliders sit on tidy positions. Tower leads can adjust
- * each L3 dial individually on the Configure Impact Levers page.
+ * Apply Versant-aware starter offshore% / AI% to every L4 Activity Group
+ * row. Rounded to the nearest 5 so seeded sliders sit on tidy positions.
+ * Tower leads can adjust each dial individually on the Configure Impact
+ * Levers page.
  *
  * Each seeded row also gets the deterministic `rowStarterRationale` text
  * baked onto `offshoreRationale` / `aiImpactRationale`, with
@@ -282,10 +299,12 @@ function applyHeadcountToRows(
  * reads "starter" (not "AI-scored") and `getTowerStaleState.dialsStale`
  * doesn't flag sample-loaded data as needing refresh.
  */
-function withL3Defaults(rows: L3WorkforceRow[], towerId: TowerId): L3WorkforceRow[] {
+function withL3Defaults(rows: L4WorkforceRow[], towerId: TowerId): L4WorkforceRow[] {
   const generatedAt = ASSESS_SEED_REFERENCE_AT;
   return rows.map((r) => {
-    const d = inferL3Defaults(towerId, r.l2, r.l3);
+    // Heuristic still keys off the bucket+row name pair — under the 5-layer
+    // model that's (Job Family, Activity Group) = (r.l3, r.l4).
+    const d = inferL3Defaults(towerId, r.l3, r.l4);
     const seeded = {
       ...r,
       offshoreAssessmentPct: Math.round(d.offshorePct / 5) * 5,
@@ -303,12 +322,13 @@ function withL3Defaults(rows: L3WorkforceRow[], towerId: TowerId): L3WorkforceRo
 }
 
 /**
- * L3 sample rows for one tower (used by the seeded program and by sample downloads).
- * No offshore FTE/contractor — the assessment fills that via the offshore lever.
- * Each row carries a starter `offshoreAssessmentPct` / `aiImpactAssessmentPct`
- * plus the canonical `l4Activities` list for display in the capability map.
+ * L4 Activity Group sample rows for one tower (used by the seeded program
+ * and by sample downloads). No offshore FTE/contractor — the assessment
+ * fills that via the offshore lever. Each row carries a starter
+ * `offshoreAssessmentPct` / `aiImpactAssessmentPct` plus the canonical
+ * `l5Activities` list for display in the capability map.
  */
-export function getTowerSeedRows(towerId: TowerId): L3WorkforceRow[] {
+export function getTowerSeedRows(towerId: TowerId): L4WorkforceRow[] {
   const map = getCapabilityMapForTower(towerId);
   if (!map) return [];
   const tw = towers.find((t) => t.id === towerId);
@@ -319,22 +339,22 @@ export function getTowerSeedRows(towerId: TowerId): L3WorkforceRow[] {
     flat,
     fte,
     contractor,
-    CONTRACTOR_L2_HINT[towerId],
-    TOWER_L2_HEADCOUNT[towerId],
+    CONTRACTOR_L3_HINT[towerId],
+    TOWER_L3_HEADCOUNT[towerId],
   );
   return withL3Defaults(sized, towerId);
 }
 
 /**
- * Full per-tower starter state: rows with L3 assessments, plus baseline computed as the
- * cost-weighted roll-up of those assessments (so the baseline matches what the summary
- * shows for the seeded scenario).
+ * Full per-tower starter state: rows with L4 Activity Group assessments, plus
+ * baseline computed as the cost-weighted roll-up of those assessments (so the
+ * baseline matches what the summary shows for the seeded scenario).
  */
 export function getTowerSeedState(towerId: TowerId): TowerAssessState {
   const rows = getTowerSeedRows(towerId);
   if (rows.length === 0) {
     return {
-      l3Rows: rows,
+      l4Rows: rows,
       baseline: { ...defaultTowerBaseline },
       status: "empty",
       lastUpdated: ASSESS_SEED_REFERENCE_AT,
@@ -350,7 +370,7 @@ export function getTowerSeedState(towerId: TowerId): TowerAssessState {
   // should promote a tower to "complete". Otherwise the hub falsely reads
   // "Reviewed by Tower Lead" before any human review has happened.
   return {
-    l3Rows: rows,
+    l4Rows: rows,
     baseline: {
       baselineOffshorePct: Math.round(w.offshorePct),
       baselineAIPct: Math.round(w.aiPct),
@@ -367,7 +387,7 @@ export function buildSeededAssessProgramV2(): AssessProgramV2 {
     tmap[id] = getTowerSeedState(id);
   }
   return {
-    version: 4,
+    version: 5,
     towers: tmap,
     global: { ...defaultGlobalAssessAssumptions },
     leadDeadlines: buildDefaultProgramLeadDeadlines(),

@@ -27,8 +27,13 @@ import { BuildScaleSummary } from "./buildScale/BuildScaleSummary";
 import { BuildRisksPanel } from "./buildScale/BuildRisksPanel";
 import { PlanThresholdInput } from "./PlanThresholdInput";
 
-const THRESHOLD_STORAGE_KEY = "forge.crossTowerPlan.aiUsdThreshold";
-const DEFAULT_THRESHOLD = 500_000;
+// Bumped from `forge.crossTowerPlan.aiUsdThreshold` when the threshold flipped
+// from per-L5 attributed-$ ($500K default) to L4 Activity Group prize ($1M
+// default + $1M 2x2 floor alignment). Old key is intentionally orphaned so
+// previously stored sub-million values don't carry over and produce the same
+// "all P2 in plan" surprise from a different angle.
+const THRESHOLD_STORAGE_KEY = "forge.crossTowerPlan.aiUsdThreshold.v2";
+const DEFAULT_THRESHOLD = 1_000_000;
 
 /**
  * Cross-Tower AI Plan — client shell.
@@ -166,9 +171,10 @@ export function CrossTowerAiPlanClient() {
                 <>
                   {" "}
                   <span className="font-mono text-forge-body">
-                    {program.threshold.excludedCount} below-threshold
+                    {program.threshold.excludedCount}
                   </span>{" "}
-                  initiatives are deferred as opportunistic.
+                  initiatives rolling up to an L4 Activity Group prize below the threshold
+                  are deferred as opportunistic.
                 </>
               ) : null}
             </p>
@@ -467,7 +473,7 @@ function formatSourceChip(
 
 function defaultExecutiveSummary(warning: string | null): string {
   if (warning) {
-    return "Cross-tower plan, grounded in the live capability map and impact-lever dials. Numerics, value buildup, Gantt, Tech View, and phase membership are populated below; the GPT-5.5 narrative is regenerated on demand. Initiatives below the plan threshold are opportunistic — handled inside the tower roadmaps.";
+    return "Cross-tower plan, grounded in the live capability map and impact-lever dials. Tier (P1 Quick Wins · P2 Fill-ins · P3 Strategic Builds) comes from the program 2x2 over feasibility × parent-L4 Activity Group business impact. Numerics, value buildup, Gantt, Tech View, and phase membership are populated below; the GPT-5.5 narrative is regenerated on demand.";
   }
-  return "Versant's cross-tower AI plan: in-plan initiatives sequenced across three horizons (P1 immediate / P2 near-term / P3 medium-term), grounded in the deterministic capability map and impact-lever dials. Numerics, Gantt, Tech View, and value buildup are live below — click Generate plan to author the GPT-5.5 narrative for this scenario. Initiatives below the plan threshold are opportunistic and addressed inside the tower roadmaps.";
+  return "Versant's cross-tower AI plan: P1 Quick Wins ship first on proven platforms, P2 Fill-ins slot in around them, P3 Strategic Builds get the longer runway for the high-prize integrations. Tier comes from the deterministic 2x2 over feasibility × parent-L4 Activity Group business impact — not per-tower P-tags. Numerics, Gantt, Tech View, and value buildup are live below — click Generate plan to author the GPT-5.5 narrative for this scenario.";
 }

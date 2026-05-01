@@ -26,12 +26,12 @@ const MENU: ReadonlyArray<{
   {
     id: "capability-map",
     label: "Step 1 — Capability map",
-    description: "L1–L4 tree, headcount, and pool fields",
+    description: "L1–L5 hierarchy, headcount, and pool fields",
   },
   {
     id: "dials",
     label: "Step 2 — Dials",
-    description: "L1–L3 labels, offshore and AI % per row",
+    description: "L1–L4 labels, offshore and AI % per Activity Group",
   },
   {
     id: "ai-initiatives",
@@ -76,7 +76,7 @@ export function TowerDataExports({
   const program = getAssessProgram();
   const tState = program.towers[tower.id];
   const hasMap = Boolean(getCapabilityMapForTower(tower.id));
-  const rowCount = tState?.l3Rows?.length ?? 0;
+  const rowCount = tState?.l4Rows?.length ?? 0;
   const canMap = hasMap || rowCount > 0;
   const canDials = rowCount > 0;
   const canInitiatives = tower.processes.length > 0;

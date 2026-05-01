@@ -1,12 +1,17 @@
 /**
- * Server-only OpenAI helper for inferring per-L3 offshore% / AI% on Versant
- * capability map rows. Used when a tower lead uploads a brand-new L1-L3
- * hierarchy whose labels won't match the deterministic keyword rules in
- * `seedAssessmentDefaults.ts`.
+ * Server-only OpenAI helper for inferring offshore% / AI% dial defaults on
+ * Versant capability-map rows. Used when a tower lead uploads a brand-new
+ * L1–L4 hierarchy whose labels won't match the deterministic keyword rules
+ * in `seedAssessmentDefaults.ts`.
  *
- * Tower leads dial impact at L3 granularity, and uploads are L2/L3-only
- * (L4 activities are display-only and generated separately by
- * `generateL4ActivitiesLLM.ts`).
+ * After the 5-layer migration the dial grain is **L4 Activity Group**
+ * (formerly L3 Capability). Each input row carries the full path
+ * `{ l2 Job Grouping, l3 Job Family, l4 Activity Group }`. L5 Activities are
+ * display-only and generated separately by `generateL4ActivitiesLLM.ts`.
+ *
+ * Back-compat: legacy v4 callers may still send `{ l2, l3 }` and omit `l4`;
+ * in that case we score on the L3 label as before so existing programs
+ * continue to function during cutover.
  *
  * Design notes:
  *  - Single batched call per tower (one request, N row scores back). We do NOT
@@ -26,8 +31,16 @@
 import type { TowerId } from "@/data/assess/types";
 
 export type LLMRowInput = {
+  /** L2 Job Grouping (prompt context). */
   l2: string;
+  /** L3 Job Family (prompt context). */
   l3: string;
+  /**
+   * L4 Activity Group — the row whose dial pair is being scored. Optional
+   * for back-compat with legacy v4 callers; when absent, the model scores
+   * the row using the L3 label as the dial-row name.
+   */
+  l4?: string;
 };
 
 export type LLMRowResult = {
@@ -90,7 +103,9 @@ function buildSystemPrompt(towerId: TowerId): string {
     "",
     "Versant Media Group (NASDAQ: VSNT) is the spin-off of NBCUniversal's news, sports, streaming, and digital portfolio: MS NOW, CNBC, Golf Channel, GolfNow, GolfPass, USA Network, E!, Syfy, Oxygen True Crime, Fandango, Rotten Tomatoes, SportsEngine, Free TV Networks. ~$6.7B revenue, ~$2.4B Adj. EBITDA, ~$2.75B debt (BB-), running on NBCU shared services until the TSA expires.",
     "",
-    "For every L2 / L3 row I send you, return TWO scores:",
+    "Versant capability maps are now FIVE layers: L1 Function > L2 Job Grouping > L3 Job Family > L4 Activity Group > L5 Activity. Dial scores live on the L4 Activity Group (the row I send you). L5 Activities are display-only and not part of this scoring task.",
+    "",
+    "For every L2 / L3 / L4 row I send you, return TWO scores for the L4 Activity Group:",
     "  - offshorePct (5-85, integer, multiple of 5): share of the WORK that can plausibly move to a global delivery centre (India/Philippines/etc.). LOWER for editorial judgment, on-air talent, US-physical work, deal-making, regulator-facing work, high-trust client relationships, brand strategy. HIGHER for routine processing (AP, AR, reconciliation, payroll), helpdesk, data prep, analytics support, software test, document review.",
     "  - aiPct (10-75, integer, multiple of 5): share of the WORK that AI (LLMs, agents, classifiers, copilots) can realistically displace or 10x today. HIGHER for summarization, transcription, captioning, translation, document review, anomaly detection, monitoring, lead scoring, structured extraction. LOWER for executive judgment, in-person relationships, on-camera work, crisis decisions.",
     "",
@@ -114,11 +129,21 @@ function buildSystemPrompt(towerId: TowerId): string {
 }
 
 function buildUserPrompt(rows: LLMRowInput[]): string {
-  const lines = rows.map(
-    (r, i) => `${i + 1}. L2="${truncate(r.l2)}" / L3="${truncate(r.l3)}"`,
-  );
+  // Two input shapes for back-compat:
+  //   V5: { l2, l3, l4 }  → dial row is the L4 Activity Group
+  //   V4 (legacy): { l2, l3 } → dial row is the L3 (we treat L3 as the
+  //                              row label so older programs still score)
+  const lines = rows.map((r, i) => {
+    if (r.l4 && r.l4.trim()) {
+      return `${i + 1}. L2="${truncate(r.l2)}" / L3="${truncate(r.l3)}" / L4="${truncate(r.l4)}"`;
+    }
+    return `${i + 1}. L2="${truncate(r.l2)}" / L3="${truncate(r.l3)}"`;
+  });
+  const grain = rows.some((r) => r.l4 && r.l4.trim())
+    ? "L4 Activity Groups (5-layer map)"
+    : "L3 capabilities (legacy 4-layer map)";
   return [
-    `Score these ${rows.length} L3 capabilities. Preserve order.`,
+    `Score these ${rows.length} ${grain}. Preserve order.`,
     "",
     ...lines,
   ].join("\n");

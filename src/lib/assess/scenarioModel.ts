@@ -229,8 +229,8 @@ export function towerOutcomeForState(
   state: AssessProgramV2,
 ): TowerOutcome | null {
   const t = state.towers[towerId];
-  if (!t?.l3Rows.length) return null;
-  return modeledSavingsForTower(t.l3Rows, t.baseline, state.global);
+  if (!t?.l4Rows.length) return null;
+  return modeledSavingsForTower(t.l4Rows, t.baseline, state.global);
 }
 
 export function allTowerIdsValid(id: string): id is TowerId {
@@ -325,8 +325,8 @@ export function programSensitivityDeltas(state: AssessProgramV2): {
   let dAi10 = 0;
   for (const t of towers) {
     const st = state.towers[t.id];
-    if (!st?.l3Rows.length) continue;
-    for (const r of st.l3Rows) {
+    if (!st?.l4Rows.length) continue;
+    for (const r of st.l4Rows) {
       const d = rowSensitivityDeltas(r, st.baseline, state.global);
       dOff10 += d.dOff10;
       dAi10 += d.dAi10;
@@ -341,7 +341,7 @@ export function buildExportCsv(program: AssessProgramV2): string {
   ];
   for (const t of towers) {
     const st = program.towers[t.id];
-    if (!st?.l3Rows.length) continue;
+    if (!st?.l4Rows.length) continue;
     const o = towerOutcomeForState(t.id, program);
     if (!o) continue;
     lines.push(

@@ -15,9 +15,9 @@ export function stepCompletionNudge(
 ): StepCompletionNudge {
   if (completedStep === 1) {
     return {
-      title: `L1–L3 confirmed for ${towerName}`,
+      title: `L1–L4 confirmed for ${towerName}`,
       description:
-        `Capability map and headcount for ${towerName} are locked in. Open Configure Impact Levers to dial offshore and AI impact per L3 — MS NOW, CNBC, and Golf Channel towers use the same lever pattern so the impact rolls up consistently across the program.`,
+        `Capability map and headcount for ${towerName} are locked in. Open Configure Impact Levers to dial offshore and AI impact per L4 Activity Group — MS NOW, CNBC, and Golf Channel towers use the same lever pattern so the impact rolls up consistently across the program.`,
     };
   }
   if (completedStep === 2) {

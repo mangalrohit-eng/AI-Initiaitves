@@ -2,8 +2,9 @@
  * Bridge: canonical capability-map L4 ↔ curated `TowerProcess` metadata.
  *
  * Phase 1 design: the AI Initiatives view (Step 4) renders the canonical
- * capability-map L1→L4 hierarchy and pulls per-L3 $ impact directly from the
- * `AssessProgramV4` dial via `rowModeledSaving`. Versant-specific curated
+ * capability-map L1→L5 hierarchy (V5) and pulls per-L4 Activity Group $
+ * impact directly from the `AssessProgramV5` dial via `rowModeledSaving`.
+ * Versant-specific curated
  * detail (priority, rationale, frequency, criticality, maturity, brief link,
  * 4-lens link) lives in `data/operating-models.ts` `TowerProcess` rows for
  * every tower today; this file joins those rows onto matching L4s.
@@ -26,7 +27,7 @@
  *   3. No match → L4 falls through to "pending-discovery" in the selector.
  */
 import type { Tower, TowerProcess } from "@/data/types";
-import type { CapabilityL4 } from "@/data/capabilityMap/types";
+import type { CapabilityL5 } from "@/data/capabilityMap/types";
 
 /**
  * Explicit overrides where fuzzy matching would either miss or attach the
@@ -195,7 +196,7 @@ export function buildProcessByL4Map(tower: Tower): ProcessByL4Map {
  * spread across half a dozen L4s by name overlap alone.
  */
 export function fuzzyMatchL4(
-  l4: CapabilityL4,
+  l4: CapabilityL5,
   tower: Tower,
   claimed: Set<string>,
 ): TowerProcess | undefined {

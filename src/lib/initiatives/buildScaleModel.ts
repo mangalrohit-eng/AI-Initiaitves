@@ -14,19 +14,37 @@
  *     them — so the chart caption / KPI strip can surface the truth without
  *     fabricating it.
  *
+ * Phase-start-month convention is INTENTIONALLY UNCHANGED from the legacy
+ * model (P1=M1, P2=M7, P3=M13). What changed is the SEMANTIC meaning of
+ * each tier — see the 2x2 in `lib/initiatives/programTier.ts`:
+ *
+ *   P1 — Quick Wins        (HF / HBI) → start M1; leverage proven platforms.
+ *   P2 — Fill-ins          (HF / LBI) → start M7; high-feasibility but
+ *                                       smaller-impact rows slot in once
+ *                                       Quick Wins are in flight.
+ *   P3 — Strategic Builds  (LF / HBI) → start M13. The later start reflects
+ *                                       longer build / change-management
+ *                                       runways, NOT lower importance —
+ *                                       these are the high-impact, lower-
+ *                                       feasibility rows that need the
+ *                                       bigger lift.
+ *   Deprioritized          (LF / LBI) → never sequenced; filtered at the
+ *                                       selector layer before this model
+ *                                       sees them.
+ *
  * Determinism contract:
- *   - Phase windows come from `priorityTier()`. Never moved.
+ *   - Phase windows come from `programTier`. Never moved.
  *   - Build months come from `Process.timelineMonths` (already in data) or
  *     phase-tier defaults grounded in phase semantics:
- *       P1 (immediate)   → 4 months: leverage already-deployed platforms
- *                          (BlackLine, Salesforce, Workday) — configuration
- *                          + agent-fleet rollout, not net-new platform stand-up.
- *       P2 (near-term)   → 6 months: mid-complexity new agent fleet on
- *                          existing platform; modest data-fabric build.
- *       P3 (medium-term) → 9 months: heavy lifts — multi-system integrations,
- *                          new vendor onboarding, larger workforce-impact
- *                          change-management.
- *       Unphased         → 6 months: median assumption when no priority set.
+ *       P1 → 4 months: leverage already-deployed platforms (BlackLine,
+ *            Salesforce, Workday) — configuration + agent-fleet rollout,
+ *            not net-new platform stand-up.
+ *       P2 → 6 months: mid-complexity new agent fleet on existing platform;
+ *            modest data-fabric build.
+ *       P3 → 9 months: heavy lifts — multi-system integrations, new vendor
+ *            onboarding, larger workforce-impact change-management. Reflects
+ *            the lower-feasibility nature of the LF/HBI bucket.
+ *       Unphased → 6 months: median assumption when no priority set.
  *   - Ramp is a fixed 6 months for every initiative (rationale documented at
  *     the call sites + on the Gantt legend).
  *   - Linear ramp: planning convention; deliberately optimistic at the start
@@ -40,8 +58,9 @@
  * row carries `buildExtendsPastHorizon: true` and the Gantt renders a fade
  * + "completes Q? Y3" annotation. Honest, not lossy.
  */
+import type { ProgramTier } from "@/data/types";
 import type { TowerId } from "@/data/assess/types";
-import type { Tier } from "@/lib/priority";
+import { tierFromProgramTier, type Tier } from "@/lib/priority";
 import type { ProgramImpactSummary } from "@/lib/assess/scenarioModel";
 
 // ===========================================================================
@@ -93,7 +112,12 @@ export type BuildScaleInputRow = {
   name: string;
   towerId: TowerId;
   towerName: string;
-  tier: Tier | null;
+  /**
+   * Program-level priority from the 2x2. `Deprioritized` rows are filtered
+   * out before this model runs; if one slips through, `tierToPhase()`
+   * routes it to "Unphased" so the math is still well-defined.
+   */
+  programTier: ProgramTier;
   /** Even-split share of l3.aiUsd across non-placeholder L4s. */
   attributedAiUsd: number;
   /** Process.timelineMonths when a full 4-lens initiative resolves. */
@@ -105,6 +129,8 @@ export type BuildScaleRow = {
   name: string;
   towerId: TowerId;
   towerName: string;
+  programTier: ProgramTier;
+  /** Visual `Tier` derived from `programTier` — `null` for Deprioritized. */
   tier: Tier | null;
   phase: BuildScalePhase;
   attributedAiUsd: number;
@@ -209,13 +235,22 @@ export function contributionAt(row: BuildScaleRow, month: number): number {
 //   Internals
 // ===========================================================================
 
-function tierToPhase(tier: Tier | null): BuildScalePhase {
-  if (tier === "P1" || tier === "P2" || tier === "P3") return tier;
+/**
+ * Map `ProgramTier` to the build-scale phase. P1/P2/P3 round-trip; the
+ * "Deprioritized" bucket falls through to "Unphased" — the selector should
+ * have filtered those rows out before they reach this model, but if one
+ * slips in (e.g. via a stale cache), routing to Unphased keeps the math
+ * well-defined and surfaces the row at the back of the queue.
+ */
+function tierToPhase(programTier: ProgramTier): BuildScalePhase {
+  if (programTier === "P1" || programTier === "P2" || programTier === "P3") {
+    return programTier;
+  }
   return "Unphased";
 }
 
 function deriveRow(init: BuildScaleInputRow): BuildScaleRow {
-  const phase = tierToPhase(init.tier);
+  const phase = tierToPhase(init.programTier);
   const phaseStartMonth = PHASE_START_MONTHS[phase];
 
   const hasUsableTimeline =
@@ -238,7 +273,8 @@ function deriveRow(init: BuildScaleInputRow): BuildScaleRow {
     name: init.name,
     towerId: init.towerId,
     towerName: init.towerName,
-    tier: init.tier,
+    programTier: init.programTier,
+    tier: tierFromProgramTier(init.programTier),
     phase,
     attributedAiUsd: Math.max(0, init.attributedAiUsd ?? 0),
 

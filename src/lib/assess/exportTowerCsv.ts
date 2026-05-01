@@ -1,6 +1,15 @@
 /**
  * Tower-scoped CSV exports for workshop steps (UTF-8 BOM, comma, RFC 4180).
- * Dials use the same effective % as L3LeverRow (row override vs tower baseline).
+ * Dials use the same effective % as L4LeverRow (row override vs tower baseline).
+ *
+ * 5-layer migration: every CSV now carries the full L1–L5 hierarchy.
+ *   - L1 = Function (e.g. "Finance")
+ *   - L2 = Job Grouping (defaults to the L1 Function name; can be overridden)
+ *   - L3 = Job Family (was the pre-migration "L2 Pillar")
+ *   - L4 = Activity Group (was the pre-migration "L3 Capability") — dials,
+ *         opportunity sizing, and review decisions all live on this row.
+ *   - L5 = Activity (was the pre-migration "L4 Activity") — the leaf where
+ *         AI initiatives attach.
  */
 import type { AssessProgramV2, TowerId } from "@/data/assess/types";
 import { defaultTowerState } from "@/data/assess/types";
@@ -43,7 +52,7 @@ export function buildCapabilityMapExportCsv(params: {
   const { towerId, towerName, program } = params;
   const exportedAt = new Date().toISOString();
   const tState = program.towers[towerId] ?? defaultTowerState();
-  const assessRows = tState.l3Rows ?? [];
+  const assessRows = tState.l4Rows ?? [];
   const map = getCapabilityMapForTower(towerId);
 
   const header = csvRow([
@@ -57,7 +66,9 @@ export function buildCapabilityMapExportCsv(params: {
     "l3_name",
     "l4_id",
     "l4_name",
-    "l4_description",
+    "l5_id",
+    "l5_name",
+    "l5_description",
     "fte_onshore",
     "fte_offshore",
     "contractor_onshore",
@@ -74,61 +85,71 @@ export function buildCapabilityMapExportCsv(params: {
     const l1 = map.l1Name;
     for (const l2 of map.l2) {
       for (const l3 of l2.l3) {
-        const assessRow = assessRows.find(
-          (r) => r.l2 === l2.name && r.l3 === l3.name,
-        );
-        if (assessRow) matchedAssessRowIds.add(assessRow.id);
-
-        const emitL4 = (l4: (typeof l3.l4)[number]) => {
-          lines.push(
-            csvRow([
-              towerId,
-              towerName,
-              exportedAt,
-              l1,
-              l2.id,
-              l2.name,
-              l3.id,
-              l3.name,
-              l4.id,
-              l4.name,
-              l4.description ?? "",
-              assessRow?.fteOnshore ?? "",
-              assessRow?.fteOffshore ?? "",
-              assessRow?.contractorOnshore ?? "",
-              assessRow?.contractorOffshore ?? "",
-              assessRow?.annualSpendUsd ?? "",
-              assessRow?.id ?? "",
-              assessRow ? "matched" : "map_only",
-            ]),
+        for (const l4 of l3.l4) {
+          // The assessment row grain is L4 (Activity Group). Match by the
+          // (l3 Job Family, l4 Activity Group) pair so a tower lead's
+          // upload locks onto the right Activity Group regardless of
+          // whether they typed the Job Grouping cell.
+          const assessRow = assessRows.find(
+            (r) => r.l3 === l3.name && r.l4 === l4.name,
           );
-        };
+          if (assessRow) matchedAssessRowIds.add(assessRow.id);
 
-        if (l3.l4.length === 0) {
-          lines.push(
-            csvRow([
-              towerId,
-              towerName,
-              exportedAt,
-              l1,
-              l2.id,
-              l2.name,
-              l3.id,
-              l3.name,
-              "",
-              "",
-              "",
-              assessRow?.fteOnshore ?? "",
-              assessRow?.fteOffshore ?? "",
-              assessRow?.contractorOnshore ?? "",
-              assessRow?.contractorOffshore ?? "",
-              assessRow?.annualSpendUsd ?? "",
-              assessRow?.id ?? "",
-              assessRow ? "matched" : "map_only",
-            ]),
-          );
-        } else {
-          for (const l4 of l3.l4) emitL4(l4);
+          const emitL5 = (l5: (typeof l4.l5)[number]) => {
+            lines.push(
+              csvRow([
+                towerId,
+                towerName,
+                exportedAt,
+                l1,
+                l2.id,
+                l2.name,
+                l3.id,
+                l3.name,
+                l4.id,
+                l4.name,
+                l5.id,
+                l5.name,
+                l5.description ?? "",
+                assessRow?.fteOnshore ?? "",
+                assessRow?.fteOffshore ?? "",
+                assessRow?.contractorOnshore ?? "",
+                assessRow?.contractorOffshore ?? "",
+                assessRow?.annualSpendUsd ?? "",
+                assessRow?.id ?? "",
+                assessRow ? "matched" : "map_only",
+              ]),
+            );
+          };
+
+          if (l4.l5.length === 0) {
+            lines.push(
+              csvRow([
+                towerId,
+                towerName,
+                exportedAt,
+                l1,
+                l2.id,
+                l2.name,
+                l3.id,
+                l3.name,
+                l4.id,
+                l4.name,
+                "",
+                "",
+                "",
+                assessRow?.fteOnshore ?? "",
+                assessRow?.fteOffshore ?? "",
+                assessRow?.contractorOnshore ?? "",
+                assessRow?.contractorOffshore ?? "",
+                assessRow?.annualSpendUsd ?? "",
+                assessRow?.id ?? "",
+                assessRow ? "matched" : "map_only",
+              ]),
+            );
+          } else {
+            for (const l5 of l4.l5) emitL5(l5);
+          }
         }
       }
     }
@@ -146,6 +167,8 @@ export function buildCapabilityMapExportCsv(params: {
         r.l2,
         "",
         r.l3,
+        "",
+        r.l4,
         "",
         "",
         "",
@@ -172,7 +195,7 @@ export function buildDialsExportCsv(params: {
   const exportedAt = new Date().toISOString();
   const tState = program.towers[towerId] ?? defaultTowerState();
   const baseline = tState.baseline;
-  const rows = tState.l3Rows ?? [];
+  const rows = tState.l4Rows ?? [];
   const map = getCapabilityMapForTower(towerId);
   const l1 = map?.l1Name ?? "";
 
@@ -183,6 +206,7 @@ export function buildDialsExportCsv(params: {
     "l1_name",
     "l2_name",
     "l3_name",
+    "l4_name",
     "row_id",
     "offshore_pct_effective",
     "ai_pct_effective",
@@ -205,6 +229,7 @@ export function buildDialsExportCsv(params: {
         l1,
         r.l2,
         r.l3,
+        r.l4,
         r.id,
         offEff,
         aiEff,
@@ -232,7 +257,16 @@ export function buildAiInitiativesExportCsv(params: {
   const l1 = map?.l1Name ?? "";
 
   const sel = selectInitiativesForTower(towerId, program, tower);
-  const byInitiative = new Map<string, { l2: string; l3: string }>();
+  // View-model layer mapping (post-5-layer-migration):
+  //   sel.l2s    -> Job Grouping (the dummy wrapper)
+  //   l2.l3s    -> Job Family
+  //   l3.rowL4Name -> Activity Group (per-row label)
+  //   l3.l4s    -> L5 Activities (the leaf where initiatives attach)
+  // Note the view-model field names lag the migration (Phase 8 rename).
+  const byInitiative = new Map<
+    string,
+    { l2: string; l3: string; l4: string }
+  >();
   for (const l2 of sel.l2s) {
     for (const l3 of l2.l3s) {
       for (const l4 of l3.l4s) {
@@ -240,6 +274,7 @@ export function buildAiInitiativesExportCsv(params: {
           byInitiative.set(l4.initiativeId, {
             l2: l2.l2.name,
             l3: l3.l3.name,
+            l4: l3.rowL4Name,
           });
         }
       }
@@ -255,6 +290,7 @@ export function buildAiInitiativesExportCsv(params: {
     "l1_name",
     "l2_name",
     "l3_name",
+    "l4_name",
     "description",
     "resolution_status",
   ]);
@@ -272,6 +308,7 @@ export function buildAiInitiativesExportCsv(params: {
         l1,
         loc?.l2 ?? "",
         loc?.l3 ?? "",
+        loc?.l4 ?? "",
         p.description,
         loc ? "linked" : "unresolved",
       ]),

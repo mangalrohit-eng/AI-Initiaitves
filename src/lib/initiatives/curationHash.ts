@@ -1,26 +1,30 @@
 /**
  * Capability-map content hash + staleness machinery.
  *
- * The hybrid refresh strategy (Step 4 AI Initiatives) treats an L3 row as
- * "stale" when its name footprint (L2 + L3 + sorted L4 names) has changed
- * since the last successful pipeline run. Dial values, headcount, and
- * annualSpendUsd are intentionally excluded from the hash — those don't
- * change which L4 activities exist, only their dollar impact, so dial sweeps
- * during a workshop never light up the refresh banner.
+ * The hybrid refresh strategy (Step 4 AI Initiatives) treats an L4 Activity
+ * Group row as "stale" when its name footprint (L2 + L3 + L4 + sorted L5
+ * Activity names) has changed since the last successful pipeline run. Dial
+ * values, headcount, and annualSpendUsd are intentionally excluded from the
+ * hash — those don't change which L5 Activities exist, only their dollar
+ * impact, so dial sweeps during a workshop never light up the refresh
+ * banner.
  *
  * Three pure helpers, all idempotent:
  *
  *   1. computeCurationContentHash(l2, l3, l4Names) — the one-line key.
+ *      (Argument names retained for back-compat; under V5 callers pass the
+ *      L4 Activity Group label as `l3` and the L5 Activity names as
+ *      `l4Names`. The hash itself is opaque.)
  *   2. markRowsStaleByHash(rows)      — write path: mark queued when names
  *                                       changed (called from the upload /
- *                                       L4-regen helpers in `useTowerAssessOps`).
+ *                                       L5-regen helpers in `useTowerAssessOps`).
  *   3. bootstrapHashOnRead(rows)      — read path: stamp seed / legacy rows
  *                                       to `idle` with a current hash so the
  *                                       banner never blasts on first load.
  *
  * The selector's cache short-circuit (`select.ts` Path 0) re-derives the
  * current hash on render and compares with `row.curationContentHash` to
- * decide whether `row.l4Items` is still valid.
+ * decide whether `row.l5Items` is still valid.
  */
 
 import type { L3WorkforceRow, TowerAssessState } from "@/data/assess/types";
@@ -69,7 +73,7 @@ export function computeCurationContentHash(
  * the selector cache check and by the pipeline orchestrator.
  */
 export function rowCurrentHash(row: L3WorkforceRow): string {
-  return computeCurationContentHash(row.l2, row.l3, row.l4Activities ?? []);
+  return computeCurationContentHash(row.l2, row.l3, row.l5Activities ?? []);
 }
 
 /**
@@ -133,19 +137,19 @@ export function hasQueuedRows(rows: ReadonlyArray<L3WorkforceRow>): boolean {
 export function hasInFlightRows(rows: ReadonlyArray<L3WorkforceRow>): boolean {
   return rows.some(
     (r) =>
-      r.curationStage === "running-l4" ||
+      r.curationStage === "running-l5" ||
       r.curationStage === "running-verdict" ||
       r.curationStage === "running-curate",
   );
 }
 
 /**
- * Selector cache validity: row.l4Items is the source of truth for L4 view-
+ * Selector cache validity: row.l5Items is the source of truth for L4 view-
  * models when (a) the row has a populated cache, and (b) the stored hash
  * matches the row's current name footprint.
  */
 export function isCacheValidForRow(row: L3WorkforceRow): boolean {
-  if (!row.l4Items || row.l4Items.length === 0) return false;
+  if (!row.l5Items || row.l5Items.length === 0) return false;
   if (row.curationContentHash == null) return false;
   return row.curationContentHash === rowCurrentHash(row);
 }
@@ -168,7 +172,7 @@ export function markRowsQueuedOnUpload(
 ): L3WorkforceRow[] {
   return rows.map((r) => {
     if (
-      r.curationStage === "running-l4" ||
+      r.curationStage === "running-l5" ||
       r.curationStage === "running-verdict" ||
       r.curationStage === "running-curate"
     ) {
@@ -187,8 +191,9 @@ export function markRowsQueuedOnUpload(
  * Tower-level stale derivation. Single source of truth for the three
  * banner predicates so Steps 1, 2, and 4 don't fork the logic.
  *
- *   - `l4Stale`               — at least one row is missing L4 activities;
- *                               drives the Step 1 StaleL4Banner.
+ *   - `l4Stale`               — at least one row is missing L5 Activities;
+ *                               drives the Step 1 StaleL4Banner. (Field name
+ *                               retained from V4 for back-compat.)
  *   - `dialsStale`            — every row has both dial overrides null AND
  *                               `dialsRationaleSource == null` (the post-
  *                               upload signature). Sample-loaded rows have
@@ -213,9 +218,9 @@ export type TowerStaleState = {
 };
 
 export function getTowerStaleState(
-  towerState: Pick<TowerAssessState, "l3Rows"> | undefined,
+  towerState: Pick<TowerAssessState, "l4Rows"> | undefined,
 ): TowerStaleState {
-  const rows = towerState?.l3Rows ?? [];
+  const rows = towerState?.l4Rows ?? [];
   if (rows.length === 0) {
     return {
       l4Stale: false,
@@ -225,7 +230,7 @@ export function getTowerStaleState(
     };
   }
   const l4Stale = rows.some(
-    (r) => !r.l4Activities || r.l4Activities.length === 0,
+    (r) => !r.l5Activities || r.l5Activities.length === 0,
   );
   const dialsStale = rows.every(
     (r) =>
@@ -237,7 +242,7 @@ export function getTowerStaleState(
   const missingL4ForRefresh = rows.some(
     (r) =>
       r.curationStage === "queued" &&
-      (!r.l4Activities || r.l4Activities.length === 0),
+      (!r.l5Activities || r.l5Activities.length === 0),
   );
   return { l4Stale, dialsStale, initiativesStale, missingL4ForRefresh };
 }

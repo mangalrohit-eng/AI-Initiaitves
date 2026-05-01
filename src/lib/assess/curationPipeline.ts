@@ -2,10 +2,10 @@
  * Curation pipeline orchestrator.
  *
  * LLM mode (current):
- *   - Stage 1 — L4 name generation: SKIPPED. The pipeline assumes
- *     `row.l4Activities` is already populated; if it isn't, the row is
+ *   - Stage 1 — L5 Activity name generation: SKIPPED. The pipeline assumes
+ *     `row.l5Activities` is already populated; if it isn't, the row is
  *     marked `failed` with a hint pointing the user back to Step 1's
- *     "Generate L4 activities" button.
+ *     "Generate L5 Activities" button.
  *   - Stages 2 + 3 — Verdict + curation: ONE batched LLM call per tower
  *     via `/api/assess/curate-initiatives`. The route falls back to the
  *     deterministic `composeL4Verdict` rubric on any LLM failure so the
@@ -31,7 +31,7 @@
 
 import type {
   CurationStage,
-  L3WorkforceRow,
+  L4WorkforceRow,
   L4Item,
   TowerId,
 } from "@/data/assess/types";
@@ -112,15 +112,15 @@ export async function runForRows(
     return summary;
   }
 
-  // Partition the queue: rows with at least one L4 activity go to the LLM,
+  // Partition the queue: rows with at least one L5 Activity go to the LLM,
   // rows without are short-circuited as failed with a clear next-step hint.
   const eligibleInputs: {
     rowId: string;
-    row: L3WorkforceRow;
-    l4Activities: string[];
+    row: L4WorkforceRow;
+    l5Activities: string[];
   }[] = [];
   for (const rowId of opts.rowIds) {
-    const row = towerState.l3Rows.find((r) => r.id === rowId);
+    const row = towerState.l4Rows.find((r) => r.id === rowId);
     if (!row) {
       writeFailure(opts.towerId, rowId, "Row no longer exists.");
       onProgress?.({
@@ -131,16 +131,16 @@ export async function runForRows(
       summary.failed += 1;
       continue;
     }
-    const l4Names = row.l4Activities ?? [];
+    const l4Names = row.l5Activities ?? [];
     if (l4Names.length === 0) {
       const error =
-        "No L4 activities on this row yet. Use Generate L4 activities on Step 1 first.";
+        "No L5 Activities on this row yet. Use Generate L5 Activities on Step 1 first.";
       writeFailure(opts.towerId, rowId, error);
       onProgress?.({ rowId, stage: "failed", error });
       summary.failed += 1;
       continue;
     }
-    eligibleInputs.push({ rowId, row, l4Activities: l4Names });
+    eligibleInputs.push({ rowId, row, l5Activities: l4Names });
   }
 
   if (eligibleInputs.length === 0) {
@@ -163,7 +163,12 @@ export async function runForRows(
       rowId: e.rowId,
       l2: e.row.l2,
       l3: e.row.l3,
-      l4Activities: e.l4Activities,
+      // V5 L4 Activity Group — required for the LLM and the deterministic
+      // rubric to score L5 leaves with full parent context. Omitting this
+      // collapses two hierarchy layers and produces all-not-eligible
+      // verdicts.
+      l4: e.row.l4,
+      l5Activities: e.l5Activities,
     })),
   );
 
@@ -212,7 +217,7 @@ export async function runForRows(
     apiRes.result.source === "llm" ? "llm" : "fallback";
 
   const succeededRowIds = new Set<string>();
-  const writeBackRows = fresh.l3Rows.map((r) => {
+  const writeBackRows = fresh.l4Rows.map((r) => {
     const e = eligibleInputs.find((x) => x.rowId === r.id);
     if (!e) return r;
     const curated = resultByRow.get(r.id);
@@ -226,7 +231,7 @@ export async function runForRows(
       };
     }
 
-    const l4Items: L4Item[] = curated.l4Items.map((item) => {
+    const l5Items: L4Item[] = curated.l5Items.map((item) => {
       const id = synthId(r.id, item.name);
       const overlay = aiCurationOverlay[id];
       // Click-through fields stay overlay-only — the LLM is not allowed
@@ -240,7 +245,11 @@ export async function runForRows(
         generatedAt,
         aiCurationStatus: item.aiCurationStatus,
         aiEligible: item.aiEligible,
-        aiPriority: item.aiPriority,
+        // The LLM now scores binary feasibility directly; aiPriority is
+        // intentionally omitted on new writes so the program-tier 2x2 owns
+        // priority. Old cached items that still carry aiPriority are
+        // honored by the back-compat map in `composeVerdict`.
+        feasibility: item.feasibility,
         aiRationale: item.aiRationale,
         notEligibleReason: item.notEligibleReason,
         frequency: item.frequency,
@@ -256,15 +265,15 @@ export async function runForRows(
     const nextHash = computeCurationContentHash(
       r.l2,
       r.l3,
-      l4Items.map((x) => x.name),
+      l5Items.map((x) => x.name),
     );
     succeededRowIds.add(r.id);
-    if (l4Items.some((i) => i.aiEligible)) summary.eligibleRows += 1;
+    if (l5Items.some((i) => i.aiEligible)) summary.eligibleRows += 1;
     else summary.needReviewRows += 1;
     return {
       ...r,
-      l4Items,
-      l4Activities: l4Items.map((x) => x.name),
+      l5Items,
+      l5Activities: l5Items.map((x) => x.name),
       curationContentHash: nextHash,
       curationStage: "done" as CurationStage,
       curationGeneratedAt: generatedAt,
@@ -272,7 +281,7 @@ export async function runForRows(
     };
   });
 
-  setTowerAssess(opts.towerId, { l3Rows: writeBackRows });
+  setTowerAssess(opts.towerId, { l4Rows: writeBackRows });
 
   for (const e of eligibleInputs) {
     if (succeededRowIds.has(e.rowId)) {
@@ -300,7 +309,7 @@ function writeFailure(towerId: TowerId, rowId: string, error: string) {
   const fresh = getAssessProgram().towers[towerId];
   if (!fresh) return;
   setTowerAssess(towerId, {
-    l3Rows: fresh.l3Rows.map((r) =>
+    l4Rows: fresh.l4Rows.map((r) =>
       r.id === rowId
         ? { ...r, curationStage: "failed", curationError: error }
         : r,
@@ -318,10 +327,10 @@ export function queuedRowIdsForTower(
   const program = getAssessProgram();
   const t = program.towers[towerId];
   if (!t) return { rowIds: [], total: 0 };
-  const ids = t.l3Rows
+  const ids = t.l4Rows
     .filter((r) => r.curationStage === "queued")
     .map((r) => r.id);
-  return { rowIds: ids, total: t.l3Rows.length };
+  return { rowIds: ids, total: t.l4Rows.length };
 }
 
 /**
@@ -331,7 +340,7 @@ export function queuedRowIdsForTower(
 export { rowCurrentHash };
 
 // ===========================================================================
-//   Single-row regenerate (per-L3 "Refine + regenerate" affordance)
+//   Single-row regenerate (per-L4-Activity-Group "Refine + regenerate" affordance)
 // ===========================================================================
 
 export type RegenerateRowOptions = {
@@ -359,13 +368,14 @@ export type RegenerateRowSummary = {
 };
 
 /**
- * Re-generate the L4 activity list AND re-curate ONE L3 row, optionally with
- * qualitative user feedback to steer the result. The function operates on
- * EXACTLY ONE rowId — never an array — and patches only that row inside
- * `program.towers[towerId].l3Rows`. Other rows in the tower (and every other
- * tower) pass through `l3Rows.map(...)` by reference and are byte-identical
- * before vs after. The dial values, modeled $ pool, and `aiImpactAssessmentPct`
- * for the regenerated row are NEVER touched — only the L4 list and curation.
+ * Re-generate the L5 Activity list AND re-curate ONE L4 Activity Group row,
+ * optionally with qualitative user feedback to steer the result. The
+ * function operates on EXACTLY ONE rowId — never an array — and patches only
+ * that row inside `program.towers[towerId].l4Rows`. Other rows in the tower
+ * (and every other tower) pass through `l4Rows.map(...)` by reference and
+ * are byte-identical before vs after. The dial values, modeled $ pool, and
+ * `aiImpactAssessmentPct` for the regenerated row are NEVER touched — only
+ * the L5 Activity list and curation.
  *
  * No-nudge invariant. Every patch in this helper writes a `curationContentHash`
  * that matches the row's current `l4Activities` at write time, so the
@@ -405,7 +415,7 @@ export async function regenerateRowWithFeedback(
       error: "Tower state missing.",
     };
   }
-  const targetRow = initialTower.l3Rows.find((r) => r.id === rowId);
+  const targetRow = initialTower.l4Rows.find((r) => r.id === rowId);
   if (!targetRow) {
     return {
       rowId,
@@ -415,7 +425,7 @@ export async function regenerateRowWithFeedback(
       error: "Row no longer exists.",
     };
   }
-  if (hasInFlightRows(initialTower.l3Rows)) {
+  if (hasInFlightRows(initialTower.l4Rows)) {
     return {
       rowId,
       ok: false,
@@ -428,18 +438,18 @@ export async function regenerateRowWithFeedback(
   // Snapshot the row's current state — used for failure rollback so a
   // partial run never leaves the row in a half-updated state.
   const snapshot = {
-    l4Activities: targetRow.l4Activities,
-    l4Items: targetRow.l4Items,
+    l5Activities: targetRow.l5Activities,
+    l5Items: targetRow.l5Items,
     curationContentHash: targetRow.curationContentHash,
     curationStage: targetRow.curationStage,
     curationGeneratedAt: targetRow.curationGeneratedAt,
     curationError: targetRow.curationError,
   };
 
-  // ----- Pre-flight: flip stage to "running-l4" so the UI shows a skeleton.
+  // ----- Pre-flight: flip stage to "running-l5" so the UI shows a skeleton.
   // Hash and l4Activities untouched, so markRowsStaleByHash is a no-op.
   patchRow(towerId, rowId, {
-    curationStage: "running-l4",
+    curationStage: "running-l5",
     curationError: undefined,
   });
 
@@ -454,12 +464,21 @@ export async function regenerateRowWithFeedback(
     };
   }
 
-  // ----- Stage 1: regenerate the L4 activity list with feedback.
+  // ----- Stage 1: regenerate the L5 Activity list with feedback.
+  // Pass the L4 Activity Group name so the LLM generates L5 leaves that
+  // belong to THIS Activity Group, not generic activities under the
+  // Job Family. Without `l4` the generator falls back to legacy v4 mode
+  // and emits much weaker activity names.
   const genRes = await clientGenerateL4Activities(towerId, [
-    { l2: targetRow.l2, l3: targetRow.l3, ...(feedback ? { feedback } : {}) },
+    {
+      l2: targetRow.l2,
+      l3: targetRow.l3,
+      l4: targetRow.l4,
+      ...(feedback ? { feedback } : {}),
+    },
   ]);
   if (!genRes.ok) {
-    const error = `Generate L4 failed (${genRes.status}): ${genRes.error}`;
+    const error = `Generate L5 Activities failed (${genRes.status}): ${genRes.error}`;
     rollbackRow(towerId, rowId, snapshot, error);
     return { rowId, ok: false, l4Count: 0, eligibleL4Count: 0, error };
   }
@@ -469,7 +488,7 @@ export async function regenerateRowWithFeedback(
     .filter((s) => s.length > 0);
   if (newL4Activities.length === 0) {
     const error =
-      "Generate L4 returned no activities. Try different feedback or set the AI dial to zero on Step 2.";
+      "Generate L5 Activities returned no activities. Try different feedback or set the AI dial to zero on Step 2.";
     rollbackRow(towerId, rowId, snapshot, error);
     return { rowId, ok: false, l4Count: 0, eligibleL4Count: 0, error };
   }
@@ -482,8 +501,8 @@ export async function regenerateRowWithFeedback(
     newL4Activities,
   );
   patchRow(towerId, rowId, {
-    l4Activities: newL4Activities,
-    l4Items: [],
+    l5Activities: newL4Activities,
+    l5Items: [],
     curationContentHash: stage1Hash,
     curationStage: "running-curate",
     curationError: undefined,
@@ -506,7 +525,9 @@ export async function regenerateRowWithFeedback(
       rowId,
       l2: targetRow.l2,
       l3: targetRow.l3,
-      l4Activities: newL4Activities,
+      // V5 L4 Activity Group context — see the note in `runForRows`.
+      l4: targetRow.l4,
+      l5Activities: newL4Activities,
       ...(feedback ? { feedback } : {}),
     },
   ]);
@@ -527,7 +548,7 @@ export async function regenerateRowWithFeedback(
   const generatedAt = new Date().toISOString();
   const itemSource: L4Item["source"] =
     curRes.result.source === "llm" ? "llm" : "fallback";
-  const l4Items: L4Item[] = curated.l4Items.map((item) => {
+  const l5Items: L4Item[] = curated.l5Items.map((item) => {
     const id = synthId(rowId, item.name);
     const overlay = aiCurationOverlay[id];
     return {
@@ -537,7 +558,9 @@ export async function regenerateRowWithFeedback(
       generatedAt,
       aiCurationStatus: item.aiCurationStatus,
       aiEligible: item.aiEligible,
-      aiPriority: item.aiPriority,
+      // See docstring on the batched curation path above — feasibility is the
+      // active signal; aiPriority is dropped on new writes.
+      feasibility: item.feasibility,
       aiRationale: item.aiRationale,
       notEligibleReason: item.notEligibleReason,
       frequency: item.frequency,
@@ -549,29 +572,28 @@ export async function regenerateRowWithFeedback(
       briefSlug: overlay?.briefSlug,
     };
   });
-  const finalL4Names = l4Items.map((x) => x.name);
+  const finalL5Names = l5Items.map((x) => x.name);
   const finalHash = computeCurationContentHash(
     targetRow.l2,
     targetRow.l3,
-    finalL4Names,
+    finalL5Names,
   );
 
-  // ----- Post-Stage-2 atomic write. Final state for the row.
   patchRow(towerId, rowId, {
-    l4Items,
-    l4Activities: finalL4Names,
+    l5Items,
+    l5Activities: finalL5Names,
     curationContentHash: finalHash,
     curationStage: "done",
     curationGeneratedAt: generatedAt,
     curationError: undefined,
   });
 
-  const eligibleCount = l4Items.filter((x) => x.aiEligible).length;
+  const eligibleCount = l5Items.filter((x) => x.aiEligible).length;
   const summary: RegenerateRowSummary = {
     rowId,
     ok: true,
     source: curRes.result.source,
-    l4Count: l4Items.length,
+    l4Count: l5Items.length,
     eligibleL4Count: eligibleCount,
   };
   const warning =
@@ -589,12 +611,12 @@ export async function regenerateRowWithFeedback(
 function patchRow(
   towerId: TowerId,
   rowId: string,
-  patch: Partial<L3WorkforceRow>,
+  patch: Partial<L4WorkforceRow>,
 ): void {
   const fresh = getAssessProgram().towers[towerId];
   if (!fresh) return;
   setTowerAssess(towerId, {
-    l3Rows: fresh.l3Rows.map((r) => (r.id === rowId ? { ...r, ...patch } : r)),
+    l4Rows: fresh.l4Rows.map((r) => (r.id === rowId ? { ...r, ...patch } : r)),
   });
 }
 
@@ -607,18 +629,18 @@ function rollbackRow(
   towerId: TowerId,
   rowId: string,
   snapshot: {
-    l4Activities: L3WorkforceRow["l4Activities"];
-    l4Items: L3WorkforceRow["l4Items"];
-    curationContentHash: L3WorkforceRow["curationContentHash"];
-    curationStage: L3WorkforceRow["curationStage"];
-    curationGeneratedAt: L3WorkforceRow["curationGeneratedAt"];
-    curationError: L3WorkforceRow["curationError"];
+    l5Activities: L4WorkforceRow["l5Activities"];
+    l5Items: L4WorkforceRow["l5Items"];
+    curationContentHash: L4WorkforceRow["curationContentHash"];
+    curationStage: L4WorkforceRow["curationStage"];
+    curationGeneratedAt: L4WorkforceRow["curationGeneratedAt"];
+    curationError: L4WorkforceRow["curationError"];
   },
   error: string,
 ): void {
   patchRow(towerId, rowId, {
-    l4Activities: snapshot.l4Activities,
-    l4Items: snapshot.l4Items,
+    l5Activities: snapshot.l5Activities,
+    l5Items: snapshot.l5Items,
     curationContentHash: snapshot.curationContentHash,
     curationGeneratedAt: snapshot.curationGeneratedAt,
     curationStage: "failed",

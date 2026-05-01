@@ -253,7 +253,7 @@ const QUICK_STARTS: ReadonlyArray<{
   {
     href: "/impact-levers",
     label: "Impact Levers",
-    description: "Configure offshore + AI per L3",
+    description: "Configure offshore + AI per L4 Activity Group",
     Icon: Sliders,
   },
   {

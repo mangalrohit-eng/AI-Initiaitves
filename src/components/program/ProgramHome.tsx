@@ -53,7 +53,7 @@ const FLOW: ReadonlyArray<FlowStep> = [
     step: 2,
     title: "Configure impact levers",
     description:
-      "Dial offshore + AI per L3 against the confirmed capability map.",
+      "Dial offshore + AI per L4 Activity Group against the confirmed capability map.",
     href: "/impact-levers",
     icon: <Sliders className="h-6 w-6" />,
     status: "active",

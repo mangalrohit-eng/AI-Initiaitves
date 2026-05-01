@@ -259,10 +259,23 @@ function sanitizePromptInput(raw: unknown): BuildPromptInput | null {
     const tier = sanitizeTier(it.tier);
     const aiPriority =
       typeof it.aiPriority === "string" ? it.aiPriority.trim() : undefined;
+    const programTierReason =
+      typeof it.programTierReason === "string"
+        ? it.programTierReason.trim()
+        : undefined;
     const rationale =
       typeof it.rationale === "string" ? it.rationale.trim() : undefined;
     if (!id || !name || !towerName) continue;
-    initiatives.push({ id, towerName, name, capabilityPath, tier, aiPriority, rationale });
+    initiatives.push({
+      id,
+      towerName,
+      name,
+      capabilityPath,
+      tier,
+      programTierReason,
+      aiPriority,
+      rationale,
+    });
   }
   if (!initiatives.length) return null;
 
@@ -274,6 +287,25 @@ function sanitizePromptInput(raw: unknown): BuildPromptInput | null {
   } else {
     // Derive from initiatives if not explicitly provided.
     for (const i of initiatives) phaseMembership[i.id] = i.tier;
+  }
+
+  // Optional Deprioritized context — used only for narrative grounding.
+  const deprioritizedRaw = Array.isArray(r.deprioritized) ? r.deprioritized : [];
+  const deprioritized: BuildPromptInput["deprioritized"] = [];
+  for (const item of deprioritizedRaw) {
+    if (!item || typeof item !== "object") continue;
+    const it = item as Record<string, unknown>;
+    const id = typeof it.id === "string" ? it.id.trim() : "";
+    const towerName = typeof it.towerName === "string" ? it.towerName.trim() : "";
+    const name = typeof it.name === "string" ? it.name.trim() : "";
+    const capabilityPath =
+      typeof it.capabilityPath === "string" ? it.capabilityPath.trim() : "";
+    const programTierReason =
+      typeof it.programTierReason === "string"
+        ? it.programTierReason.trim()
+        : "";
+    if (!id || !name || !towerName) continue;
+    deprioritized.push({ id, towerName, name, capabilityPath, programTierReason });
   }
 
   const towersRaw = Array.isArray(r.towersInScope) ? r.towersInScope : [];
@@ -320,6 +352,7 @@ function sanitizePromptInput(raw: unknown): BuildPromptInput | null {
   return {
     initiatives,
     phaseMembership,
+    deprioritized: deprioritized.length > 0 ? deprioritized : undefined,
     towersInScope,
     vendorStack,
     orchestrationMix,

@@ -15,7 +15,7 @@ import type {
 import type { InitiativeL2, InitiativeL3, InitiativeL4 } from "@/lib/initiatives/select";
 import type { UseInitiativeReviewsResult } from "@/lib/initiatives/useInitiativeReviews";
 import { cn, slugify } from "@/lib/utils";
-import { TIER_STYLES, priorityTier } from "@/lib/priority";
+import { feasibilityChip } from "@/lib/feasibilityChip";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
 import { getTowerHref } from "@/lib/towerHref";
@@ -48,11 +48,12 @@ type RowCurationState = {
 
 /**
  * Subscribe once to the live AssessProgram for this tower and return:
- *   - `byRowId`: per-row `{ stage, error }` snapshot keyed by `L3WorkforceRow.id`.
- *   - `anyInFlight`: true iff at least one row in the tower is `running-l4`,
- *     `running-verdict`, or `running-curate` — used to disable the per-L3 Refine
- *     button while another regen (single-row OR tower-wide) is mid-flight,
- *     mirroring the cross-disable pattern in `RegenerateAiGuidanceToolbar`.
+ *   - `byRowId`: per-row `{ stage, error }` snapshot keyed by `L4WorkforceRow.id`.
+ *   - `anyInFlight`: true iff at least one row in the tower is `running-l5`,
+ *     `running-verdict`, or `running-curate` — used to disable the per-L4
+ *     Activity Group Refine button while another regen (single-row OR
+ *     tower-wide) is mid-flight, mirroring the cross-disable pattern in
+ *     `RegenerateAiGuidanceToolbar`.
  */
 function useTowerCurationStages(towerId: TowerId): {
   byRowId: Map<string, RowCurationState>;
@@ -67,7 +68,7 @@ function useTowerCurationStages(towerId: TowerId): {
   }, []);
 
   return React.useMemo(() => {
-    const rows = program.towers[towerId]?.l3Rows ?? [];
+    const rows = program.towers[towerId]?.l4Rows ?? [];
     const byRowId = new Map<string, RowCurationState>();
     for (const r of rows) {
       byRowId.set(r.id, { stage: r.curationStage, error: r.curationError });
@@ -90,44 +91,190 @@ const MATURITY_ACCENT: Record<string, string> = {
   Automated: "border-accent-teal/55 bg-accent-teal/15 text-emerald-900",
 };
 
+// ===========================================================================
+//   Row grouping helpers — V5 hierarchy
+// ===========================================================================
+
 /**
- * One curated (or placeholder) L4 row inside an L3's expanded panel.
- *
- * Renders the Versant-specific rationale, P-tier, frequency, criticality,
- * and maturity for an AI-eligible activity, then offers click-through to the
- * brief or full 4-lens initiative when one is attached.
+ * One L3 Job Family bucket within a single L2 Section: holds every L4
+ * Activity Group row whose canonical parent is this Job Family. Drives
+ * the L3 sub-section header counts ("X Activity Groups · Y AI-eligible
+ * L5 Activities · $Z modeled AI") and supplies the row list for the
+ * stack of `L4ActivityGroupCard`s underneath.
  */
-function L4Row({
+type L3Group = {
+  l3Id: string;
+  l3Name: string;
+  l3Description?: string;
+  /** Workforce rows under this L3 — each is one L4 Activity Group. */
+  rows: InitiativeL3[];
+  totalAiUsd: number;
+  totalActivityGroupCount: number;
+  curatedL5Count: number;
+  placeholderL5Count: number;
+};
+
+/**
+ * Groups the flat row list inside an `InitiativeL2` by L3 Job Family,
+ * preserving canonical order via first-encounter index. Each row in
+ * `l2.l3s` carries its parent `l3.l3` (CapabilityL3), so we bucket by
+ * that id, not by the row id.
+ *
+ * Pre-V5 the panel rendered one card per row and labeled it "L3" — but
+ * multiple rows can share the same L3 Job Family, which surfaced as
+ * duplicate "L3 [same name]" cards. This helper restores the V5-correct
+ * grouping: distinct L3 Job Families become sub-sections, and the rows
+ * (= L4 Activity Groups) sit underneath.
+ */
+function groupRowsByL3(l2: InitiativeL2): L3Group[] {
+  const order: string[] = [];
+  const buckets = new Map<string, L3Group>();
+  for (const row of l2.l3s) {
+    const id = row.l3.id;
+    let g = buckets.get(id);
+    if (!g) {
+      g = {
+        l3Id: id,
+        l3Name: row.l3.name,
+        l3Description: row.l3.description,
+        rows: [],
+        totalAiUsd: 0,
+        totalActivityGroupCount: 0,
+        curatedL5Count: 0,
+        placeholderL5Count: 0,
+      };
+      buckets.set(id, g);
+      order.push(id);
+    }
+    g.rows.push(row);
+    g.totalAiUsd += row.aiUsd;
+    g.totalActivityGroupCount += 1;
+    for (const l5 of row.l4s) {
+      if (l5.isPlaceholder) g.placeholderL5Count += 1;
+      else g.curatedL5Count += 1;
+    }
+  }
+  return order.map((id) => buckets.get(id)!);
+}
+
+/**
+ * Display-only band rendered between the sticky L2 section header and the
+ * `L4ActivityGroupCard` stack. Carries the L3 badge, Job Family name,
+ * the row-level counts, optional description, and summed AI dollars.
+ *
+ * Not sticky and not collapsible — the L4 cards underneath own the
+ * expand/collapse interaction. Keeping the L3 band display-only avoids
+ * two competing sticky bands and keeps the L3 always discoverable.
+ */
+function L3Subsection({
+  group,
+  redact,
+}: {
+  group: L3Group;
+  redact: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <div
+        id={`l3-${group.l3Id}`}
+        className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-accent-purple/30 bg-accent-purple/[0.06] px-3 py-2.5 sm:px-4"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="rounded border border-accent-purple/40 bg-accent-purple/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-accent-purple-dark"
+              title="Hierarchy level"
+            >
+              L3
+            </span>
+            <span className="font-display text-sm font-semibold text-forge-ink">
+              {group.l3Name}
+            </span>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
+              {group.totalActivityGroupCount}{" "}
+              {group.totalActivityGroupCount === 1
+                ? "Activity Group"
+                : "Activity Groups"}
+              {group.curatedL5Count > 0 ? (
+                <>
+                  {" · "}
+                  {group.curatedL5Count} AI-eligible L5
+                  {group.curatedL5Count === 1 ? " Activity" : " Activities"}
+                </>
+              ) : null}
+              {group.placeholderL5Count > 0 ? (
+                <>
+                  {" "}
+                  <span className="text-forge-subtle">
+                    (+{group.placeholderL5Count} pending)
+                  </span>
+                </>
+              ) : null}
+            </span>
+          </div>
+          {group.l3Description ? (
+            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-forge-subtle">
+              {group.l3Description}
+            </p>
+          ) : null}
+        </div>
+        {!redact ? (
+          <div className="text-right">
+            <div className="font-mono text-sm font-semibold tabular-nums text-forge-ink">
+              {formatUsdCompact(group.totalAiUsd)}
+            </div>
+            <div className="text-[10px] uppercase tracking-wider text-forge-hint">
+              Modeled AI $
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One curated (or placeholder) L5 Activity row inside an L4 Activity
+ * Group's expanded panel.
+ *
+ * Renders the Versant-specific rationale, feasibility (ship-ready vs.
+ * investigate), frequency, criticality, and maturity for an AI-eligible
+ * L5 Activity, then offers click-through to the brief or full 4-lens
+ * initiative when one is attached. Per-tower views deliberately do NOT
+ * surface a priority chip — program priority is owned by the cross-tower
+ * 2x2 and lives on the Cross-Tower AI Plan page.
+ */
+function L5ActivityRow({
+  l5,
   l4,
-  l3,
   tower,
   index,
   rowId,
   review,
   actions,
 }: {
-  l4: InitiativeL4;
-  l3: InitiativeL3;
+  l5: InitiativeL4;
+  l4: InitiativeL3;
   tower: Tower;
   index: number;
   rowId: string;
   review: InitiativeReview | undefined;
   actions: UseInitiativeReviewsResult["actions"];
 }) {
-  const tier = priorityTier(l4.aiPriority);
-  const initiative = l4.initiativeId
-    ? tower.processes.find((p) => p.id === l4.initiativeId)
+  const feas = l5.isPlaceholder ? null : feasibilityChip(l5.feasibility);
+  const initiative = l5.initiativeId
+    ? tower.processes.find((p) => p.id === l5.initiativeId)
     : undefined;
   const initiativeHref = initiative
     ? `/tower/${tower.id}/process/${slugify(initiative.name)}`
     : undefined;
-  const briefHref = l4.briefSlug
-    ? `/tower/${tower.id}/brief/${l4.briefSlug}`
-    : l4.llmBriefHref;
-  const briefIsLLM = !l4.briefSlug && Boolean(l4.llmBriefHref);
+  const briefHref = l5.briefSlug
+    ? `/tower/${tower.id}/brief/${l5.briefSlug}`
+    : l5.llmBriefHref;
+  const briefIsLLM = !l5.briefSlug && Boolean(l5.llmBriefHref);
   const isClickable = Boolean(initiativeHref || briefHref);
 
-  const borderClass = l4.isPlaceholder
+  const borderClass = l5.isPlaceholder
     ? "border-l-[3px] border-l-dashed border-l-forge-border"
     : initiative
       ? "border-l-[3px] border-l-accent-purple"
@@ -143,37 +290,35 @@ function L4Row({
       className={cn(
         "grid grid-cols-12 items-start gap-3 px-4 py-3 text-sm transition",
         borderClass,
-        tier ? TIER_STYLES[tier].row : "bg-transparent",
         isClickable ? "hover:bg-accent-purple/5" : "",
       )}
     >
       <div className="col-span-12 min-w-0 md:col-span-6">
         <div className="flex items-start gap-2">
-          {tier ? (
-            <span
-              className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", TIER_STYLES[tier].dot)}
-              aria-hidden
-            />
-          ) : (
-            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-forge-border" aria-hidden />
-          )}
+          <span
+            className={cn(
+              "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+              feas ? feas.dot : "bg-forge-border",
+            )}
+            aria-hidden
+          />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className="rounded border border-forge-border bg-forge-well px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-forge-hint"
                 title="Hierarchy level"
               >
-                L4
+                L5
               </span>
               <span
                 className={cn(
                   "font-medium",
-                  l4.isPlaceholder ? "italic text-forge-subtle" : "text-forge-ink",
+                  l5.isPlaceholder ? "italic text-forge-subtle" : "text-forge-ink",
                 )}
               >
-                {l4.name}
+                {l5.name}
               </span>
-              {l4.source === "fuzzy-match" ? (
+              {l5.source === "fuzzy-match" ? (
                 <span
                   className="rounded-full border border-forge-border bg-forge-well px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider text-forge-hint"
                   title="Curated detail attached via name match. Will be confirmed in editorial sweep."
@@ -181,43 +326,43 @@ function L4Row({
                   inferred
                 </span>
               ) : null}
-              {l4.isPlaceholder ? (
+              {l5.isPlaceholder ? (
                 <span
                   className="inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-well px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider text-forge-hint"
-                  title="AI couldn't identify L4 activities that are candidates for AI here. Regenerate the L4 list on Step 1, or reduce the AI dial for this L3 to zero on Step 2."
+                  title="AI couldn't identify L5 Activities that are candidates for AI here. Regenerate the L5 Activity list on Step 1, or reduce the AI dial for this L4 Activity Group to zero on Step 2."
                 >
                   <Icons.CircleAlert className="h-2.5 w-2.5" />
                   no AI candidates
                 </span>
               ) : null}
               <InitiativeReviewActions
-                l4={l4}
-                l3={l3}
+                l4={l5}
+                l3={l4}
                 review={review}
                 actions={actions}
                 compact
               />
             </div>
-            {l4.aiRationale ? (
+            {l5.aiRationale ? (
               <p className="mt-1 text-xs leading-relaxed text-forge-subtle">
-                {l4.aiRationale}
+                {l5.aiRationale}
               </p>
             ) : null}
-            {l4.isPlaceholder ? (
+            {l5.isPlaceholder ? (
               <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
                 <Link
                   href={`${getTowerHref(tower.id as Parameters<typeof getTowerHref>[0], "capability-map")}#generate-l4-toolbar`}
                   className="inline-flex items-center gap-1 rounded-md border border-forge-border bg-forge-surface px-2 py-0.5 text-forge-body transition hover:border-accent-purple/40 hover:text-accent-purple-dark"
-                  title="Open Step 1 and re-run Generate L4 activities for this tower (LLM-first, canonical-map fallback)."
+                  title="Open Step 1 and re-run Generate L5 Activities for this tower (LLM-first, canonical-map fallback)."
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Icons.RefreshCw className="h-3 w-3" />
-                  Regenerate L4 list
+                  Regenerate L5 list
                 </Link>
                 <Link
-                  href={`${getTowerHref(tower.id as Parameters<typeof getTowerHref>[0], "impact-levers")}#l3-${rowId}`}
+                  href={`${getTowerHref(tower.id as Parameters<typeof getTowerHref>[0], "impact-levers")}#l4-${rowId}`}
                   className="inline-flex items-center gap-1 rounded-md border border-forge-border bg-forge-surface px-2 py-0.5 text-forge-body transition hover:border-accent-purple/40 hover:text-accent-purple-dark"
-                  title="Open Step 2 and reduce the AI dial for this L3 to zero."
+                  title="Open Step 2 and reduce the AI dial for this L4 Activity Group to zero."
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Icons.SlidersHorizontal className="h-3 w-3" />
@@ -230,48 +375,50 @@ function L4Row({
       </div>
 
       <div className="col-span-4 text-xs md:col-span-2">
-        {l4.frequency ? (
+        {l5.frequency ? (
           <span className="inline-flex items-center rounded-full border border-forge-border bg-forge-well px-2 py-0.5 font-medium text-forge-body">
-            {l4.frequency}
+            {l5.frequency}
           </span>
         ) : null}
       </div>
 
       <div className="col-span-4 text-xs md:col-span-2">
-        {l4.criticality ? (
+        {l5.criticality ? (
           <span
             className={cn(
               "inline-flex items-center rounded-full border px-2 py-0.5 font-medium",
-              CRITICALITY_ACCENT[l4.criticality] ?? "border-forge-border bg-forge-well",
+              CRITICALITY_ACCENT[l5.criticality] ?? "border-forge-border bg-forge-well",
             )}
           >
-            {l4.criticality}
+            {l5.criticality}
           </span>
         ) : null}
       </div>
 
       <div className="col-span-4 text-xs md:col-span-1">
-        {l4.currentMaturity ? (
+        {l5.currentMaturity ? (
           <span
             className={cn(
               "inline-flex items-center rounded-full border px-2 py-0.5 font-medium",
-              MATURITY_ACCENT[l4.currentMaturity] ?? "border-forge-border bg-forge-well",
+              MATURITY_ACCENT[l5.currentMaturity] ?? "border-forge-border bg-forge-well",
             )}
           >
-            {l4.currentMaturity}
+            {l5.currentMaturity}
           </span>
         ) : null}
       </div>
 
       <div className="col-span-12 flex items-center justify-between gap-2 md:col-span-1 md:justify-end">
-        {tier ? (
+        {feas ? (
           <span
             className={cn(
-              "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold",
-              TIER_STYLES[tier].badge,
+              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+              feas.badge,
             )}
+            title={feas.tooltip}
           >
-            {tier}
+            <span className={cn("h-1 w-1 rounded-full", feas.dot)} aria-hidden />
+            {feas.label}
           </span>
         ) : null}
         {isClickable ? (
@@ -310,7 +457,7 @@ function L4Row({
   return (
     <div
       className="border-b border-forge-border last:border-b-0"
-      title={l4.aiRationale ?? undefined}
+      title={l5.aiRationale ?? undefined}
     >
       {content}
     </div>
@@ -318,23 +465,24 @@ function L4Row({
 }
 
 /**
- * 3-row skeleton + spinner shown inside the expanded L3 panel while a single-L3
- * regenerate is mid-flight (`running-l4` / `running-curate`). Replaces the live
- * L4 list so the user doesn't briefly see stale or empty content during the
- * interim between Stage 1 and Stage 2 atomic writes.
+ * 3-row skeleton + spinner shown inside the expanded L4 Activity Group
+ * panel while a single-row regenerate is mid-flight (`running-l5` /
+ * `running-curate`). Replaces the live L5 Activity list so the user
+ * doesn't briefly see stale or empty content during the interim
+ * between Stage 1 and Stage 2 atomic writes.
  */
-function L4ListSkeleton({ stage }: { stage: CurationStage | undefined }) {
+function L5ActivityListSkeleton({ stage }: { stage: CurationStage | undefined }) {
   const label =
-    stage === "running-l4"
-      ? "Generating new activities…"
-      : "Re-scoring eligibility and priority…";
+    stage === "running-l5"
+      ? "Generating new L5 Activities…"
+      : "Re-scoring eligibility and feasibility…";
   return (
     <div className="space-y-2 px-4 py-4" aria-live="polite" aria-busy="true">
       <div className="flex items-center gap-2 text-xs text-forge-subtle">
         <Icons.Loader2 className="h-3.5 w-3.5 animate-spin text-accent-purple" aria-hidden />
         <span className="font-medium text-forge-body">{label}</span>
         <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
-          this L3 only
+          this L4 only
         </span>
       </div>
       <div className="space-y-1.5">
@@ -360,21 +508,22 @@ const REFINE_PLACEHOLDER = [
 ].join("\n");
 
 /**
- * Inline "Refine this capability with feedback" panel rendered inside the
- * expanded L3 detail. Captures session-only qualitative feedback, runs the
- * confirm flow, and calls the single-row pipeline helper. Other L3 rows on
- * the page are not touched by this action.
+ * Inline "Refine this Activity Group with feedback" panel rendered
+ * inside the expanded L4 Activity Group detail. Captures session-only
+ * qualitative feedback, runs the confirm flow, and calls the
+ * single-row pipeline helper. Other L4 Activity Group rows on the page
+ * are not touched by this action.
  */
-function RefineL3Panel({
+function RefineActivityGroupPanel({
   towerId,
   rowId,
-  l3Name,
+  activityGroupName,
   inFlight,
   rowStage,
 }: {
   towerId: TowerId;
   rowId: string;
-  l3Name: string;
+  activityGroupName: string;
   inFlight: boolean;
   rowStage: CurationStage | undefined;
 }) {
@@ -384,10 +533,11 @@ function RefineL3Panel({
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [running, setRunning] = React.useState(false);
 
-  // The L3 card outer wrapper is a <button>; every interactive element inside
-  // the panel must stop propagation so the parent doesn't toggle expand/collapse
-  // on every keystroke or click. Mirrors the existing pattern used by the
-  // placeholder-remediation Link components in L4Row.
+  // The L4 Activity Group card outer wrapper is a <button>; every interactive
+  // element inside the panel must stop propagation so the parent doesn't
+  // toggle expand/collapse on every keystroke or click. Mirrors the existing
+  // pattern used by the placeholder-remediation Link components in
+  // L5ActivityRow.
   const stop = React.useCallback(
     (e: React.SyntheticEvent) => e.stopPropagation(),
     [],
@@ -414,7 +564,7 @@ function RefineL3Panel({
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       toast.error({
-        title: "Couldn't regenerate this capability",
+        title: "Couldn't regenerate this Activity Group",
         description: error,
       });
       setRunning(false);
@@ -428,7 +578,7 @@ function RefineL3Panel({
         title: "Regenerate failed",
         description:
           (summary.error ?? "Unknown error.") +
-          " The previous activity list and curation are intact.",
+          " The previous L5 Activity list and curation are intact.",
       });
       return;
     }
@@ -443,22 +593,22 @@ function RefineL3Panel({
     const eligibleNote =
       summary.eligibleL4Count === 1 ? "is now AI-eligible" : "are now AI-eligible";
     toast.success({
-      title: `Refreshed ${summary.l4Count} activit${summary.l4Count === 1 ? "y" : "ies"} for ${l3Name}`,
+      title: `Refreshed ${summary.l4Count} L5 Activit${summary.l4Count === 1 ? "y" : "ies"} for ${activityGroupName}`,
       description:
         (sourceLabel ? `Sourced via ${sourceLabel}. ` : "") +
-        `${summary.eligibleL4Count} of ${summary.l4Count} ${eligibleNote}. Modeled $ for this L3 is unchanged; per-activity attribution rebalanced.` +
+        `${summary.eligibleL4Count} of ${summary.l4Count} ${eligibleNote}. Modeled $ for this L4 Activity Group is unchanged; per-Activity attribution rebalanced.` +
         (summary.warning ? ` ${summary.warning}` : ""),
       durationMs: 8000,
     });
-  }, [feedback, l3Name, rowId, running, toast, towerId]);
+  }, [feedback, activityGroupName, rowId, running, toast, towerId]);
 
   // The Refine button is disabled when ANY in-flight regen exists for the
   // tower (including a tower-wide refresh), to prevent races on conflicting
   // writes. Also disabled while this row's confirm is mid-flight.
   const disabled = running || inFlight;
   const disabledTooltip =
-    running || rowStage === "running-l4" || rowStage === "running-curate"
-      ? "Regeneration in progress for this capability"
+    running || rowStage === "running-l5" || rowStage === "running-curate"
+      ? "Regeneration in progress for this Activity Group"
       : inFlight
         ? "Another regeneration is in progress for this tower"
         : undefined;
@@ -481,7 +631,7 @@ function RefineL3Panel({
         className="inline-flex items-center gap-2 text-xs font-semibold text-accent-purple-dark hover:underline"
       >
         <Icons.Wand2 className="h-3.5 w-3.5" aria-hidden />
-        Refine this capability with feedback
+        Refine this Activity Group with feedback
         <Icons.ChevronDown
           className={cn(
             "h-3.5 w-3.5 transition",
@@ -495,10 +645,11 @@ function RefineL3Panel({
         <div className="mt-2 space-y-2">
           <p className="text-[11px] leading-relaxed text-forge-subtle">
             <span className="font-mono text-forge-hint">›</span> Regenerating
-            affects only this L3. Tower and program $ totals stay the same;
-            per-activity attribution rebalances. Approve / reject decisions on
-            this L3&rsquo;s previous activities become orphans (still visible
-            in the Rejected drawer).
+            affects only this L4 Activity Group. Tower and program $ totals
+            stay the same; per-Activity attribution rebalances. Approve /
+            reject decisions on this Activity Group&rsquo;s previous L5
+            Activities become orphans (still visible in the Rejected
+            drawer).
           </p>
           <textarea
             value={feedback}
@@ -569,26 +720,26 @@ function RefineL3Panel({
           if (!running) setConfirmOpen(false);
         }}
         onConfirm={onConfirm}
-        title={`Regenerate AI ideas for "${l3Name}"?`}
+        title={`Regenerate AI ideas for "${activityGroupName}"?`}
         busy={running}
         confirmLabel={running ? "Regenerating…" : "Regenerate"}
         cancelLabel="Cancel"
         description={
           <div className="space-y-2 text-sm leading-relaxed text-forge-body">
             <p>
-              This re-runs both the activity list and AI scoring for this
-              capability only. Other L3s in this tower and every other tower
-              are not touched.
+              This re-runs both the L5 Activity list and AI scoring for this
+              Activity Group only. Other Activity Groups in this tower and
+              every other tower are not touched.
             </p>
             <p>
-              Modeled $ for this L3 stays the same (it&rsquo;s driven by the
-              dial on Step 2). Per-activity dollar attribution will rebalance
-              across the new list.
+              Modeled $ for this L4 Activity Group stays the same
+              (it&rsquo;s driven by the dial on Step 2). Per-Activity
+              dollar attribution will rebalance across the new list.
             </p>
             <p className="text-forge-subtle">
-              Approve / reject decisions on this L3&rsquo;s previous activities
-              become orphans — they remain visible in the Rejected drawer with
-              their captured snapshot.
+              Approve / reject decisions on this Activity Group&rsquo;s
+              previous L5 Activities become orphans — they remain visible
+              in the Rejected drawer with their captured snapshot.
             </p>
           </div>
         }
@@ -598,14 +749,16 @@ function RefineL3Panel({
 }
 
 /**
- * One L3 row with an expandable detail panel showing AI-eligible L4s.
+ * One L4 Activity Group row card with an expandable detail panel showing
+ * AI-eligible L5 Activities.
  *
- * The header carries the modeled $ from `rowModeledSaving` (via the selector),
- * the live AI dial %, and a deep-link to Step 2 so the user can adjust the
- * dial without losing context.
+ * The header carries the Activity Group name (`row.rowL4Name`), the
+ * modeled $ from `rowModeledSaving` (via the selector), the live AI
+ * dial %, and a deep-link to Step 2 so the user can adjust the dial
+ * without losing context.
  */
-function L3RowCard({
-  l3,
+function L4ActivityGroupCard({
+  row,
   tower,
   expanded,
   onToggle,
@@ -616,7 +769,7 @@ function L3RowCard({
   rowError,
   anyInFlight,
 }: {
-  l3: InitiativeL3;
+  row: InitiativeL3;
   tower: Tower;
   expanded: boolean;
   onToggle: () => void;
@@ -628,15 +781,22 @@ function L3RowCard({
   anyInFlight: boolean;
 }) {
   const redact = useRedactDollars();
-  const maxTier = React.useMemo(() => {
-    const tiers = l3.l4s.map((l) => priorityTier(l.aiPriority)).filter(Boolean);
-    if (tiers.includes("P1")) return "P1" as const;
-    if (tiers.includes("P2")) return "P2" as const;
-    if (tiers.includes("P3")) return "P3" as const;
-    return null;
-  }, [l3.l4s]);
+  // Surface the strongest feasibility signal under this Activity Group —
+  // if any L5 is ship-ready, the L4 carries a "Ship-ready" badge so leads
+  // can scan for Activity Groups ready to move now. Final program priority
+  // lives on the cross-tower 2x2.
+  const headlineFeasibility = React.useMemo<"High" | "Low" | null>(() => {
+    let sawLow = false;
+    for (const l5 of row.l4s) {
+      if (l5.isPlaceholder) continue;
+      if (l5.feasibility === "High") return "High";
+      if (l5.feasibility === "Low") sawLow = true;
+    }
+    return sawLow ? "Low" : null;
+  }, [row.l4s]);
+  const headlineChip = headlineFeasibility ? feasibilityChip(headlineFeasibility) : null;
 
-  const stepTwoHref = `${getTowerHref(tower.id as Parameters<typeof getTowerHref>[0], "impact-levers")}#l3-${l3.rowId}`;
+  const stepTwoHref = `${getTowerHref(tower.id as Parameters<typeof getTowerHref>[0], "impact-levers")}#l4-${row.rowId}`;
 
   return (
     <div
@@ -657,35 +817,31 @@ function L3RowCard({
               className="rounded border border-forge-border bg-forge-well px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-forge-hint"
               title="Hierarchy level"
             >
-              L3
+              L4
             </span>
             <span className="font-display text-sm font-semibold text-forge-ink">
-              {l3.l3.name}
+              {row.rowL4Name}
             </span>
-            {maxTier ? (
+            {headlineChip ? (
               <span
                 className={cn(
-                  "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-                  TIER_STYLES[maxTier].badge,
+                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+                  headlineChip.badge,
                 )}
-                title={`Highest priority of any AI-eligible activity in this capability: ${maxTier}`}
+                title={headlineChip.tooltip}
               >
-                {maxTier}
+                <span className={cn("h-1 w-1 rounded-full", headlineChip.dot)} aria-hidden />
+                {headlineChip.label}
               </span>
             ) : null}
             <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
-              {l3.l4s.length}{" "}
-              {l3.l4s.length === 1 ? "activity" : "activities"}
+              {row.l4s.length}{" "}
+              {row.l4s.length === 1 ? "L5 Activity" : "L5 Activities"}
             </span>
           </div>
           {showBreadcrumb ? (
             <p className="mt-1 font-mono text-[11px] text-forge-hint">
-              {l3.l2Name} · {l3.l3.name}
-            </p>
-          ) : null}
-          {l3.l3.description ? (
-            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-forge-subtle">
-              {l3.l3.description}
+              {row.l2Name} · {row.l3.name} · {row.rowL4Name}
             </p>
           ) : null}
         </div>
@@ -693,10 +849,10 @@ function L3RowCard({
         <div className="flex shrink-0 items-center gap-3 text-right">
           <div>
             <div className="font-mono text-base font-semibold tabular-nums text-forge-ink">
-              {redact ? "—" : formatUsdCompact(l3.aiUsd)}
+              {redact ? "—" : formatUsdCompact(row.aiUsd)}
             </div>
             <div className="text-[10px] uppercase tracking-wider text-forge-hint">
-              AI dial · {Math.round(l3.aiPct)}%
+              AI dial · {Math.round(row.aiPct)}%
             </div>
           </div>
           <Icons.ChevronDown
@@ -718,10 +874,10 @@ function L3RowCard({
             transition={{ duration: 0.22, ease: "easeOut" }}
             className="overflow-hidden border-t border-forge-border"
           >
-            <RefineL3Panel
+            <RefineActivityGroupPanel
               towerId={tower.id as TowerId}
-              rowId={l3.rowId}
-              l3Name={l3.l3.name}
+              rowId={row.rowId}
+              activityGroupName={row.rowL4Name}
               inFlight={anyInFlight}
               rowStage={rowStage}
             />
@@ -731,33 +887,38 @@ function L3RowCard({
                 <Icons.AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-red" aria-hidden />
                 <span>
                   <span className="font-semibold text-forge-ink">Previous regenerate failed:</span>{" "}
-                  {rowError} The activity list below is the last successful version.
+                  {rowError} The L5 Activity list below is the last successful version.
                 </span>
               </div>
             ) : null}
 
-            {rowStage === "running-l4" || rowStage === "running-curate" ? (
-              <L4ListSkeleton stage={rowStage} />
+            {rowStage === "running-l5" || rowStage === "running-curate" ? (
+              <L5ActivityListSkeleton stage={rowStage} />
             ) : (
               <>
                 <div className="hidden grid-cols-12 gap-3 border-b border-forge-border bg-forge-well/50 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-forge-hint md:grid">
-                  <div className="col-span-6">Activity (L4)</div>
+                  <div className="col-span-6">Activity (L5)</div>
                   <div className="col-span-2">Frequency</div>
                   <div className="col-span-2">Criticality</div>
                   <div className="col-span-1">Maturity</div>
-                  <div className="col-span-1 text-right">Priority</div>
+                  <div
+                    className="col-span-1 text-right"
+                    title="Ship-ready vs. Investigate. Final program priority is set on the Cross-Tower AI Plan via the feasibility × business-impact 2x2."
+                  >
+                    Feasibility
+                  </div>
                 </div>
 
                 <div>
-                  {l3.l4s.map((l4, i) => (
-                    <L4Row
-                      key={l4.id}
-                      l4={l4}
-                      l3={l3}
+                  {row.l4s.map((l5, i) => (
+                    <L5ActivityRow
+                      key={l5.id}
+                      l5={l5}
+                      l4={row}
                       tower={tower}
                       index={i}
-                      rowId={l3.rowId}
-                      review={reviews[l4.id]}
+                      rowId={row.rowId}
+                      review={reviews[l5.id]}
                       actions={actions}
                     />
                   ))}
@@ -767,13 +928,13 @@ function L3RowCard({
 
             <div className="flex items-center justify-between gap-2 border-t border-forge-border bg-forge-well/40 px-4 py-2 text-[11px] text-forge-subtle">
               <span>
-                Per-L3 AI $ matches the dial set on Step 2 — change once, both
-                surfaces update.
+                Per-L4 Activity Group AI $ matches the dial set on Step 2 —
+                change once, both surfaces update.
               </span>
               <Link
                 href={stepTwoHref}
                 className="inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-surface px-2.5 py-1 font-medium text-forge-body hover:border-accent-purple/40 hover:text-accent-purple-dark"
-                title="Adjust the AI dial for this capability on Step 2"
+                title="Adjust the AI dial for this Activity Group on Step 2"
               >
                 <Icons.SlidersHorizontal className="h-3 w-3" />
                 Adjust dial in Step 2
@@ -788,8 +949,27 @@ function L3RowCard({
 }
 
 /**
- * Nested L2 sections with L3 rows (L4 expands per L3). All L2s visible;
- * L3 panels start collapsed.
+ * V5 capability hierarchy renderer: L2 Section -> L3 sub-section band ->
+ * L4 Activity Group card -> expandable list of L5 Activities.
+ *
+ *   - L2 sections come straight from the selector (`InitiativeL2`) with
+ *     a sticky bordered header. One per Job Grouping.
+ *   - L3 sub-sections are computed locally via `groupRowsByL3`. Distinct
+ *     L3 Job Families bucket the rows so multi-row Job Families collapse
+ *     into one band instead of N look-alike cards. The band is display-
+ *     only (not collapsible, not sticky) so the L4 cards underneath own
+ *     the expand interaction without competing.
+ *   - L4 Activity Group cards are one-per-row (each `InitiativeL3`
+ *     entry IS one workforce row = one Activity Group). Header carries
+ *     the Activity Group name, headline feasibility, modeled AI $, and
+ *     the live dial %. Click to expand.
+ *   - L5 Activity rows are the AI initiatives surfaced under the
+ *     Activity Group — rationale, feasibility, frequency, criticality,
+ *     maturity, with click-through to the brief or full 4-lens initiative.
+ *
+ * The expanded-state set is keyed by `${l2Id}::${l3Id}::${rowId}` so
+ * "two L4 Activity Groups happen to share a name in different L2/L3"
+ * still expand independently.
  */
 export function ProcessLandscape({
   l2s,
@@ -803,28 +983,31 @@ export function ProcessLandscape({
   actions: UseInitiativeReviewsResult["actions"];
 }) {
   const redact = useRedactDollars();
-  const [expandedL3Keys, setExpandedL3Keys] = React.useState<Set<string>>(
+  const [expandedL4Keys, setExpandedL4Keys] = React.useState<Set<string>>(
     () => new Set(),
   );
   const { byRowId: rowStages, anyInFlight } = useTowerCurationStages(
     tower.id as TowerId,
   );
 
-  const toggleL3 = React.useCallback((l2Id: string, l3Id: string) => {
-    const key = `${l2Id}::${l3Id}`;
-    setExpandedL3Keys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
+  const toggleL4 = React.useCallback(
+    (l2Id: string, l3Id: string, rowId: string) => {
+      const key = `${l2Id}::${l3Id}::${rowId}`;
+      setExpandedL4Keys((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    },
+    [],
+  );
 
   const collapseAll = React.useCallback(() => {
-    setExpandedL3Keys(new Set());
+    setExpandedL4Keys(new Set());
   }, []);
 
-  const anyExpanded = expandedL3Keys.size > 0;
+  const anyExpanded = expandedL4Keys.size > 0;
 
   return (
     <div className="space-y-6">
@@ -832,9 +1015,11 @@ export function ProcessLandscape({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="max-w-3xl text-xs text-forge-subtle">
             The{" "}
-            <span className="font-medium text-forge-body">Priority roadmap</span>{" "}
-            tab lists only P1–P3-tagged activities; this view is the full scoped
-            set. Expand an L3 row for L4 activities.
+            <span className="font-medium text-forge-body">Feasibility roster</span>{" "}
+            tab groups ship-ready vs. investigate ideas for this tower; this view
+            is the full scoped set. Expand an L4 Activity Group card for its L5
+            Activities. Final program priority (P1/P2/P3) is set on the
+            Cross-Tower AI Plan via the feasibility × business-impact 2x2.
           </p>
           {anyExpanded ? (
             <button
@@ -850,6 +1035,7 @@ export function ProcessLandscape({
 
       {l2s.map((l2) => {
         const Icon = resolveIcon(l2.l2.icon);
+        const l3Groups = groupRowsByL3(l2);
         return (
           <motion.section
             key={l2.l2.id}
@@ -884,7 +1070,7 @@ export function ProcessLandscape({
               <div className="flex shrink-0 flex-col items-end gap-1 text-right text-xs text-forge-subtle sm:flex-row sm:items-center sm:gap-4">
                 <div className="text-right">
                   <div className="text-[10px] uppercase tracking-wider text-forge-hint">
-                    AI-eligible activities
+                    AI-eligible L5 Activities
                   </div>
                   <div className="font-mono text-sm font-semibold tabular-nums text-forge-ink">
                     {l2.curatedL4Count}
@@ -910,26 +1096,35 @@ export function ProcessLandscape({
             </header>
 
             <div className="overflow-x-auto">
-              <div className="min-w-[min(100%,640px)] space-y-2 p-4 sm:p-5">
-                {l2.l3s.map((l3) => {
-                  const key = `${l2.l2.id}::${l3.l3.id}`;
-                  const stageState = rowStages.get(l3.rowId);
-                  return (
-                    <L3RowCard
-                      key={l3.l3.id}
-                      l3={l3}
-                      tower={tower}
-                      expanded={expandedL3Keys.has(key)}
-                      onToggle={() => toggleL3(l2.l2.id, l3.l3.id)}
-                      reviews={reviews}
-                      actions={actions}
-                      showBreadcrumb
-                      rowStage={stageState?.stage}
-                      rowError={stageState?.error}
-                      anyInFlight={anyInFlight}
-                    />
-                  );
-                })}
+              <div className="min-w-[min(100%,640px)] space-y-5 p-4 sm:p-5">
+                {l3Groups.map((group) => (
+                  <div key={group.l3Id} className="space-y-2">
+                    <L3Subsection group={group} redact={redact} />
+                    <div className="space-y-2">
+                      {group.rows.map((row) => {
+                        const key = `${l2.l2.id}::${group.l3Id}::${row.rowId}`;
+                        const stageState = rowStages.get(row.rowId);
+                        return (
+                          <L4ActivityGroupCard
+                            key={row.rowId}
+                            row={row}
+                            tower={tower}
+                            expanded={expandedL4Keys.has(key)}
+                            onToggle={() =>
+                              toggleL4(l2.l2.id, group.l3Id, row.rowId)
+                            }
+                            reviews={reviews}
+                            actions={actions}
+                            showBreadcrumb
+                            rowStage={stageState?.stage}
+                            rowError={stageState?.error}
+                            anyInFlight={anyInFlight}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </motion.section>

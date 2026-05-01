@@ -70,8 +70,8 @@ function FlowBand({
           Today → Steady state (M24)
         </h2>
         <p className="mt-1 text-sm text-forge-subtle">
-          Program-wide. Every count is deterministic — sum of per-L3 movable
-          headcount math from Step 2 dials.
+          Program-wide. Every count is deterministic — sum of per-L4 Activity
+          Group movable headcount math from Step 2 dials.
           {plan.programEditorialCarveOutCount > 0 ? (
             <>
               {" "}Editorial carve-out is{" "}
@@ -248,9 +248,9 @@ function PerTowerTable({
           Per-tower org transition
         </h2>
         <p className="mt-1 text-sm text-forge-subtle">
-          Click a tower to drill into its L3 rows — the lane assignment,
-          provenance, and the LLM justification when the offshore plan has
-          been generated.
+          Click a tower to drill into its L4 Activity Group rows — the lane
+          assignment, provenance, and the LLM justification when the offshore
+          plan has been generated.
         </p>
       </header>
 

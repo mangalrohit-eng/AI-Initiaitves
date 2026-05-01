@@ -1,12 +1,14 @@
 import type { L3WorkforceRow, TowerId } from "./types";
 
 /**
- * Versant-aware starter heuristic for L3 offshoring% and AI-impact%.
+ * Versant-aware starter heuristic for L4 Activity Group offshoring% and
+ * AI-impact% (V5). Function names retained from V4 for back-compat.
  *
- * Inputs are the L2 / L3 capability labels (case-insensitive substring match) plus
- * the tower id, which sets a prior. Rules then add deltas. Output is clamped to a
- * realistic band (5–85% offshore, 10–75% AI) and rounded to the nearest 5 for a clean
- * starting point.
+ * Inputs are the L3 Job Family / L4 Activity Group labels (case-insensitive
+ * substring match — supplied via the legacy `l2` / `l3` argument names) plus
+ * the tower id, which sets a prior. Rules then add deltas. Output is clamped
+ * to a realistic band (5–85% offshore, 10–75% AI) and rounded to the nearest
+ * 5 for a clean starting point.
  *
  * Logic considers Versant's profile (US news / sports / streaming under a TSA expiration,
  * on-air talent, political brand sensitivity, multi-entity JV, BB- credit) so:
@@ -44,9 +46,10 @@ type Rule = {
 /**
  * Routine, codified, transactional → higher offshore + AI.
  *
- * These keywords describe L2/L3 capability buckets (e.g., "Accounts Payable",
- * "Service Desk"), not L4 activity verbs. The heuristic now scores at L3, so
- * very narrow per-activity tells (e.g., "match-pay-and-extract") have been
+ * These keywords describe L3 Job Family / L4 Activity Group buckets (e.g.,
+ * "Accounts Payable", "Service Desk"), not L5 Activity verbs. The heuristic
+ * scores at the dial-bearing rung (L4 Activity Group under V5), so very
+ * narrow per-activity tells (e.g., "match-pay-and-extract") have been
  * removed in favor of the broader sub-capability vocabulary.
  */
 const ROUTINE_RULES: Rule[] = [

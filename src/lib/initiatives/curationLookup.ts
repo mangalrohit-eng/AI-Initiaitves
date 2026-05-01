@@ -1,7 +1,9 @@
 /**
  * Canonical capability-map walk for reports and offline analysis.
- * Initiative P-tiers and curation detail for the tower journey are shown on
- * AI Initiatives (Step 4), not on the Capability Map (Step 1).
+ * Per-L4 feasibility (Ship-ready / Investigate) and curation detail for the
+ * tower journey are shown on AI Initiatives (Step 4), not on the Capability
+ * Map (Step 1). Program priority (P1 / P2 / P3 / Deprioritized) is computed
+ * from the cross-tower 2x2 — it is NOT carried on individual L4s here.
  */
 
 import type { CapabilityMapDefinition } from "@/data/capabilityMap/types";

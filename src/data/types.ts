@@ -1,6 +1,36 @@
 /** Modeled potential impact — qualitative only until discovery validates sizing. */
 export type ImpactTier = "High" | "Medium" | "Low";
 
+/**
+ * Per-L5 Activity ship-readiness signal. Binary by design — the program-level
+ * 2x2 needs a binary input. "Medium" is intentionally absent: in plain
+ * language, either we believe the activity can ship in the next 6 months on
+ * Versant's existing platform stack, or we don't. Sources stack:
+ *   1. Explicit override on overlay / canonical L5 / LLM curation.
+ *   2. Rubric INCLUDE_PATTERN tag (today's "P1" patterns -> High).
+ *   3. Computed fallback from currentMaturity + frequency + primaryVendor.
+ *
+ * Display rule: feasibility is NEVER shown as a chip on Step 4. It feeds the
+ * cross-tower 2x2 only.
+ */
+export type Feasibility = "High" | "Low";
+
+/**
+ * Cross-tower program priority — output of the deterministic 2x2 over
+ * (feasibility, parent-L4 Activity Group business impact). Distinct from the
+ * legacy per-L5 `aiPriority`, which is now used only as a back-compat input
+ * to feasibility.
+ *
+ *   - P1 — Quick Wins        (HF/HBI)
+ *   - P2 — Fill-ins          (HF/LBI)
+ *   - P3 — Strategic Builds  (LF/HBI)
+ *   - Deprioritized          (LF/LBI — below the line, not in plan)
+ *
+ * Phase start months stay UNCHANGED from the previous model (P1=M1, P2=M7,
+ * P3=M13) by direction; the labels above are the user-facing meaning.
+ */
+export type ProgramTier = "P1" | "P2" | "P3" | "Deprioritized";
+
 export type Tower = {
   id: string;
   name: string;
@@ -82,7 +112,22 @@ export type TowerProcess = {
   criticality: TowerProcessCriticality;
   currentMaturity: TowerProcessMaturity;
   aiEligible: boolean;
+  /**
+   * @deprecated Per-tower P1/P2/P3 is no longer the program-wide priority
+   * signal. Cross-tower priority comes from `computeProgramTiers()` in
+   * `lib/initiatives/programTier.ts`, which derives `ProgramTier` from
+   * (feasibility, parent-L4 Activity Group business impact). Field is
+   * retained ONLY as a back-compat input to the binary `feasibility`
+   * derivation in `composeVerdict.ts` (P1 -> High, P2/P3 -> Low). Do not
+   * display as a priority chip on Step 4 / per-tower views.
+   */
   aiPriority?: AiPriority;
+  /**
+   * Binary ship-readiness signal, surfaced separately from `aiPriority`.
+   * Optional because legacy data (canonical operating models) hasn't been
+   * back-filled yet — readers fall back to the deprecated `aiPriority` map.
+   */
+  feasibility?: Feasibility;
   aiRationale: string;
   aiInitiativeId?: string;
   aiInitiativeRelation?: "primary" | "sub-process" | "related" | "governance";
@@ -123,7 +168,12 @@ export type AIProcessBrief = {
   // Exact or partial name match used to attach this brief to a
   // TowerProcess row in the operating model at composition time.
   matchRowName: string;
-  aiPriority: "P1" | "P2";
+  /**
+   * Brief routing tier — internal hint for which build-wave the brief is
+   * authored against. NOT a program priority signal; the cross-tower 2x2
+   * owns that. Retained for content sequencing and brief authoring queue.
+   */
+  briefRoutingTier: "P1" | "P2";
   description?: string;
   impactTier: ImpactTier;
   preState: {

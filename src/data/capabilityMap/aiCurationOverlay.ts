@@ -18,7 +18,7 @@
  *   2. This overlay has an entry                          →  second
  *   3. Rubric output                                      →  fallback
  *
- * The LLM pipeline (PR 2) — when it lands — writes to `L3WorkforceRow.l4Items`
+ * The LLM pipeline (PR 2) — when it lands — writes to `L3WorkforceRow.l5Items`
  * and overrides every layer below. This file remains as the deterministic
  * floor for offline / no-API-key environments.
  */

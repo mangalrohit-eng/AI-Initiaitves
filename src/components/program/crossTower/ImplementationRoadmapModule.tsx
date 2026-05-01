@@ -3,6 +3,7 @@
 import type { PhaseBucket, SelectProgramResult } from "@/lib/initiatives/selectProgram";
 import type { CrossTowerAiPlanLLM, LLMRoadmapPhase } from "@/lib/llm/prompts/crossTowerAiPlan.v1";
 import { TIER_META, TIER_STYLES, type Tier } from "@/lib/priority";
+import { programTierLabel } from "@/lib/programTierLabels";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
 import { Sparkles } from "lucide-react";
@@ -10,7 +11,10 @@ import { Sparkles } from "lucide-react";
 /**
  * Three-phase implementation roadmap.
  *
- *   - Phase windows + initiative membership: deterministic via `priorityTier()`.
+ *   - Phase windows + initiative membership: deterministic via the
+ *     program-level 2x2 (`computeProgramTiers`); start months come from
+ *     `PHASE_START_MONTHS` in `buildScaleModel.ts` and stay the same as the
+ *     legacy P1/P2/P3 timeline (M1 / M7 / M13).
  *   - Phase narrative, milestones, owner notes: LLM-authored when available.
  *
  * Each phase card shows the count + AI $ for that phase, then either the
@@ -44,7 +48,10 @@ export function ImplementationRoadmapModule({
             <span className="font-mono text-accent-purple-dark">&gt;</span> Implementation roadmap
           </h2>
           <p className="mt-1 text-sm text-forge-subtle">
-            Three horizons: P1 immediate (0–6mo), P2 near-term (6–12mo), P3 medium-term (12–24mo).
+            Three program tiers from the cross-tower 2x2: P1 Quick Wins (M1+),
+            P2 Fill-ins (M7+), P3 Strategic Builds (M13+). Tier comes from
+            feasibility × parent-L4 Activity Group business impact — start
+            months stay fixed from the legacy timeline.
             {llmAuthored ? (
               <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">
                 <Sparkles className="h-2.5 w-2.5" aria-hidden /> AI-authored narrative
@@ -57,7 +64,7 @@ export function ImplementationRoadmapModule({
       <div className="mt-5 grid gap-4 lg:grid-cols-3">
         {phases.map((phase) => (
           <PhaseCard
-            key={phase.tier}
+            key={phase.programTier}
             phase={phase}
             llmPhase={pickLLMPhase(llmPlan, phase.tier)}
           />
@@ -82,8 +89,13 @@ function PhaseCard({
   llmPhase: LLMRoadmapPhase | null;
 }) {
   const redact = useRedactDollars();
-  const meta = TIER_META[phase.tier];
-  const styles = TIER_STYLES[phase.tier];
+  // PhaseCard is only rendered for in-plan tiers (P1/P2/P3) — `phase.tier`
+  // is non-null by construction in this module.
+  const visualTier = phase.tier;
+  if (!visualTier) return null;
+  const meta = TIER_META[visualTier];
+  const styles = TIER_STYLES[visualTier];
+  const ptLabel = programTierLabel(phase.programTier);
   const Icon = meta.icon;
   return (
     <div
@@ -97,8 +109,11 @@ function PhaseCard({
             <Icon className="h-4 w-4" aria-hidden />
           </span>
           <div>
-            <div className="text-[11px] font-medium uppercase tracking-wider text-forge-subtle">
-              {phase.tier} · {meta.label}
+            <div
+              className="text-[11px] font-medium uppercase tracking-wider text-forge-subtle"
+              title={ptLabel.longLabel}
+            >
+              {ptLabel.numeral} · {ptLabel.name}
             </div>
             <div className="text-sm font-semibold text-forge-ink">{meta.window}</div>
           </div>
@@ -178,9 +193,9 @@ function PhaseCard({
 
 function pickLLMPhase(
   llmPlan: CrossTowerAiPlanLLM | null,
-  tier: Tier,
+  tier: Tier | null,
 ): LLMRoadmapPhase | null {
-  if (!llmPlan) return null;
+  if (!llmPlan || !tier) return null;
   if (tier === "P1") return llmPlan.roadmapPhases.p1;
   if (tier === "P2") return llmPlan.roadmapPhases.p2;
   return llmPlan.roadmapPhases.p3;

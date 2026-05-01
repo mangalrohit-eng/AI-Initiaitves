@@ -3,9 +3,19 @@
  *
  * One batched call per tower scores every L4 across every queued L3 row in a
  * single request. The model returns the full Stage 2 (verdict) + Stage 3
- * (curation summary) shape — eligibility, priority, rationale, vendor, agent
- * one-liner — and the caller stamps it onto the persisted `L4Item.l4Items`
- * array so the AI Initiatives view-model can read straight from the cache.
+ * (curation summary) shape — eligibility, binary feasibility, rationale,
+ * vendor, agent one-liner — and the caller stamps it onto the persisted
+ * `L4Item.l4Items` array so the AI Initiatives view-model can read straight
+ * from the cache.
+ *
+ * Why feasibility (not priority): the prompt asks the model to score binary
+ * ship-readiness only. Cross-tower priority is computed deterministically by
+ * the program-level 2x2 in `lib/initiatives/programTier.ts` from
+ * (feasibility, parent-L4 Activity Group business impact). The deterministic
+ * substrate keeps its field names (`l3AiUsd`, `l3RowId`) for back-compat —
+ * those fields semantically describe the L4 Activity Group prize under V5.
+ * This separation prevents the model from accidentally producing tower-local
+ * priorities that aren't comparable across towers.
  *
  * Design notes:
  *  - Mirrors the structure of `inferDefaultsLLM.ts`: Chat Completions JSON
@@ -25,7 +35,7 @@
  */
 
 import type {
-  AiPriority,
+  Feasibility,
   TowerProcessCriticality,
   TowerProcessFrequency,
   TowerProcessMaturity,
@@ -36,18 +46,50 @@ import type { NotEligibleReason, TowerId } from "@/data/assess/types";
 const DEFAULT_MODEL = "gpt-4o-mini";
 const DEFAULT_TIMEOUT_MS = 90_000;
 
-/** Hard ceiling per tower per call. The pipeline batches by tower already. */
-export const MAX_L4S_PER_CALL = 100;
+/**
+ * Hard ceiling per tower per call. The pipeline batches by tower already.
+ * Pre-migration the LLM scored L4 Activities; post-5-layer-migration it
+ * scores L5 Activities. Same per-call ceiling — the leaves themselves
+ * didn't get more numerous, the layer numbering shifted.
+ */
+export const MAX_L5S_PER_CALL = 100;
+/** @deprecated Renamed to `MAX_L5S_PER_CALL` in the 5-layer migration. */
+export const MAX_L4S_PER_CALL = MAX_L5S_PER_CALL;
 
 export type CurateLLMRowInput = {
   /** Round-tripped so the caller can match results back without name fuzzing. */
   rowId: string;
+  /**
+   * V5 L2 Job Grouping label — the topmost bucket inside the tower (e.g.
+   * "Finance & Accounting"). Field stays named `l2` to keep the wire-format
+   * stable across the 5-layer cutover.
+   */
   l2: string;
+  /**
+   * V5 L3 Job Family label — the mid-tier bucket (e.g. "Source-to-Pay").
+   * Field name retained for wire-format stability.
+   */
   l3: string;
-  l4Activities: string[];
+  /**
+   * V5 L4 Activity Group label — the dial-bearing row that the L5 Activities
+   * sit under (e.g. "Invoice Processing"). REQUIRED for accurate scoring:
+   * without it the model collapses two layers of context and produces
+   * lower-quality verdicts (often defaulting to not-eligible because it
+   * can't distinguish a generic activity from a Versant-specific one).
+   *
+   * Optional only for legacy callers mid-cutover; server falls back to
+   * using `l3` as the Activity Group when absent and emits a warning so the
+   * miscall is visible.
+   */
+  l4?: string;
+  /**
+   * The L5 Activity names under the L4 Activity Group (was L4 Activities
+   * under an L3 Capability). The model scores each leaf for AI eligibility.
+   */
+  l5Activities: string[];
   /**
    * Optional qualitative feedback from the user to steer the curation for this
-   * row. Used by the per-L3 "Refine + regenerate" affordance on Step 4. The
+   * row. Used by the per-row "Refine + regenerate" affordance on Step 4. The
    * system prompt instructs the model that feedback can shift priority /
    * rationale / vendor selections, but CANNOT bypass the canonical
    * not-eligible reasons or the vendor allow-list. Sanitized server-side to
@@ -56,12 +98,17 @@ export type CurateLLMRowInput = {
   feedback?: string;
 };
 
-/** One scored L4 — server-validated shape returned to the caller. */
+/** One scored L5 Activity — server-validated shape returned to the caller. */
 export type CurateLLMItem = {
   name: string;
   aiCurationStatus: AiCurationStatus;
   aiEligible: boolean;
-  aiPriority?: AiPriority;
+  /**
+   * Binary ship-readiness — feeds the cross-tower 2x2 deterministically.
+   * The LLM scores ONLY this dimension; program priority is computed
+   * downstream from (feasibility, parent-L4 Activity Group business impact).
+   */
+  feasibility?: Feasibility;
   aiRationale: string;
   notEligibleReason?: NotEligibleReason;
   frequency?: TowerProcessFrequency;
@@ -73,7 +120,11 @@ export type CurateLLMItem = {
 
 export type CurateLLMRow = {
   rowId: string;
-  l4Items: CurateLLMItem[];
+  /**
+   * Scored L5 Activities for this row. Pre-migration this was named
+   * `l4Items` because the leaves were L4. Renamed in the 5-layer migration.
+   */
+  l5Items: CurateLLMItem[];
 };
 
 export type CurateLLMOptions = {
@@ -226,19 +277,44 @@ function buildSystemPrompt(towerId: TowerId): string {
   const towerContext =
     TOWER_CONTEXT[towerId] ?? "Versant tower (context not authored).";
   return [
-    "You curate Versant Media Group L4 activities for an AI initiatives agenda. Every output must be Versant-specific and declarative — never generic.",
+    "You curate Versant Media Group L5 Activities (the leaf rung under each L4 Activity Group on the 5-layer capability map) for an AI initiatives agenda. Every output must be Versant-specific and declarative — never generic.",
+    "",
+    "Capability map shape (top-down, 5 layers):",
+    "  L1 Function (e.g. Finance) > L2 Job Grouping > L3 Job Family > L4 Activity Group > L5 Activity",
+    "Each input row gives you the parent context (Job Grouping → Job Family → Activity Group) and the L5 Activities sitting directly under that Activity Group. You score the L5 Activities — never the parents.",
     "",
     "Versant Media Group (NASDAQ: VSNT) is the spin-off of NBCUniversal's news, sports, streaming, digital portfolio: MS NOW, CNBC, Golf Channel, GolfNow, GolfPass, USA Network, E!, Syfy, Oxygen True Crime, Fandango, Rotten Tomatoes, SportsEngine, Free TV Networks. ~$6.7B revenue, ~$2.4B Adj. EBITDA, ~$2.75B debt (BB-), running on NBCU shared services until the TSA expires.",
     "",
-    "For each L4 activity, return a verdict (Stage 2) plus a short curation summary (Stage 3). Eligible items get priority + frequency + criticality + maturity + primaryVendor + agentOneLine. Not-eligible items skip the curation fields and instead return one of the FIVE canonical reasons.",
+    "For each L5 Activity, return a verdict (Stage 2) plus a short curation summary (Stage 3). Eligible items get a binary feasibility + frequency + criticality + maturity + primaryVendor + agentOneLine. Not-eligible items skip the curation fields and instead return one of the FIVE canonical reasons.",
     "",
     `Tower currently being scored: ${towerId} — ${towerContext}`,
     "",
-    "Versant constraints you MUST respect:",
-    "  - Editorial / news judgment / on-air talent / fact-checking / political coverage → reviewed-not-eligible with reason 'Requires human editorial judgment'.",
-    "  - Negotiation, key-account, agency, carriage, talent / sports-rights deal-making → reviewed-not-eligible with reason 'Fundamentally relationship-driven'.",
-    "  - Treasury / covenant / 10-K / disclosure / political-brand decisions → reviewed-not-eligible with reason 'Strategic exercise requiring executive judgment'.",
-    "  - Live broadcast, master control, on-air ops, in-studio production → reviewed-not-eligible with reason 'Requires human editorial judgment' OR 'Strategic exercise requiring executive judgment' depending on context.",
+    "ELIGIBILITY rule (the binary field `aiEligible`):",
+    "  Default `aiEligible = true` for any L5 Activity that is processing, matching, reconciling, drafting, tagging, transcribing, summarising, monitoring, anomaly-detection, classification, extraction, routing, scheduling, dispatching, forecasting, validation, compliance-check, ingestion, normalisation, or any rules-based / pattern-driven operation — even when it sits inside a parent bucket whose NAME contains a not-eligible keyword (e.g. an `Account Reconciliation` L5 inside a `Treasury & Capital` L3 is still eligible — the activity itself is rules-based).",
+    "",
+    "  Mark `aiEligible = false` ONLY when the SPECIFIC L5 Activity itself is one of the four patterns below. Do NOT exclude an L5 just because its parent L4/L3 name brushes past one of these words.",
+    "",
+    "  Calibration check before you finalise: across a tower's ~30-80 L5 Activities you should typically land 50%-80% eligible. If your draft has <30% eligible, re-read — you're treating parent-bucket names as exclusion signals, which is wrong. Score each L5 Activity on its OWN merits.",
+    "",
+    "FEASIBILITY rule (the binary field `feasibility`, only set when aiEligible = true):",
+    "  feasibility = 'High' when ALL three signals hold:",
+    "    (1) The activity is rules-based or pattern-driven (not requiring net-new editorial / negotiation / executive judgment on EACH instance),",
+    "    (2) A named vendor on the allow-list (BlackLine, Eightfold, Workday, ServiceNow, Amagi, Piano, LiveRamp, Deepgram, Descript, etc.) ALREADY supports this work or directly applies,",
+    "    (3) Cadence is recurring at meaningful volume (Continuous / Daily / Weekly / Bi-weekly / Event-driven) so automation pays back inside the plan window.",
+    "  feasibility = 'Low' when the activity is genuinely AI-eligible but needs longer runway: net-new platform stand-up, heavy change-management, multi-system integrations, or new vendor onboarding before the agent fleet can ship.",
+    "  Feasibility is BINARY by design — there is NO 'Medium'. Cross-tower priority (P1/P2/P3) is computed downstream by the deterministic 2x2; do NOT attempt to score priority.",
+    "",
+    "NOT-ELIGIBLE patterns (apply to the L5 Activity itself, not its parent):",
+    "  - The L5 IS editorial judgment / on-air talent decision / fact-checking / political-coverage editorial call → 'Requires human editorial judgment'. NOT: editorial production support, transcript drafting, broadcast monitoring, news ingest — those are eligible.",
+    "  - The L5 IS deal-making / counterparty negotiation / agency-relationship / key-account selling / carriage negotiation / talent-rights negotiation → 'Fundamentally relationship-driven'. NOT: contract abstraction, deal-pipeline tracking, renewal forecasting — those are eligible.",
+    "  - The L5 IS a strategic decision call (capital-allocation policy, M&A go/no-go, board-level strategy, executive-judgment 10-K narrative authoring, political-brand positioning decision, multi-year covenant-strategy decision) → 'Strategic exercise requiring executive judgment'. NOT: covenant DATA monitoring, 10-K data assembly, treasury cash-position reporting, MD&A first-draft generation — those are eligible.",
+    "  - The L5 IS in-the-moment live broadcast / master-control switching / studio-floor production direction → 'Requires human editorial judgment'. NOT: playout scheduling, transmission monitoring, ad-trafficking automation — those are eligible.",
+    "  - The L5 is already fully automated by an entrenched system with no further AI lift available → 'Already automated via existing tools'.",
+    "  - The L5 is genuinely tiny-volume one-off work (e.g. annual / per-departure / per-production with <10 instances/year) where no payback exists → 'Low volume — ROI doesn't justify AI investment'.",
+    "",
+    "Worked examples (apply the same logic across all towers):",
+    "  ELIGIBLE — Bank Reconciliations / Intercompany Eliminations / Invoice Match-Pay-Extract / 10-K Data Assembly / MD&A First-Draft Drafting / Cash Flow Forecasting / Multi-Entity Close Orchestration / Vendor Onboarding Diligence / KPI Scorecard Refresh / Anomaly-Detection on Transmission Logs / Closed-Captioning / News-Clip Tagging / Subscriber-Churn Scoring / Talent-Match Sourcing.",
+    "  NOT ELIGIBLE — On-Air Anchor Selection / Sports-Rights Deal Negotiation / Capital-Allocation Strategy Calls / Live Newsroom Editorial Direction / Master-Control Switching During Live Telecast / Board-Level M&A Go/No-Go.",
     "",
     "Versant rationale guidance — be Versant-specific, concrete, declarative. NAME REAL BRANDS (MS NOW / CNBC / Golf Channel / GolfNow / GolfPass / USA Network / E! / Syfy / Fandango / Rotten Tomatoes / SportsEngine), the TSA carve-out, BB- credit, multi-entity JV, split rights, MS NOW progressive positioning. NEVER use hedge phrases ('potentially', 'could possibly', 'may help to', 'leverage AI'). NEVER write rationales that could apply to any media company.",
     "",
@@ -248,14 +324,14 @@ function buildSystemPrompt(towerId: TowerId): string {
     "",
     "agentOneLine MUST describe what the agent does + the concrete saving. Example: 'Reconciliation Agent matches intercompany transactions across 7+ Versant entities, auto-resolves timing diffs, flags exceptions for human review.' Never write 'leverages AI' or 'transforms the workflow'.",
     "",
-    "When per-row user feedback is provided, you MAY use it to shift priority / rationale / vendor selections — but feedback CANNOT bypass the canonical not-eligible reasons (the five strings above), the vendor allow-list, or the rule that editorial / negotiation / strategic-judgment activities stay reviewed-not-eligible. If feedback contradicts those constraints, ignore the contradicting part of the feedback and stay grounded.",
+    "When per-row user feedback is provided, you MAY use it to shift feasibility / rationale / vendor selections — but feedback CANNOT bypass the canonical not-eligible reasons (the five strings above), the vendor allow-list, or the rule that editorial / negotiation / strategic-judgment activities stay reviewed-not-eligible. If feedback contradicts those constraints, ignore the contradicting part of the feedback and stay grounded.",
     "",
-    "Return STRICT JSON ONLY in this exact shape, with one outer item per input row, in INPUT ORDER, and one inner item per L4 activity in EACH ROW'S INPUT ORDER:",
-    '{"rows": [{"rowId": "<echo input rowId>", "l4Items": [',
+    "Return STRICT JSON ONLY in this exact shape, with one outer item per input row, in INPUT ORDER, and one inner item per L5 Activity in EACH ROW'S INPUT ORDER:",
+    '{"rows": [{"rowId": "<echo input rowId>", "l5Items": [',
     '  {',
-    '    "name": "<echo L4 activity name verbatim>",',
+    '    "name": "<echo L5 Activity name verbatim>",',
     '    "aiEligible": <true|false>,',
-    '    "aiPriority": "P1" | "P2" | "P3" | null,',
+    '    "feasibility": "High" | "Low" | null,',
     '    "aiRationale": "<≤25 words, Versant-specific>",',
     '    "notEligibleReason": "<one of the five canonical strings>" | null,',
     '    "frequency": "Continuous" | "Daily" | "Weekly" | "Monthly" | "Quarterly" | "Annual" | "Event-driven" | "Seasonal" | "Per hire" | "Per episode" | "Per event" | "Per departure" | "Per production" | "Per listen" | "Bi-weekly" | "Semi-annual" | null,',
@@ -266,26 +342,36 @@ function buildSystemPrompt(towerId: TowerId): string {
     '  }',
     "]}, ...]}",
     "",
-    "Use null for any field that doesn't apply (e.g., aiPriority on a not-eligible item). Eligible items MUST set aiPriority + aiRationale + frequency + criticality + currentMaturity + primaryVendor + agentOneLine. Not-eligible items MUST set notEligibleReason and aiRationale, leave the rest null.",
+    "Use null for any field that doesn't apply (e.g., feasibility on a not-eligible item). Eligible items MUST set feasibility + aiRationale + frequency + criticality + currentMaturity + primaryVendor + agentOneLine. Not-eligible items MUST set notEligibleReason and aiRationale, leave the rest null.",
     "",
-    "Do NOT skip rows. Do NOT add extra rows or extra L4 items. Echo `name` and `rowId` verbatim. Do NOT add prose outside the JSON object.",
+    "Do NOT skip rows. Do NOT add extra rows or extra L5 items. Echo `name` and `rowId` verbatim. Do NOT add prose outside the JSON object.",
   ].join("\n");
 }
 
 function buildUserPrompt(rows: CurateLLMRowInput[]): string {
   const lines: string[] = [];
   rows.forEach((r, ri) => {
-    lines.push(`Row ${ri + 1} (rowId="${r.rowId}") — L2="${truncate(r.l2)}" / L3="${truncate(r.l3)}":`);
+    // V5 hierarchy: r.l2 = Job Grouping, r.l3 = Job Family, r.l4 =
+    // Activity Group (the dial-bearing parent of the L5 leaves). Pre-V5
+    // callers may omit l4 — fall back to using l3 as the Activity Group
+    // and signal the missing layer in the label so the model knows.
+    const jobGrouping = truncate(r.l2);
+    const jobFamily = truncate(r.l3);
+    const activityGroup = r.l4 ? truncate(r.l4) : truncate(r.l3);
+    const ambiguous = !r.l4;
+    lines.push(
+      `Row ${ri + 1} (rowId="${r.rowId}") — L2 Job Grouping="${jobGrouping}" / L3 Job Family="${jobFamily}" / L4 Activity Group="${activityGroup}"${ambiguous ? " (Activity Group inferred from Job Family — legacy v4 input)" : ""}:`,
+    );
     if (r.feedback && r.feedback.trim()) {
       lines.push(`  User feedback to honor for this row: "${truncate(r.feedback, 600)}"`);
     }
-    r.l4Activities.forEach((name, ai) => {
-      lines.push(`  ${ai + 1}. ${truncate(name, 200)}`);
+    r.l5Activities.forEach((name, ai) => {
+      lines.push(`  L5 Activity ${ai + 1}. ${truncate(name, 200)}`);
     });
     lines.push("");
   });
   return [
-    `Curate every L4 activity below. Echo \`rowId\` and \`name\` verbatim. Preserve order.`,
+    `Curate every L5 Activity below in the context of its parent L4 Activity Group. Echo \`rowId\` and \`name\` verbatim. Preserve order.`,
     "",
     ...lines,
   ].join("\n");
@@ -333,17 +419,19 @@ function sanitizeNotEligibleReason(raw: unknown): NotEligibleReason | undefined 
 }
 
 /**
- * Normalize the LLM's short-form priority (the prompt asks for "P1" / "P2" /
- * "P3" because they're easier to score reliably) into the full em-dash
- * `AiPriority` string used everywhere else in the codebase. Also tolerates
- * full-string responses in case the model decides to echo the prompt.
+ * Normalize the LLM's binary feasibility response into the canonical
+ * `Feasibility` literal. Tolerates common case / whitespace variations and
+ * the legacy "P1"/"P2"/"P3" fallbacks (P1 → High; P2/P3 → Low) so a model
+ * that accidentally echoes the old schema still produces a usable answer.
  */
-function sanitizePriority(raw: unknown): AiPriority | undefined {
+function sanitizeFeasibility(raw: unknown): Feasibility | undefined {
   if (typeof raw !== "string") return undefined;
-  const trimmed = raw.trim();
-  if (trimmed === "P1" || trimmed.startsWith("P1")) return "P1 — Immediate (0-6mo)";
-  if (trimmed === "P2" || trimmed.startsWith("P2")) return "P2 — Near-term (6-12mo)";
-  if (trimmed === "P3" || trimmed.startsWith("P3")) return "P3 — Medium-term (12-24mo)";
+  const trimmed = raw.trim().toLowerCase();
+  if (trimmed === "high") return "High";
+  if (trimmed === "low") return "Low";
+  // Back-compat — accept "P1"/"P2"/"P3" if the model regresses to the old prompt.
+  if (trimmed.startsWith("p1")) return "High";
+  if (trimmed.startsWith("p2") || trimmed.startsWith("p3")) return "Low";
   return undefined;
 }
 
@@ -378,8 +466,8 @@ function sanitizeText(raw: unknown, maxLen = 240): string | undefined {
 }
 
 /**
- * Calls OpenAI to curate every L4 across every row in a single batched
- * request. Throws an `LLMError` on any failure — caller owns the
+ * Calls OpenAI to curate every L5 Activity across every row in a single
+ * batched request. Throws an `LLMError` on any failure — caller owns the
  * deterministic fallback contract.
  */
 export async function curateInitiativesWithLLM(
@@ -392,11 +480,11 @@ export async function curateInitiativesWithLLM(
     throw new LLMError("OPENAI_API_KEY not set");
   }
   if (!rows.length) return [];
-  const totalL4s = rows.reduce((s, r) => s + r.l4Activities.length, 0);
-  if (totalL4s === 0) return rows.map((r) => ({ rowId: r.rowId, l4Items: [] }));
-  if (totalL4s > MAX_L4S_PER_CALL) {
+  const totalL5s = rows.reduce((s, r) => s + r.l5Activities.length, 0);
+  if (totalL5s === 0) return rows.map((r) => ({ rowId: r.rowId, l5Items: [] }));
+  if (totalL5s > MAX_L5S_PER_CALL) {
     throw new LLMError(
-      `Tower has ${totalL4s} L4 activities; max ${MAX_L4S_PER_CALL} per call.`,
+      `Tower has ${totalL5s} L5 Activities; max ${MAX_L5S_PER_CALL} per call.`,
     );
   }
 
@@ -476,15 +564,20 @@ export async function curateInitiativesWithLLM(
 
   return rows.map((input, ri) => {
     const llmRow = (llmRows[ri] ?? {}) as Record<string, unknown>;
-    const llmItems = Array.isArray(llmRow.l4Items)
-      ? (llmRow.l4Items as unknown[])
-      : [];
-    if (llmItems.length !== input.l4Activities.length) {
+    // Accept both the new `l5Items` key and the legacy `l4Items` key so a
+    // model that hasn't fully transitioned to the new prompt vocabulary
+    // still parses cleanly. Prefer the new key.
+    const llmItems = Array.isArray(llmRow.l5Items)
+      ? (llmRow.l5Items as unknown[])
+      : Array.isArray(llmRow.l4Items)
+        ? (llmRow.l4Items as unknown[])
+        : [];
+    if (llmItems.length !== input.l5Activities.length) {
       throw new LLMError(
-        `Row ${input.rowId}: model returned ${llmItems.length} items for ${input.l4Activities.length} L4 activities`,
+        `Row ${input.rowId}: model returned ${llmItems.length} items for ${input.l5Activities.length} L5 Activities`,
       );
     }
-    const l4Items: CurateLLMItem[] = input.l4Activities.map((expectedName, ai) => {
+    const l5Items: CurateLLMItem[] = input.l5Activities.map((expectedName, ai) => {
       const item = (llmItems[ai] ?? {}) as Record<string, unknown>;
       const aiEligible = item.aiEligible === true;
       const status: AiCurationStatus = aiEligible
@@ -516,7 +609,7 @@ export async function curateInitiativesWithLLM(
         aiCurationStatus: status,
         aiEligible: true,
         aiRationale,
-        aiPriority: sanitizePriority(item.aiPriority),
+        feasibility: sanitizeFeasibility(item.feasibility),
         frequency: sanitizeFrequency(item.frequency),
         criticality: sanitizeCriticality(item.criticality),
         currentMaturity: sanitizeMaturity(item.currentMaturity),
@@ -524,6 +617,6 @@ export async function curateInitiativesWithLLM(
         agentOneLine: sanitizeText(item.agentOneLine, 280),
       };
     });
-    return { rowId: input.rowId, l4Items };
+    return { rowId: input.rowId, l5Items };
   });
 }

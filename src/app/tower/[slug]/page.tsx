@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Map } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { TowerAiLeadToolbar } from "@/components/towers/TowerAiLeadToolbar";
-import { HoursSavedBar } from "@/components/charts/HoursSavedBar";
 import { PageShell } from "@/components/PageShell";
 import { AiInitiativesTabs } from "@/components/operatingModel/AiInitiativesTabs";
 import { InitiativeReviewChip } from "@/components/operatingModel/InitiativeReviewChip";
@@ -24,8 +23,6 @@ export function generateStaticParams() {
 export default function TowerPage({ params }: { params: { slug: string } }) {
   const tower = getTowerBySlug(params.slug);
   if (!tower) notFound();
-
-  const chartData = tower.processes.map((p) => ({ name: p.name, impactTier: p.impactTier }));
 
   return (
     <PageShell>
@@ -102,18 +99,6 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
             <InitiativeReviewChip tower={tower} />
           </div>
           <AiInitiativesTabs tower={tower} />
-        </section>
-
-        <section className="mt-14 space-y-3">
-          <h2 className="font-display text-lg font-semibold text-forge-ink">
-            Impact by AI initiative
-          </h2>
-          <p className="text-sm text-forge-subtle">
-            Qualitative High / Medium / Low tiers per initiative (not financial, hours, or FTE precision).
-          </p>
-          <div className="min-w-0 rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-card">
-            <HoursSavedBar data={chartData} />
-          </div>
         </section>
       </div>
     </PageShell>

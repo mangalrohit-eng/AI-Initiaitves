@@ -245,6 +245,24 @@ export function buildDialsExportCsv(params: {
   return UTF8_BOM + lines.join("\n");
 }
 
+/**
+ * Step 4 "AI initiatives" CSV export. Emits one row per L5 Activity that the
+ * Step 4 UI displays — i.e. exactly what `selectInitiativesForTower` returns
+ * after its eligibility / `aiPct > 0` filters. This deliberately mirrors the
+ * UI count rather than dumping every curated L5 in the database, because the
+ * export's purpose is "share what the workshop is showing." A future audit
+ * dump that includes `aiEligible: false` and zero-dial rows would be a
+ * separate function.
+ *
+ * Pre-fix history: this function iterated `tower.processes` (the small set of
+ * hand-authored 4-lens briefs) instead of the curated initiatives. That made
+ * the export emit 5 rows for Finance regardless of how many L5 Activities
+ * Step 4 actually showed. The wiring miss pre-dated V5 — V5 just renamed
+ * fields without revealing it.
+ *
+ * Placeholders (`l5.isPlaceholder === true`) are skipped — they exist for
+ * ghost-L3 prevention in the UI, not for export consumers.
+ */
 export function buildAiInitiativesExportCsv(params: {
   towerId: TowerId;
   towerName: string;
@@ -256,63 +274,87 @@ export function buildAiInitiativesExportCsv(params: {
   const map = getCapabilityMapForTower(towerId);
   const l1 = map?.l1Name ?? "";
 
-  const sel = selectInitiativesForTower(towerId, program, tower);
   // View-model layer mapping (post-5-layer-migration):
-  //   sel.l2s    -> Job Grouping (the dummy wrapper)
-  //   l2.l3s    -> Job Family
-  //   l3.rowL4Name -> Activity Group (per-row label)
-  //   l3.l4s    -> L5 Activities (the leaf where initiatives attach)
-  // Note the view-model field names lag the migration (Phase 8 rename).
-  const byInitiative = new Map<
-    string,
-    { l2: string; l3: string; l4: string }
-  >();
-  for (const l2 of sel.l2s) {
-    for (const l3 of l2.l3s) {
-      for (const l4 of l3.l4s) {
-        if (l4.initiativeId) {
-          byInitiative.set(l4.initiativeId, {
-            l2: l2.l2.name,
-            l3: l3.l3.name,
-            l4: l3.rowL4Name,
-          });
-        }
-      }
-    }
-  }
+  //   sel.l2s        -> L2 Job Grouping (canonical wrapper)
+  //   l2.l3s         -> L3 Job Family
+  //   l3.rowL4Name   -> L4 Activity Group (per-row label)
+  //   l3.l4s         -> L5 Activities (the leaf where initiatives attach)
+  // Note the view-model field names lag the migration (Phase 8 rename pending).
+  const sel = selectInitiativesForTower(towerId, program, tower);
+
+  // O(1) brief lookup for `linked_*` enrichment columns. Built once outside
+  // the loop instead of `tower.processes.find(...)` per L5.
+  const processById = new Map(tower.processes.map((p) => [p.id, p]));
+
+  // Read review decisions off the SAME program snapshot the selector saw, so
+  // a row's `review_status` is consistent with its presence in the export.
+  // Going through `program.towers[...]?.initiativeReviews` directly (not
+  // `getInitiativeReviews`) avoids a second `getAssessProgram()` read that
+  // could race with an in-flight save.
+  const reviews = program.towers[towerId]?.initiativeReviews ?? {};
 
   const header = csvRow([
     "tower_id",
     "tower_name",
     "exported_at_iso",
-    "initiative_id",
-    "initiative_name",
     "l1_name",
     "l2_name",
     "l3_name",
     "l4_name",
-    "description",
-    "resolution_status",
+    "l5_id",
+    "l5_name",
+    "feasibility",
+    "ai_rationale",
+    "primary_vendor",
+    "frequency",
+    "criticality",
+    "current_maturity",
+    "source",
+    "review_status",
+    "review_decided_by",
+    "review_decided_at",
+    "linked_initiative_id",
+    "linked_brief_slug",
+    "linked_brief_description",
   ]);
   const lines = [header];
 
-  for (const p of tower.processes) {
-    const loc = byInitiative.get(p.id);
-    lines.push(
-      csvRow([
-        towerId,
-        towerName,
-        exportedAt,
-        p.id,
-        p.name,
-        l1,
-        loc?.l2 ?? "",
-        loc?.l3 ?? "",
-        loc?.l4 ?? "",
-        p.description,
-        loc ? "linked" : "unresolved",
-      ]),
-    );
+  for (const l2 of sel.l2s) {
+    for (const l3 of l2.l3s) {
+      for (const l5 of l3.l4s) {
+        if (l5.isPlaceholder) continue;
+        const review = reviews[l5.id];
+        const linkedBrief = l5.initiativeId
+          ? processById.get(l5.initiativeId)
+          : undefined;
+        lines.push(
+          csvRow([
+            towerId,
+            towerName,
+            exportedAt,
+            l1,
+            l2.l2.name,
+            l3.l3.name,
+            l3.rowL4Name,
+            l5.id,
+            l5.name,
+            l5.feasibility ?? "",
+            l5.aiRationale ?? "",
+            l5.primaryVendor ?? "",
+            l5.frequency ?? "",
+            l5.criticality ?? "",
+            l5.currentMaturity ?? "",
+            l5.source,
+            review?.status ?? "pending",
+            review?.decidedBy ?? "",
+            review?.decidedAt ?? "",
+            l5.initiativeId ?? "",
+            l5.briefSlug ?? "",
+            linkedBrief?.description ?? "",
+          ]),
+        );
+      }
+    }
   }
 
   return UTF8_BOM + lines.join("\n");

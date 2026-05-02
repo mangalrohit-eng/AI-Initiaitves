@@ -36,7 +36,7 @@ const MENU: ReadonlyArray<{
   {
     id: "ai-initiatives",
     label: "Step 4 — AI initiatives",
-    description: "Initiative names, descriptions, capability path",
+    description: "L5 Activities with feasibility, vendor, review status, and capability path",
   },
 ];
 
@@ -79,7 +79,13 @@ export function TowerDataExports({
   const rowCount = tState?.l4Rows?.length ?? 0;
   const canMap = hasMap || rowCount > 0;
   const canDials = rowCount > 0;
-  const canInitiatives = tower.processes.length > 0;
+  // The Step 4 export walks the same selector Step 4 itself displays, so any
+  // tower with L4 rows has *something* to emit (header + 0+ data rows). We
+  // gate on `rowCount > 0` rather than re-running the selector here because
+  // the selector is fast but `rowCount` is already free, and the Step 4 UI
+  // itself nudges the user to curate when rows exist but no eligible L5s
+  // surface — the export landing empty in that case is acceptable.
+  const canInitiatives = rowCount > 0;
 
   if (redact) return null;
 
@@ -91,7 +97,7 @@ export function TowerDataExports({
       return "No L3 footprint loaded for this tower yet.";
     }
     if (id === "ai-initiatives" && !canInitiatives) {
-      return "No initiatives are defined for this tower.";
+      return "Upload a capability map on Step 1 first.";
     }
     return undefined;
   };

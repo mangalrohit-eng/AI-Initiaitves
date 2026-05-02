@@ -8,12 +8,15 @@ import type {
   L4WorkforceRow,
   OffshoreAssumptions,
   TowerId,
+  TowerRates,
 } from "@/data/assess/types";
-import { buildSeededAssessProgramV2 } from "@/data/assess/seedAssessProgram";
 import {
   buildDefaultProgramLeadDeadlines,
   DEFAULT_OFFSHORE_ASSUMPTIONS,
+  defaultAssessProgramV2,
+  defaultTowerRates,
   defaultTowerState,
+  LEGACY_PROGRAM_GLOBAL_DEFAULTS,
   type TowerAssessState,
 } from "@/data/assess/types";
 import { getTowerFunctionName } from "@/data/towerFunctionNames";
@@ -629,7 +632,7 @@ export function coerceInitiativeReviews(
  * saved on the next mutation.
  */
 function migrateAssessProgram(raw: unknown): AssessProgramV2 {
-  if (raw === null || typeof raw !== "object") return buildSeededAssessProgramV2();
+  if (raw === null || typeof raw !== "object") return defaultAssessProgramV2();
   const r = raw as Record<string, unknown>;
   const versionRaw = typeof r.version === "number" ? r.version : 0;
   const towersRaw =
@@ -637,19 +640,31 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
   const globalRaw =
     r.global && typeof r.global === "object" ? (r.global as Record<string, unknown>) : {};
 
-  const seed = buildSeededAssessProgramV2();
-  const global: GlobalAssessAssumptions = {
-    blendedFteOnshore: numOr(globalRaw.blendedFteOnshore, seed.global.blendedFteOnshore),
-    blendedFteOffshore: numOr(globalRaw.blendedFteOffshore, seed.global.blendedFteOffshore),
-    blendedContractorOnshore: numOr(
-      globalRaw.blendedContractorOnshore,
-      seed.global.blendedContractorOnshore,
-    ),
-    blendedContractorOffshore: numOr(
-      globalRaw.blendedContractorOffshore,
-      seed.global.blendedContractorOffshore,
-    ),
-  };
+  // Pre-migration "global" rates carry over once: any field that was
+  // explicitly customized vs. the *historical* platform defaults gets copied
+  // onto each tower whose own `rates` field is still absent. Towers that
+  // already store their own rates win — explicit per-tower edits never get
+  // clobbered by legacy global drift.
+  //
+  // CRITICAL: compare against LEGACY_PROGRAM_GLOBAL_DEFAULTS (the frozen
+  // historical numbers), NOT today's per-tower seeds. If the comparison
+  // baseline ever drifts away from what shipped, every legacy DB row's
+  // platform defaults would be incorrectly recognized as "customizations"
+  // and would clobber the new per-tower workshop-pivot seeds — exactly the
+  // 180K/90K/120K/60K bug this constant exists to prevent.
+  const legacyGlobal: Partial<GlobalAssessAssumptions> = {};
+  for (const k of [
+    "blendedFteOnshore",
+    "blendedFteOffshore",
+    "blendedContractorOnshore",
+    "blendedContractorOffshore",
+  ] as const) {
+    const n = numOr(globalRaw[k], NaN);
+    if (Number.isFinite(n) && n !== LEGACY_PROGRAM_GLOBAL_DEFAULTS[k]) {
+      legacyGlobal[k] = n;
+    }
+  }
+  const hasLegacyGlobal = Object.keys(legacyGlobal).length > 0;
 
   const towers: AssessProgramV2["towers"] = {};
   for (const [k, vRaw] of Object.entries(towersRaw)) {
@@ -660,14 +675,8 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
         ? (v.baseline as Record<string, unknown>)
         : {};
     const baseline = {
-      baselineOffshorePct: numOr(
-        baselineRaw.baselineOffshorePct,
-        seed.towers[k as TowerId]?.baseline.baselineOffshorePct ?? 20,
-      ),
-      baselineAIPct: numOr(
-        baselineRaw.baselineAIPct,
-        seed.towers[k as TowerId]?.baseline.baselineAIPct ?? 15,
-      ),
+      baselineOffshorePct: numOr(baselineRaw.baselineOffshorePct, 20),
+      baselineAIPct: numOr(baselineRaw.baselineAIPct, 15),
     };
     const status =
       v.status === "empty" || v.status === "data" || v.status === "complete"
@@ -797,9 +806,40 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
       l4Rows = groupLegacyL4RowsToL3(legacyRows, towerId);
     }
 
+    // Per-tower rates: prefer the snapshot's own `rates` blob; otherwise
+    // start from the seeded defaults for this tower and overlay any legacy
+    // `program.global` customization (one-shot carry-over). Persisted
+    // per-tower edits ALWAYS win — we only fall back to the legacy global
+    // when the tower has no rates of its own.
+    const ratesRaw =
+      v.rates && typeof v.rates === "object"
+        ? (v.rates as Record<string, unknown>)
+        : null;
+    const seededRates = defaultTowerRates(towerId);
+    const ratesFromSnapshot = ratesRaw
+      ? {
+          blendedFteOnshore: numOr(ratesRaw.blendedFteOnshore, seededRates.blendedFteOnshore),
+          blendedFteOffshore: numOr(ratesRaw.blendedFteOffshore, seededRates.blendedFteOffshore),
+          blendedContractorOnshore: numOr(
+            ratesRaw.blendedContractorOnshore,
+            seededRates.blendedContractorOnshore,
+          ),
+          blendedContractorOffshore: numOr(
+            ratesRaw.blendedContractorOffshore,
+            seededRates.blendedContractorOffshore,
+          ),
+        }
+      : null;
+    const rates: TowerRates = ratesFromSnapshot
+      ? ratesFromSnapshot
+      : hasLegacyGlobal
+        ? { ...seededRates, ...legacyGlobal }
+        : seededRates;
+
     const towerState: TowerAssessState = {
       l4Rows,
       baseline,
+      rates,
       status,
       lastUpdated:
         typeof v.lastUpdated === "string" ? v.lastUpdated : undefined,
@@ -851,7 +891,6 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
   return {
     version: 5,
     towers,
-    global,
     ...(leadDeadlines && Object.keys(leadDeadlines).length > 0 ? { leadDeadlines } : {}),
   };
 }
@@ -890,15 +929,17 @@ function finalizeAssessProgramFromRaw(raw: unknown): AssessProgramV2 {
 /**
  * Deterministic workshop snapshot for React initial state (SSR + first client
  * paint). Matches `getAssessProgram()` when there is no `localStorage` entry
- * yet — avoids hydration mismatches vs `safeGet` returning the seeded fallback
- * on the server while the browser reads persisted workshop state.
+ * yet — avoids hydration mismatches by returning the same empty program on
+ * the server and the browser before the persisted workshop state is read.
+ * Real workshop users replace this within a tick via `AssessSyncProvider`
+ * pulling the DB program.
  */
 export function getAssessProgramHydrationSnapshot(): AssessProgramV2 {
-  return finalizeAssessProgramFromRaw(buildSeededAssessProgramV2());
+  return finalizeAssessProgramFromRaw(defaultAssessProgramV2());
 }
 
 export function getAssessProgram(): AssessProgramV2 {
-  const raw = safeGet<unknown>(KEYS.assessProgram, buildSeededAssessProgramV2());
+  const raw = safeGet<unknown>(KEYS.assessProgram, defaultAssessProgramV2());
   return finalizeAssessProgramFromRaw(raw);
 }
 
@@ -933,7 +974,7 @@ export function updateAssessProgram(
 
 export function setTowerAssess(towerId: TowerId, patch: Partial<TowerAssessState>): void {
   updateAssessProgram((p) => {
-    const cur = p.towers[towerId] ?? { ...defaultTowerState() };
+    const cur = p.towers[towerId] ?? defaultTowerState(towerId);
     // Any write that touches `l4Rows` runs through markRowsStaleByHash so a
     // changed Activity Group name or L5 Activity list lights up the
     // StaleCurationBanner. Idempotent: rows whose names didn't change keep
@@ -952,6 +993,14 @@ export function setTowerAssess(towerId: TowerId, patch: Partial<TowerAssessState
           ...patch,
           l4Rows: nextRows,
           baseline: patch.baseline ? { ...cur.baseline, ...patch.baseline } : cur.baseline,
+          // Per-tower rates: deep-merge the incoming patch against the
+          // current tower rates so a single-field edit from `TowerRatesCard`
+          // (e.g. only `blendedFteOnshore`) doesn't blow away the other
+          // three fields. Fall back to seeded rates if the tower somehow
+          // had no rates blob yet (back-compat with legacy snapshots).
+          rates: patch.rates
+            ? { ...(cur.rates ?? defaultTowerRates(towerId)), ...patch.rates }
+            : cur.rates ?? defaultTowerRates(towerId),
           status: patch.status ?? cur.status,
           lastUpdated: new Date().toISOString(),
         },
@@ -960,11 +1009,13 @@ export function setTowerAssess(towerId: TowerId, patch: Partial<TowerAssessState
   });
 }
 
-export function setGlobalAssessAssumptions(patch: Partial<GlobalAssessAssumptions>): void {
-  updateAssessProgram((p) => ({
-    ...p,
-    global: { ...p.global, ...patch },
-  }));
+/**
+ * Patch a single tower's `rates`. Routes through `setTowerAssess` so the
+ * existing tower-scoped PUT guard fires — a tower lead's save naturally
+ * stays scoped to one tower because they can only mutate their own rates.
+ */
+export function setTowerRates(towerId: TowerId, patch: Partial<TowerRates>): void {
+  setTowerAssess(towerId, { rates: patch as TowerRates });
 }
 
 /**
@@ -972,7 +1023,7 @@ export function setGlobalAssessAssumptions(patch: Partial<GlobalAssessAssumption
  * in place, falling back to `DEFAULT_OFFSHORE_ASSUMPTIONS` when absent. Stamps
  * `setAt` so consumers can show "edited X minutes ago" if needed.
  *
- * Mirrors `setGlobalAssessAssumptions` — the AssessSyncProvider debounces the
+ * Mirrors `setTowerRates` — the AssessSyncProvider debounces the
  * server flush via the same subscribe channel.
  */
 export function setOffshoreAssumptions(
@@ -1034,7 +1085,7 @@ export function setInitiativeReview(
   decidedBy?: string,
 ): void {
   updateAssessProgram((p) => {
-    const cur = p.towers[towerId] ?? { ...defaultTowerState() };
+    const cur = p.towers[towerId] ?? defaultTowerState(towerId);
     const reviews = { ...(cur.initiativeReviews ?? {}) };
     const review: InitiativeReview = {
       status,

@@ -195,13 +195,11 @@ function validateTowerScopedMutation(
   current: AssessProgramV2,
   next: AssessProgramV2,
 ): { ok: true; towerId: string | null } | { ok: false; error: string } {
-  if (!jsonEqual(current.global, next.global)) {
-    return {
-      ok: false,
-      error:
-        "Program admin required: global assumptions changes are not allowed for non-admin users.",
-    };
-  }
+  // Per-tower rates live on TowerAssessState.rates (no longer on
+  // program.global). The single-tower-scope rule below naturally enforces
+  // that a tower lead can only edit their own tower's rates: a save that
+  // touches two towers' rates at once is rejected as "only one tower per
+  // save."
   if (!jsonEqual(current.leadDeadlines ?? null, next.leadDeadlines ?? null)) {
     return {
       ok: false,
@@ -214,7 +212,7 @@ function validateTowerScopedMutation(
     return {
       ok: false,
       error:
-        "Only one tower can be updated per save for non-admin users. Split the change by tower and retry.",
+        "Only one tower can be updated per save for non-admin users (this includes per-tower cost rates). Split the change by tower and retry.",
     };
   }
   return { ok: true, towerId: changedTowers[0] ?? null };

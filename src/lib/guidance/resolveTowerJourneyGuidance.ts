@@ -19,7 +19,7 @@ export function resolveCapabilityMapGuidance(
   if (rowCount === 0) {
     return {
       tier: 0,
-      title: "Load this tower’s map and headcount here, or open the Capability Map hub for the illustrative sample.",
+      title: "Upload this tower’s capability map and headcount here, or jump back to the Capability Map hub to switch towers.",
       staleKind: null,
       actionHref: "/capability-map",
       actionLabel: "Back to hub",
@@ -62,7 +62,7 @@ export function resolveImpactLeversGuidance(
   if (rowCount === 0) {
     return {
       tier: 0,
-      title: `No map or headcount for ${towerName} yet — open the Capability Map and upload or load sample data.`,
+      title: `No map or headcount for ${towerName} yet — open the Capability Map and upload your CSV / XLSX.`,
       staleKind: null,
       actionHref: getTowerHref(towerId, "capability-map"),
       actionLabel: "Open Capability Map",
@@ -143,7 +143,7 @@ export function hubCapabilityMapLine(hasAnyTowerData: boolean): ResolvedJourneyG
   if (!hasAnyTowerData) {
     return {
       tier: 0,
-      title: "Load the illustrative sample or pick a tower below, then upload a map and run Generate L5 Activities on any blank L4 Activity Group.",
+      title: "Pick a tower below, upload its capability map and headcount, then run Generate L5 Activities on any blank L4 Activity Group.",
       staleKind: null,
       actionHref: "#tower-list",
       actionLabel: "Jump to towers",
@@ -190,7 +190,7 @@ export function impactEstimateSummaryLine(hasFootprint: boolean): ResolvedJourne
   if (!hasFootprint) {
     return {
       tier: 0,
-      title: "Add tower data on Step 1 first — or load the illustrative sample on the Capability Map hub to explore the model.",
+      title: "Add tower data on Step 1 first — once at least one tower has its capability map uploaded the program roll-up lights up here.",
       staleKind: null,
     };
   }

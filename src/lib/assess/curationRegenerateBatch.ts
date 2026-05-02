@@ -9,7 +9,7 @@
 
 import type { AssessProgramV2, L3WorkforceRow, TowerId } from "@/data/assess/types";
 import type { RunSummary } from "@/lib/assess/curationPipeline";
-import { rowModeledSaving } from "@/lib/assess/scenarioModel";
+import { rowModeledSaving, towerRatesFromState } from "@/lib/assess/scenarioModel";
 
 /**
  * Must stay aligned with `MAX_L4S_PER_CALL` in `curateInitiativesLLM.ts` and
@@ -38,11 +38,11 @@ export function regenerableRowsForStep4(
   const t = program.towers[towerId];
   if (!t) return { rowIds: [], rows: [] };
   const baseline = t.baseline;
-  const g = program.global;
+  const rates = towerRatesFromState(towerId, program);
   const rows: L3WorkforceRow[] = [];
   for (const row of t.l4Rows) {
     if ((row.l5Activities ?? []).length === 0) continue;
-    const saving = rowModeledSaving(row, baseline, g);
+    const saving = rowModeledSaving(row, baseline, rates);
     if (saving.aiPct <= 0) continue;
     rows.push(row);
   }

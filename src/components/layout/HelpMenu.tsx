@@ -6,7 +6,6 @@ import {
   Bell,
   BookOpen,
   Compass,
-  Download,
   HelpCircle,
   Mail,
   MessageCircle,
@@ -47,13 +46,6 @@ const ITEMS: HelpItem[] = [
     href: "/changelog",
     Icon: Bell,
     internalOnly: true,
-  },
-  {
-    id: "sample",
-    label: "Sample workbook",
-    description: "13-tower Excel sample — one sheet per tower, ready to drop into the program.",
-    href: "/capability-map?sample=open",
-    Icon: Download,
   },
   {
     id: "contact",

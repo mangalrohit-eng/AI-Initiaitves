@@ -20,7 +20,7 @@ import { useGuidanceCapabilityMapHub } from "@/lib/guidance/useJourneyGuidance";
 import { Term } from "@/components/help/Term";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { towers } from "@/data/towers";
-import { downloadSingleTowerSampleCsv } from "@/lib/assess/downloadAssessSamples";
+import { downloadCurrentTowerCapabilityMapCsv } from "@/lib/assess/downloadAssessSamples";
 import {
   getAssessProgram,
   getAssessProgramHydrationSnapshot,
@@ -230,7 +230,12 @@ export function CapabilityMapHubClient() {
                   </div>
                 </Link>
                 <div className="absolute right-2 top-2">
-                  <RowMenu towerId={tw.id as TowerId} towerName={tw.name} toast={toast} />
+                  <RowMenu
+                    towerId={tw.id as TowerId}
+                    towerName={tw.name}
+                    hasRows={status !== "not-started"}
+                    toast={toast}
+                  />
                 </div>
               </li>
             );
@@ -246,10 +251,12 @@ export function CapabilityMapHubClient() {
 function RowMenu({
   towerId,
   towerName,
+  hasRows,
   toast,
 }: {
   towerId: TowerId;
   towerName: string;
+  hasRows: boolean;
   toast: ReturnType<typeof useToast>;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -292,24 +299,26 @@ function RowMenu({
           <button
             type="button"
             role="menuitem"
+            disabled={!hasRows}
+            title={hasRows ? undefined : "Upload your map first to download a current copy."}
             onClick={() => {
               try {
-                downloadSingleTowerSampleCsv(towerId, towerName);
+                downloadCurrentTowerCapabilityMapCsv(towerId, towerName);
                 toast.success({
-                  title: `Sample CSV for ${towerName} downloaded`,
+                  title: `Current capability map for ${towerName} downloaded`,
                 });
               } catch (e) {
                 toast.error({
-                  title: "Couldn't download sample",
+                  title: "Couldn't download capability map",
                   description: e instanceof Error ? e.message : undefined,
                 });
               }
               setOpen(false);
             }}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-forge-body hover:bg-forge-well/60"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-forge-body hover:bg-forge-well/60 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download className="h-3.5 w-3.5 text-accent-teal" />
-            Download sample CSV
+            Current capability map (CSV)
           </button>
           <a
             href="/assess-tower-template.xlsx"

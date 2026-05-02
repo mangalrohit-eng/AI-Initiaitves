@@ -12,8 +12,8 @@ import { cn } from "@/lib/utils";
  * overrides null AND `dialsRationaleSource` undefined. That's the post-
  * upload signature: `importOp` clears the dials and clears the rationale
  * provenance, so the banner fires immediately without false-positive on
- * sample-loaded data (which always carries `dialsRationaleSource:
- * "starter"`).
+ * rows filled with starter defaults (which always carry
+ * `dialsRationaleSource: "starter"`).
  *
  * The CTA fires the EXISTING LLM-backed `overwriteAllOp` ("Re-score every
  * L3 with AI"). It routes through the existing `reseedDialogOpen`

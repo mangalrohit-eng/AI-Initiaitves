@@ -16,7 +16,7 @@
  *   `npx tsx scripts/staleDetectionTest.ts`
  */
 
-import { buildSeededAssessProgramV2 } from "../src/data/assess/seedAssessProgram";
+import { buildSeededAssessProgramV2 } from "./lib/seedFixture";
 import {
   bootstrapHashOnRead,
   computeCurationContentHash,

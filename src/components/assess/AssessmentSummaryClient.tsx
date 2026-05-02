@@ -355,8 +355,9 @@ function ImpactSummaryTowerRow({
   const o = towerOutcomeForState(towerId, program);
   const st = program.towers[towerId];
   if (!o || !st) return null;
-  const pool = towerPoolUsd(st.l4Rows, program.global);
-  const l2c = l2Concentration(st.l4Rows, program.global);
+  const rates = st.rates;
+  const pool = towerPoolUsd(st.l4Rows, rates);
+  const l2c = l2Concentration(st.l4Rows, rates);
   const isComplete = st.status === "complete";
   const step3Done = st.impactEstimateValidatedAt != null;
 

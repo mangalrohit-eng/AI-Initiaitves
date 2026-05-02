@@ -2,7 +2,7 @@
  * Validates tower CSV export builders against the seeded assess program.
  * Run: npx tsx scripts/verify-tower-exports.ts
  */
-import { buildSeededAssessProgramV2 } from "../src/data/assess/seedAssessProgram";
+import { buildSeededAssessProgramV2 } from "./lib/seedFixture";
 import { towers } from "../src/data/towers";
 import type { TowerId } from "../src/data/assess/types";
 import {

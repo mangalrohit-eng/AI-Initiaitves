@@ -10,6 +10,7 @@ import { Term } from "@/components/help/Term";
 import { L4LeverRow } from "@/components/assess/L3LeverRow";
 import { AssessmentScoreboard } from "@/components/assess/AssessmentScoreboard";
 import { StaleDialsBanner } from "@/components/assess/StaleDialsBanner";
+import { TowerRatesCard } from "@/components/assess/TowerRatesCard";
 import { ScreenGuidanceBar } from "@/components/guidance/ScreenGuidanceBar";
 import { useGuidanceImpactLevers } from "@/lib/guidance/useJourneyGuidance";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
@@ -59,7 +60,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
     program,
     tState,
     rows,
-    global,
+    rates,
     blanks,
     isComplete,
     doMarkComplete,
@@ -196,7 +197,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
         throw new Error("No blanks to fill — every row already has explicit values.");
       }
 
-      const w = weightedTowerLevers(nextRows, tState.baseline, global);
+      const w = weightedTowerLevers(nextRows, tState.baseline, rates);
       setTowerAssess(towerId, {
         l4Rows: nextRows,
         baseline: {
@@ -208,7 +209,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
       if (sync?.canSync) await sync.flushSave();
       return { changedRows, changedCells, source, warning };
     },
-    [rows, towerId, tState.baseline, tState.status, global, sync],
+    [rows, towerId, tState.baseline, tState.status, rates, sync],
   );
 
   const sourceLabel = (source: InferDefaultsSource) =>
@@ -279,12 +280,12 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
   };
 
   const noFootprint = rows.length === 0;
-  const totalPool = rows.reduce((s, r) => s + rowAnnualCost(r, global), 0);
+  const totalPool = rows.reduce((s, r) => s + rowAnnualCost(r, rates), 0);
   // Single source of truth for the staleness banners. After a tower-lead
   // upload, every row arrives with `dialsRationaleSource: undefined` and
-  // `dialsStale` returns true. Sample-loaded rows carry "starter" provenance
-  // and are therefore NOT flagged as stale, so the banner doesn't fire on
-  // the seeded program.
+  // `dialsStale` returns true. Rows whose dials were filled from heuristic
+  // starter defaults carry "starter" provenance and are NOT flagged as
+  // stale, so the banner doesn't fire prematurely.
   const staleState = getTowerStaleState(tState);
   const impactGuidance = useGuidanceImpactLevers(towerId, towerName);
   const towerVm = towers.find((t) => t.id === towerId);
@@ -369,6 +370,8 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
               />
             </div>
 
+            <TowerRatesCard towerId={towerId} towerName={towerName} rates={rates} />
+
             <div className="mt-5 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-forge-border bg-forge-surface/60 p-3">
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 {blanks.totalBlanks > 0 ? (
@@ -405,7 +408,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
                     row={r}
                     towerId={towerId}
                     baseline={tState.baseline}
-                    global={global}
+                    rates={rates}
                     onPatch={(patch) => patchL3(r.id, patch)}
                   />
                   <div className="mt-1 hidden text-right text-[10px] text-forge-hint group-hover:block">
@@ -423,11 +426,11 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
 
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-forge-hint">
               <span>
-                Adjust global blended $ on the{" "}
-                <Link href="/impact-levers/summary" className="text-forge-body underline">
-                  impact estimate
+                Adjust this tower&apos;s blended $ in the Cost rates card above to change pool math; see the{" "}
+                <Link href="/assumptions" className="text-forge-body underline">
+                  methodology
                 </Link>{" "}
-                to change pool math across all towers.
+                for the formulas.
               </span>
               <span className="font-mono">
                 {redact ? (

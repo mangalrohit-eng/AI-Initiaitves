@@ -10,7 +10,7 @@
  * Run during development before each PR — `npx tsx scripts/smokeSelector.ts`.
  */
 
-import { buildSeededAssessProgramV2 } from "../src/data/assess/seedAssessProgram";
+import { buildSeededAssessProgramV2 } from "./lib/seedFixture";
 import { towers } from "../src/data/towers";
 import { selectInitiativesForTower } from "../src/lib/initiatives/select";
 import type { TowerId } from "../src/data/assess/types";

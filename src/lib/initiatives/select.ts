@@ -54,7 +54,7 @@ import type {
   L5Item,
   TowerId,
 } from "@/data/assess/types";
-import { defaultTowerBaseline, defaultGlobalAssessAssumptions } from "@/data/assess/types";
+import { defaultTowerBaseline, defaultTowerRates } from "@/data/assess/types";
 import {
   modeledSavingsForTower,
   rowModeledSaving,
@@ -233,7 +233,7 @@ export function selectInitiativesForTower(
   const map = getCapabilityMapForTower(towerId);
   const towerState = program.towers[towerId];
   const baseline = towerState?.baseline ?? defaultTowerBaseline;
-  const global = program.global ?? defaultGlobalAssessAssumptions;
+  const rates = towerState?.rates ?? defaultTowerRates(towerId);
   const l4Rows: L4WorkforceRow[] = towerState?.l4Rows ?? [];
 
   const overlay = buildProcessByL4Map(tower);
@@ -314,7 +314,7 @@ export function selectInitiativesForTower(
   let synthOrderCursor = 0;
 
   for (const row of l4Rows) {
-    const saving = rowModeledSaving(row, baseline, global);
+    const saving = rowModeledSaving(row, baseline, rates);
 
     // Resolve canonical metadata (id-first, name-key fallback for stale data).
     // The row IS an L4 Activity Group, so its id matches a CapabilityL4 id,
@@ -507,7 +507,7 @@ export function selectInitiativesForTower(
     }));
 
   const towerSummary = l4Rows.length
-    ? modeledSavingsForTower(l4Rows, baseline, global)
+    ? modeledSavingsForTower(l4Rows, baseline, rates)
     : { pool: 0, offshorePct: 0, aiPct: 0, offshore: 0, ai: 0, combined: 0 };
 
   // Queued rows are excluded from the L3 list above (they render an empty

@@ -3,10 +3,10 @@
 import * as React from "react";
 import { Cpu, Globe2 } from "lucide-react";
 import type {
-  GlobalAssessAssumptions,
   L4WorkforceRow,
   TowerBaseline,
   TowerId,
+  TowerRates,
 } from "@/data/assess/types";
 import { rowModeledSaving } from "@/lib/assess/scenarioModel";
 import { rowStarterRationale } from "@/data/assess/rowRationale";
@@ -21,7 +21,13 @@ type Props = {
   row: L4WorkforceRow;
   towerId: TowerId;
   baseline: TowerBaseline;
-  global: GlobalAssessAssumptions;
+  /**
+   * Tower-owned cost rates. Used to size the row's pool $ and to value
+   * the offshore wage gap. Each tower owns its own copy on
+   * `TowerAssessState.rates` — pass that here, never a program-level
+   * global.
+   */
+  rates: TowerRates;
   onPatch: (patch: Partial<L4WorkforceRow>) => void;
 };
 
@@ -46,11 +52,11 @@ type Props = {
  * `L3LeverRow` export is retained as an alias so any caller pinned to the
  * old name keeps compiling.
  */
-export function L4LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
+export function L4LeverRow({ row, towerId, baseline, rates, onPatch }: Props) {
   const redact = useRedactDollars();
   const saving = React.useMemo(
-    () => rowModeledSaving(row, baseline, global),
-    [row, baseline, global],
+    () => rowModeledSaving(row, baseline, rates),
+    [row, baseline, rates],
   );
 
   const headcount =
@@ -64,7 +70,8 @@ export function L4LeverRow({ row, towerId, baseline, global, onPatch }: Props) {
   // Per-row rationales are sourced in priority order:
   //   1. LLM/heuristic-stamped strings on the row itself (`offshoreRationale`
   //      / `aiImpactRationale`) — written by `applyDefaults` after a Step 2
-  //      "Re-score" run, or by the seed loader for sample-loaded rows.
+  //      "Re-score" run, or by `applyTowerStarterDefaults` for rows filled
+  //      with deterministic starter values.
   //   2. Deterministic `rowStarterRationale` text — used when the row hasn't
   //      been scored yet (post-upload, before "Re-score every L3").
   // The provenance chip surfaces which path produced the rationale so tower

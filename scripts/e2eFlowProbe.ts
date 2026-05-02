@@ -20,7 +20,7 @@
  */
 /* eslint-disable no-console */
 
-import { buildSeededAssessProgramV2 } from "../src/data/assess/seedAssessProgram";
+import { buildSeededAssessProgramV2 } from "./lib/seedFixture";
 import {
   getTowerStaleState,
   markRowsQueuedOnUpload,

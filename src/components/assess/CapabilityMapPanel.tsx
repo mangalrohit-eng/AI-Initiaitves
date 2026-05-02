@@ -16,9 +16,10 @@ type Props = {
   view: CapabilityMapViewModel;
   rows: L3WorkforceRow[];
   /**
-   * When true the rendered tree is the predefined seed map (no rows uploaded
-   * yet). Adds a Preview banner and suppresses every per-box headcount cell —
-   * those become meaningful only once the user loads a footprint.
+   * When true the rendered tree is the canonical capability map (no rows
+   * uploaded yet). Adds a Preview banner and suppresses every per-box
+   * headcount cell — those become meaningful only once the user uploads a
+   * footprint.
    */
   isPreview?: boolean;
 };

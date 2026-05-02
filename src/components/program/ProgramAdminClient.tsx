@@ -3,28 +3,25 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  AlertTriangle,
   ArrowRight,
   Calendar,
   FileJson,
   FileUp,
-  RefreshCw,
   RotateCcw,
   ShieldAlert,
-  Sparkles,
 } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PageShell } from "@/components/PageShell";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
-import { defaultGlobalAssessAssumptions } from "@/data/assess/types";
+import { defaultTowerRates } from "@/data/assess/types";
+import { towers } from "@/data/towers";
 import {
   getAssessProgram,
   setAssessProgram,
-  setGlobalAssessAssumptions,
+  setTowerRates,
 } from "@/lib/localStore";
-import { buildSeededAssessProgramV2 } from "@/data/assess/seedAssessProgram";
 import {
   readAssessProgramFile,
   serializeAssessProgramForDownload,
@@ -53,10 +50,8 @@ export function ProgramAdminClient() {
   const [isAdmin, setIsAdmin] = React.useState(false);
   const [adminConfigured, setAdminConfigured] = React.useState(false);
 
-  const [confirmLoadSampleOpen, setConfirmLoadSampleOpen] = React.useState(false);
   const [confirmImportOpen, setConfirmImportOpen] = React.useState(false);
   const [pendingFile, setPendingFile] = React.useState<File | null>(null);
-  const [confirmReseedOpen, setConfirmReseedOpen] = React.useState(false);
   const [confirmResetAssumptionsOpen, setConfirmResetAssumptionsOpen] =
     React.useState(false);
 
@@ -78,8 +73,6 @@ export function ProgramAdminClient() {
     };
   }, []);
 
-  const dbReady = sync?.canSync ?? false;
-
   const exportOp = useAsyncOp<void, []>({
     run: async () => {
       const p = getAssessProgram();
@@ -93,20 +86,6 @@ export function ProgramAdminClient() {
       successDescription:
         "Store the file in SharePoint, Teams, or email. Required reading before any destructive action below.",
       errorTitle: "Couldn't export backup",
-    },
-  });
-
-  const sampleLoadOp = useAsyncOp<void, []>({
-    run: async () => {
-      setAssessProgram(buildSeededAssessProgramV2());
-      if (sync?.canSync) await sync.flushSave();
-    },
-    messages: {
-      loadingTitle: "Loading sample program across 13 towers",
-      successTitle: "Sample program loaded",
-      successDescription:
-        "All 13 towers seeded with capability maps, headcount, and starter dials.",
-      errorTitle: "Couldn't load sample",
     },
   });
 
@@ -130,42 +109,23 @@ export function ProgramAdminClient() {
     },
   });
 
-  const reseedOp = useAsyncOp<{ towers: number }, []>({
-    run: async () => {
-      const r = await fetch("/api/assess/seed", { method: "POST", credentials: "include" });
-      const data = (await r.json().catch(() => ({}))) as {
-        ok?: boolean;
-        towers?: number;
-        error?: string;
-      };
-      if (!r.ok || !data.ok) {
-        throw new Error(data.error ?? `Re-seed failed (HTTP ${r.status})`);
-      }
-      if (sync) await sync.refetch();
-      return { towers: data.towers ?? 0 };
-    },
-    messages: {
-      loadingTitle: "Re-seeding program from latest defaults",
-      loadingDescription:
-        "Rebuilding L1–L4 maps and starter heuristic for all 13 towers...",
-      successTitle: ({ towers }) => `Re-seeded ${towers} towers from latest defaults`,
-      successDescription:
-        "All headcount, dials, and scenario state were replaced. Cost-weighted baselines recomputed.",
-      errorTitle: "Re-seed failed",
-    },
-    retryable: true,
-  });
-
   const resetAssumptionsOp = useAsyncOp<void, []>({
     run: async () => {
-      setGlobalAssessAssumptions({ ...defaultGlobalAssessAssumptions });
+      // Per-tower rates: iterate every canonical tower and rewrite its
+      // rates blob to the seeded workshop-pivot defaults. Each call
+      // routes through `setTowerAssess` so the AssessSyncProvider
+      // debounces the PUT(s) — admin-scoped, so the multi-tower mutation
+      // is allowed.
+      for (const t of towers) {
+        setTowerRates(t.id, defaultTowerRates(t.id));
+      }
       if (sync?.canSync) await sync.flushSave();
     },
     messages: {
-      loadingTitle: "Restoring assumption defaults",
+      loadingTitle: "Restoring tower-rate defaults",
       successTitle: "Defaults restored",
       successDescription:
-        "Onshore and offshore rates and contractor blends are back to seeded values.",
+        "Every tower's onshore + offshore rates and contractor blends are back to the seeded workshop-pivot values.",
       errorTitle: "Couldn't restore defaults",
     },
   });
@@ -254,10 +214,10 @@ export function ProgramAdminClient() {
             &gt; Destructive program actions
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-forge-body">
-            All program-wide resets, imports, and re-seeds live here so they cannot be
-            triggered by accident from working pages. Each action requires admin login,
-            an explicit typed confirmation, and a JSON backup is offered before every
-            destructive step.
+            All program-wide resets and imports live here so they cannot be triggered by
+            accident from working pages. Each action requires admin login, an explicit
+            typed confirmation, and a JSON backup is offered before every destructive
+            step.
           </p>
         </div>
 
@@ -287,38 +247,6 @@ export function ProgramAdminClient() {
                   ? "Exporting..."
                   : "Export JSON backup"}
               </button>
-            </div>
-          </section>
-
-          {/* Section: Load sample program */}
-          <section className="rounded-2xl border border-forge-border bg-forge-surface/60 p-5">
-            <div className="flex items-start gap-3">
-              <Sparkles
-                className="mt-0.5 h-5 w-5 shrink-0 text-accent-purple"
-                aria-hidden
-              />
-              <div className="flex-1">
-                <h2 className="font-display text-base font-semibold text-forge-ink">
-                  &gt; Load sample program (all 13 towers)
-                </h2>
-                <p className="mt-1 text-sm text-forge-body">
-                  Replaces the entire program with the illustrative sample. Wipes every
-                  tower&apos;s capability map, headcount, dials, sign-offs, and reviews.
-                </p>
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmLoadSampleOpen(true)}
-                    disabled={!isAdmin || adminLoading || sampleLoadOp.state === "loading"}
-                    className="inline-flex items-center gap-2 rounded-lg border border-accent-purple/40 bg-accent-purple/10 px-3 py-2 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/20 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    {sampleLoadOp.state === "loading"
-                      ? "Loading..."
-                      : "Load sample program"}
-                  </button>
-                </div>
-              </div>
             </div>
           </section>
 
@@ -359,52 +287,7 @@ export function ProgramAdminClient() {
             </div>
           </section>
 
-          {/* Section: Re-seed all towers */}
-          <section className="rounded-2xl border border-forge-border bg-forge-surface/60 p-5">
-            <div className="flex items-start gap-3">
-              <AlertTriangle
-                className="mt-0.5 h-5 w-5 shrink-0 text-accent-amber"
-                aria-hidden
-              />
-              <div className="flex-1">
-                <h2 className="font-display text-base font-semibold text-forge-ink">
-                  &gt; Re-seed all towers from latest defaults
-                </h2>
-                <p className="mt-1 text-sm text-forge-body">
-                  Rebuilds every tower from the latest L1–L4 maps and starter
-                  heuristic in code. Use after editing seed files. Replaces every
-                  workshop edit; persists to the database.
-                </p>
-                {!dbReady ? (
-                  <p className="mt-2 text-xs text-accent-amber">
-                    Database not configured. Set{" "}
-                    <code className="font-mono">DATABASE_URL</code> and run the migration
-                    first.
-                  </p>
-                ) : null}
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmReseedOpen(true)}
-                    disabled={
-                      !isAdmin ||
-                      adminLoading ||
-                      !dbReady ||
-                      reseedOp.state === "loading"
-                    }
-                    className="inline-flex items-center gap-2 rounded-lg border border-accent-purple/40 bg-accent-purple/10 px-3 py-2 text-xs font-medium text-accent-purple-dark hover:bg-accent-purple/20 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    {reseedOp.state === "loading"
-                      ? "Re-seeding..."
-                      : "Re-seed all towers from latest defaults"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Section: Restore global assumptions */}
+          {/* Section: Reset all tower rates */}
           <section className="rounded-2xl border border-forge-border bg-forge-surface/60 p-5">
             <div className="flex items-start gap-3">
               <RotateCcw
@@ -413,11 +296,13 @@ export function ProgramAdminClient() {
               />
               <div className="flex-1">
                 <h2 className="font-display text-base font-semibold text-forge-ink">
-                  &gt; Restore global assumptions defaults
+                  &gt; Reset all tower rates to seeded defaults
                 </h2>
                 <p className="mt-1 text-sm text-forge-body">
-                  Resets onshore and offshore FTE/contractor blended rates back to the
-                  seeded illustrative values. Affects every dollar in the app.
+                  Rewrites every tower&apos;s onshore + offshore FTE and contractor
+                  rates back to the workshop-pivot seeds. Affects every modeled
+                  dollar in the app. Tower-specific edits made by leads will be
+                  overwritten.
                 </p>
                 <div className="mt-3">
                   <button
@@ -433,7 +318,7 @@ export function ProgramAdminClient() {
                     <RotateCcw className="h-3.5 w-3.5" />
                     {resetAssumptionsOp.state === "loading"
                       ? "Resetting..."
-                      : "Restore assumption defaults"}
+                      : "Reset all tower rates"}
                   </button>
                 </div>
               </div>
@@ -474,28 +359,6 @@ export function ProgramAdminClient() {
           </p>
         </div>
       </div>
-
-      <DestructiveActionDialog
-        open={confirmLoadSampleOpen}
-        onClose={() => setConfirmLoadSampleOpen(false)}
-        onConfirm={async () => {
-          setConfirmLoadSampleOpen(false);
-          await sampleLoadOp.fire();
-        }}
-        title="Load sample program?"
-        impactSummary="The current program state is replaced with the illustrative sample across all 13 towers."
-        affectedItems={[
-          "Every tower's capability map and headcount",
-          "Every offshore and AI dial",
-          "Every tower-lead sign-off and initiative review",
-          "Lead deadlines and assumptions remain unless changed",
-        ]}
-        confirmPhrase="LOADSAMPLE"
-        confirmLabel="Replace with sample"
-        onExportBackup={onExportBackup}
-        exportingBackup={exportOp.state === "loading"}
-        busy={sampleLoadOp.state === "loading"}
-      />
 
       <DestructiveActionDialog
         open={confirmImportOpen}
@@ -539,42 +402,22 @@ export function ProgramAdminClient() {
       />
 
       <DestructiveActionDialog
-        open={confirmReseedOpen}
-        onClose={() => setConfirmReseedOpen(false)}
-        onConfirm={async () => {
-          setConfirmReseedOpen(false);
-          await reseedOp.fire();
-        }}
-        title="Re-seed program from latest defaults?"
-        impactSummary="Rebuilds every tower from the latest L1–L4 maps and starter heuristic in code, then upserts the result to the database."
-        affectedItems={[
-          "All 13 towers replaced with seed content",
-          "All workshop edits, dials, sign-offs, and reviews discarded",
-          "Cost-weighted baselines recomputed",
-        ]}
-        confirmPhrase="RESEED"
-        confirmLabel="Replace with seed"
-        onExportBackup={onExportBackup}
-        exportingBackup={exportOp.state === "loading"}
-        busy={reseedOp.state === "loading"}
-      />
-
-      <DestructiveActionDialog
         open={confirmResetAssumptionsOpen}
         onClose={() => setConfirmResetAssumptionsOpen(false)}
         onConfirm={async () => {
           setConfirmResetAssumptionsOpen(false);
           await resetAssumptionsOp.fire();
         }}
-        title="Restore global assumption defaults?"
-        impactSummary="Resets the four blended workforce rates back to seeded illustrative values. Every dollar in the app recomputes."
+        title="Reset all tower rates to seeded defaults?"
+        impactSummary="Rewrites every tower's onshore + offshore FTE and contractor blended rates back to the workshop-pivot seeds. Every modeled dollar in the app recomputes."
         affectedItems={[
-          "FTE onshore and offshore blended rates",
-          "Contractor onshore and offshore blended rates",
-          "Tower-level dial values are unchanged but resulting $ change",
+          "Per-tower FTE onshore + offshore rates",
+          "Per-tower contractor onshore + offshore rates",
+          "Tower lead overrides on these rates will be overwritten",
+          "L4 dial values (offshore + AI) are unchanged but resulting $ change",
         ]}
         confirmPhrase="RESET"
-        confirmLabel="Restore defaults"
+        confirmLabel="Reset all tower rates"
         onExportBackup={onExportBackup}
         exportingBackup={exportOp.state === "loading"}
         busy={resetAssumptionsOp.state === "loading"}

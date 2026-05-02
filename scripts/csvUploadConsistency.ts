@@ -32,7 +32,7 @@
  */
 
 import { towers } from "../src/data/towers";
-import { buildSeededAssessProgramV2 } from "../src/data/assess/seedAssessProgram";
+import { buildSeededAssessProgramV2 } from "./lib/seedFixture";
 import { getCapabilityMapForTower } from "../src/data/capabilityMap/maps";
 import { getTowerFunctionName } from "../src/data/towerFunctionNames";
 import {
@@ -47,8 +47,8 @@ import {
   markRowsStaleByHash,
 } from "../src/lib/initiatives/curationHash";
 import {
-  defaultGlobalAssessAssumptions,
   defaultTowerBaseline,
+  defaultTowerRates,
   type AssessProgramV2,
   type L4WorkforceRow,
   type TowerId,
@@ -208,6 +208,7 @@ function simulateUpload(
     ...(baseTowerState ?? {
       l4Rows: [],
       baseline: defaultTowerBaseline,
+      rates: defaultTowerRates(towerId),
       status: "empty" as const,
     }),
     l4Rows: uploadedRows,
@@ -216,13 +217,13 @@ function simulateUpload(
   };
 
   const baseline = program.towers[towerId]?.baseline ?? defaultTowerBaseline;
-  const global = program.global ?? defaultGlobalAssessAssumptions;
+  const rates = program.towers[towerId]?.rates ?? defaultTowerRates(towerId);
 
   // Step 2 — money
-  const step2 = modeledSavingsForTower(uploadedRows, baseline, global);
+  const step2 = modeledSavingsForTower(uploadedRows, baseline, rates);
   let step2RowSum = 0;
   for (const r of uploadedRows) {
-    step2RowSum += rowModeledSaving(r, baseline, global).ai;
+    step2RowSum += rowModeledSaving(r, baseline, rates).ai;
   }
   if (Math.abs(step2.ai - step2RowSum) > DOLLAR_TOLERANCE) {
     fail(
@@ -258,7 +259,7 @@ function simulateUpload(
   const surfaced = new Set<string>();
   for (const l2 of step4.l2s) for (const l3 of l2.l3s) surfaced.add(l3.rowId);
   for (const r of uploadedRows) {
-    const ai = rowModeledSaving(r, baseline, global).ai;
+    const ai = rowModeledSaving(r, baseline, rates).ai;
     if (ai > 0 && !surfaced.has(r.id)) {
       fail(
         towerId,

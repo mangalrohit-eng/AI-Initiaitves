@@ -1,10 +1,11 @@
 import type {
   AssessProgramV2,
-  GlobalAssessAssumptions,
   L3WorkforceRow,
   TowerBaseline,
   TowerId,
+  TowerRates,
 } from "@/data/assess/types";
+import { defaultTowerRates } from "@/data/assess/types";
 import { towers } from "@/data/towers";
 
 export type RowCostResult = { row: L3WorkforceRow; annualCost: number };
@@ -14,23 +15,24 @@ export type RowCostResult = { row: L3WorkforceRow; annualCost: number };
  *
  * Every $ in the app routes through `rowModeledSaving` (per row),
  * `modeledSavingsForTower` (per tower), or `programImpactSummary`
- * (program total). Every rate read pulls from `g: GlobalAssessAssumptions`
- * — i.e., the Assumptions tab. There are no magic lever weights, caps,
- * or combine-mode toggles in this file by design.
+ * (program total). Every rate read pulls from the tower's own
+ * `TowerRates` — `state.towers[towerId].rates` — never a global. There
+ * are no magic lever weights, caps, or combine-mode toggles in this
+ * file by design.
  *
- * Math (per L3 row):
+ * Math (per L4 row, with `r: TowerRates` for that tower):
  *   POOL  = annualSpendUsd  if set, else
- *           fteOn  × g.blendedFteOnshore
- *         + fteOff × g.blendedFteOffshore
- *         + ctrOn  × g.blendedContractorOnshore
- *         + ctrOff × g.blendedContractorOffshore
+ *           fteOn  × r.blendedFteOnshore
+ *         + fteOff × r.blendedFteOffshore
+ *         + ctrOn  × r.blendedContractorOnshore
+ *         + ctrOff × r.blendedContractorOffshore
  *
- *   OFFSHORE  =  movableFte        × (g.blendedFteOnshore        − g.blendedFteOffshore)
- *             +  movableContractor × (g.blendedContractorOnshore − g.blendedContractorOffshore)
+ *   OFFSHORE  =  movableFte        × (r.blendedFteOnshore        − r.blendedFteOffshore)
+ *             +  movableContractor × (r.blendedContractorOnshore − r.blendedContractorOffshore)
  *     where  movableFte        = max(0, (fteOn + fteOff) × dial − fteOff)
  *            movableContractor = max(0, (ctrOn + ctrOff) × dial − ctrOff)
  *     fallback when no headcount but annualSpendUsd is set:
- *       OFFSHORE = annualSpendUsd × dial × (1 − g.blendedFteOffshore / g.blendedFteOnshore)
+ *       OFFSHORE = annualSpendUsd × dial × (1 − r.blendedFteOffshore / r.blendedFteOnshore)
  *
  *   AI = pool × aiDial
  *
@@ -39,41 +41,41 @@ export type RowCostResult = { row: L3WorkforceRow; annualCost: number };
  *
  * ==================================================================== */
 
-/** $ pool for one L3 row — sum of rates × headcount, or annualSpendUsd override. */
+/** $ pool for one L4 row — sum of rates × headcount, or annualSpendUsd override. */
 export function rowAnnualCost(
   row: L3WorkforceRow,
-  g: GlobalAssessAssumptions,
+  rates: TowerRates,
 ): number {
   if (row.annualSpendUsd != null && row.annualSpendUsd > 0) {
     return row.annualSpendUsd;
   }
   return (
-    row.fteOnshore * g.blendedFteOnshore +
-    row.fteOffshore * g.blendedFteOffshore +
-    row.contractorOnshore * g.blendedContractorOnshore +
-    row.contractorOffshore * g.blendedContractorOffshore
+    row.fteOnshore * rates.blendedFteOnshore +
+    row.fteOffshore * rates.blendedFteOffshore +
+    row.contractorOnshore * rates.blendedContractorOnshore +
+    row.contractorOffshore * rates.blendedContractorOffshore
   );
 }
 
-export function towerPoolUsd(rows: L3WorkforceRow[], g: GlobalAssessAssumptions): number {
-  return rows.reduce((s, r) => s + rowAnnualCost(r, g), 0);
+export function towerPoolUsd(rows: L3WorkforceRow[], rates: TowerRates): number {
+  return rows.reduce((s, r) => s + rowAnnualCost(r, rates), 0);
 }
 
 /**
- * Cost-weighted offshore / AI dials across L3 rows. Used for *display only*
+ * Cost-weighted offshore / AI dials across L4 rows. Used for *display only*
  * (e.g., "this tower averages 32% offshore"). Not used to compute $ —
  * the $ comes from per-row math summed, not from these aggregates.
  */
 export function weightedTowerLevers(
   rows: L3WorkforceRow[],
   baseline: TowerBaseline,
-  g: GlobalAssessAssumptions,
+  rates: TowerRates,
 ): { offshorePct: number; aiPct: number } {
   let w = 0;
   let wO = 0;
   let wA = 0;
   for (const r of rows) {
-    const c = rowAnnualCost(r, g);
+    const c = rowAnnualCost(r, rates);
     if (c <= 0) continue;
     w += c;
     wO += c * (r.offshoreAssessmentPct ?? baseline.baselineOffshorePct);
@@ -88,11 +90,11 @@ export function weightedTowerLevers(
 /** Cost share by L2 name — drives the concentration tile on tower pages. */
 export function l2Concentration(
   rows: L3WorkforceRow[],
-  g: GlobalAssessAssumptions,
+  rates: TowerRates,
 ): { l2: string; sharePct: number; subtotal: number }[] {
   const byL2 = new Map<string, number>();
   for (const r of rows) {
-    const c = rowAnnualCost(r, g);
+    const c = rowAnnualCost(r, rates);
     byL2.set(r.l2, (byL2.get(r.l2) ?? 0) + c);
   }
   const total = Array.from(byL2.values()).reduce((a, b) => a + b, 0) || 1;
@@ -116,17 +118,17 @@ export type RowSavings = {
 
 /**
  * Per-row modeled savings. Uses the row's own dials if set; otherwise the
- * tower baseline. All rates come from `g`.
+ * tower baseline. All rates come from the tower's `TowerRates`.
  */
 export function rowModeledSaving(
   row: L3WorkforceRow,
   baseline: TowerBaseline,
-  g: GlobalAssessAssumptions,
+  rates: TowerRates,
 ): RowSavings {
-  const pool = rowAnnualCost(row, g);
+  const pool = rowAnnualCost(row, rates);
   const offshorePct = row.offshoreAssessmentPct ?? baseline.baselineOffshorePct;
   const aiPct = row.aiImpactAssessmentPct ?? baseline.baselineAIPct;
-  const offshore = computeRowOffshore(row, offshorePct, g);
+  const offshore = computeRowOffshore(row, offshorePct, rates);
   const ai = pool * (aiPct / 100);
   const combined = ai + offshore * (1 - aiPct / 100);
   return { pool, offshorePct, aiPct, offshore, ai, combined };
@@ -139,7 +141,7 @@ export function rowModeledSaving(
 function computeRowOffshore(
   row: L3WorkforceRow,
   offshoreDialPct: number,
-  g: GlobalAssessAssumptions,
+  rates: TowerRates,
 ): number {
   const dial = clamp01(offshoreDialPct / 100);
   if (dial <= 0) return 0;
@@ -149,20 +151,22 @@ function computeRowOffshore(
 
   if (fteTotal <= 0 && ctrTotal <= 0) {
     if (row.annualSpendUsd == null || row.annualSpendUsd <= 0) return 0;
-    const onshoreRate = g.blendedFteOnshore;
+    const onshoreRate = rates.blendedFteOnshore;
     if (onshoreRate <= 0) return 0;
-    const wageGapFactor = Math.max(0, 1 - g.blendedFteOffshore / onshoreRate);
+    const wageGapFactor = Math.max(0, 1 - rates.blendedFteOffshore / onshoreRate);
     return row.annualSpendUsd * dial * wageGapFactor;
   }
 
   const targetOffFte = fteTotal * dial;
   const movableFte = Math.max(0, targetOffFte - row.fteOffshore);
-  const fteSavings = movableFte * Math.max(0, g.blendedFteOnshore - g.blendedFteOffshore);
+  const fteSavings =
+    movableFte * Math.max(0, rates.blendedFteOnshore - rates.blendedFteOffshore);
 
   const targetOffCtr = ctrTotal * dial;
   const movableCtr = Math.max(0, targetOffCtr - row.contractorOffshore);
   const ctrSavings =
-    movableCtr * Math.max(0, g.blendedContractorOnshore - g.blendedContractorOffshore);
+    movableCtr *
+    Math.max(0, rates.blendedContractorOnshore - rates.blendedContractorOffshore);
 
   return fteSavings + ctrSavings;
 }
@@ -190,20 +194,20 @@ export type TowerSavings = {
 export function modeledSavingsForTower(
   rows: L3WorkforceRow[],
   baseline: TowerBaseline,
-  g: GlobalAssessAssumptions,
+  rates: TowerRates,
 ): TowerSavings {
   let pool = 0;
   let offshore = 0;
   let ai = 0;
   let combined = 0;
   for (const r of rows) {
-    const s = rowModeledSaving(r, baseline, g);
+    const s = rowModeledSaving(r, baseline, rates);
     pool += s.pool;
     offshore += s.offshore;
     ai += s.ai;
     combined += s.combined;
   }
-  const w = weightedTowerLevers(rows, baseline, g);
+  const w = weightedTowerLevers(rows, baseline, rates);
   return {
     pool,
     offshorePct: w.offshorePct,
@@ -223,6 +227,20 @@ export type TowerOutcome = {
   combined: number;
 };
 
+/**
+ * Resolve the rates a tower uses. Always returns a populated `TowerRates`
+ * — falls back to `defaultTowerRates(towerId)` when the tower's state is
+ * absent or its `rates` field hasn't been backfilled yet (e.g. an
+ * in-flight migration). All math callers route through this helper so a
+ * missing rates blob never produces NaN $ figures downstream.
+ */
+export function towerRatesFromState(
+  towerId: TowerId,
+  state: AssessProgramV2,
+): TowerRates {
+  return state.towers[towerId]?.rates ?? defaultTowerRates(towerId);
+}
+
 /** Single per-tower outcome — no scenario stress-test overlay. */
 export function towerOutcomeForState(
   towerId: TowerId,
@@ -230,7 +248,7 @@ export function towerOutcomeForState(
 ): TowerOutcome | null {
   const t = state.towers[towerId];
   if (!t?.l4Rows.length) return null;
-  return modeledSavingsForTower(t.l4Rows, t.baseline, state.global);
+  return modeledSavingsForTower(t.l4Rows, t.baseline, towerRatesFromState(towerId, state));
 }
 
 export function allTowerIdsValid(id: string): id is TowerId {
@@ -244,20 +262,20 @@ export function allTowerIdsValid(id: string): id is TowerId {
 export function rowSensitivityDeltas(
   row: L3WorkforceRow,
   baseline: TowerBaseline,
-  g: GlobalAssessAssumptions,
+  rates: TowerRates,
 ): { dOff10: number; dAi10: number } {
-  const cur = rowModeledSaving(row, baseline, g).combined;
+  const cur = rowModeledSaving(row, baseline, rates).combined;
   const offDial = (row.offshoreAssessmentPct ?? baseline.baselineOffshorePct) + 10;
   const aiDial = (row.aiImpactAssessmentPct ?? baseline.baselineAIPct) + 10;
   const offBumped = rowModeledSaving(
     { ...row, offshoreAssessmentPct: Math.min(100, offDial) },
     baseline,
-    g,
+    rates,
   ).combined;
   const aiBumped = rowModeledSaving(
     { ...row, aiImpactAssessmentPct: Math.min(100, aiDial) },
     baseline,
-    g,
+    rates,
   ).combined;
   return { dOff10: offBumped - cur, dAi10: aiBumped - cur };
 }
@@ -313,9 +331,9 @@ export function programImpactSummary(state: AssessProgramV2): ProgramImpactSumma
 }
 
 /**
- * Program-level sensitivity ribbon: net $ if every L3's offshore (or AI) dial
- * bumped +10 pts. Each L3 row holds one dial pair, so summing the +10 delta
- * across every L3 row is exactly the program-wide +10 sensitivity.
+ * Program-level sensitivity ribbon: net $ if every L4's offshore (or AI) dial
+ * bumped +10 pts. Each L4 row holds one dial pair, so summing the +10 delta
+ * across every L4 row is exactly the program-wide +10 sensitivity.
  */
 export function programSensitivityDeltas(state: AssessProgramV2): {
   dOff10: number;
@@ -326,8 +344,9 @@ export function programSensitivityDeltas(state: AssessProgramV2): {
   for (const t of towers) {
     const st = state.towers[t.id];
     if (!st?.l4Rows.length) continue;
+    const rates = towerRatesFromState(t.id, state);
     for (const r of st.l4Rows) {
-      const d = rowSensitivityDeltas(r, st.baseline, state.global);
+      const d = rowSensitivityDeltas(r, st.baseline, rates);
       dOff10 += d.dOff10;
       dAi10 += d.dAi10;
     }
@@ -337,17 +356,22 @@ export function programSensitivityDeltas(state: AssessProgramV2): {
 
 export function buildExportCsv(program: AssessProgramV2): string {
   const lines: string[] = [
-    "towerId,towerName,poolUsd,weightedOffPct,weightedAiPct,modeledOffshoreUsd,modeledAiUsd,modeledCombinedUsd",
+    "towerId,towerName,fteOnshoreRateUsd,fteOffshoreRateUsd,contractorOnshoreRateUsd,contractorOffshoreRateUsd,poolUsd,weightedOffPct,weightedAiPct,modeledOffshoreUsd,modeledAiUsd,modeledCombinedUsd",
   ];
   for (const t of towers) {
     const st = program.towers[t.id];
     if (!st?.l4Rows.length) continue;
     const o = towerOutcomeForState(t.id, program);
     if (!o) continue;
+    const rates = towerRatesFromState(t.id, program);
     lines.push(
       [
         t.id,
         `"${t.name.replace(/"/g, '""')}"`,
+        rates.blendedFteOnshore.toFixed(0),
+        rates.blendedFteOffshore.toFixed(0),
+        rates.blendedContractorOnshore.toFixed(0),
+        rates.blendedContractorOffshore.toFixed(0),
         o.pool.toFixed(0),
         o.offshorePct.toFixed(1),
         o.aiPct.toFixed(1),

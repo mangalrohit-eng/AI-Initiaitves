@@ -7,14 +7,12 @@
     "dev:clean": "node -e \"const fs=require('fs'); for (const p of ['.next','node_modules/.cache']){ try { fs.rmSync(p,{recursive:true,force:true}); } catch (e) { if (e.code!=='ENOENT') throw e; } }\"",
     "dev:fresh": "npm run dev:clean && next dev",
     "db:migrate": "node scripts/migrate-assess.cjs",
-    "db:seed": "tsx scripts/seed-assess-defaults.ts",
     "build": "next build",
     "build:check": "node scripts/build-check.cjs",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:lead-step": "tsx scripts/leadStepStatusTest.ts",
-    "test:program-smoke": "tsx scripts/programSmokeTest.ts",
     "test:http-smoke": "node scripts/httpSmoke.mjs"
   },
   "dependencies": {

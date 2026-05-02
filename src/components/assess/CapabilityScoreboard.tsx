@@ -10,7 +10,15 @@ import {
   towerFootprintCoverage,
   type CapabilityCounts,
 } from "@/lib/assess/capabilityCounts";
-import { VERSANT_REPORTED_FTE } from "@/data/assess/seedAssessProgram";
+/**
+ * Versant's reported total employee headcount per `docs/headcount.csv` (24
+ * locations, ~55 sub-business units). Used to render a "gap vs Versant"
+ * indicator next to the program-wide FTE total — i.e. how much of the
+ * 3,748-person footprint is currently represented in tower-lead-confirmed
+ * capability maps. CSV is employees only (no contractors), so this baseline
+ * only compares against onshore + offshore FTE.
+ */
+const VERSANT_REPORTED_FTE = 3748;
 import { towers } from "@/data/towers";
 import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
 import { cn } from "@/lib/utils";
@@ -63,7 +71,7 @@ export function CapabilityScoreboard(props: Props) {
     const versantGap = headcount.fte - VERSANT_REPORTED_FTE;
     const versantSubtle =
       headcount.fte === 0
-        ? `vs Versant ${VERSANT_REPORTED_FTE.toLocaleString()} — load sample`
+        ? `vs Versant ${VERSANT_REPORTED_FTE.toLocaleString()} — upload tower data`
         : versantGap === 0
           ? `matches Versant ${VERSANT_REPORTED_FTE.toLocaleString()}`
           : `${versantGap > 0 ? "+" : "−"}${Math.abs(versantGap).toLocaleString()} vs Versant ${VERSANT_REPORTED_FTE.toLocaleString()}`;

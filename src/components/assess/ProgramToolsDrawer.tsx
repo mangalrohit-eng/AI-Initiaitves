@@ -12,36 +12,24 @@ import {
   Wrench,
 } from "lucide-react";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
-import { downloadAllTowersSampleWorkbook, downloadBlob } from "@/lib/assess/downloadAssessSamples";
+import { downloadBlob } from "@/lib/assess/downloadAssessSamples";
 import { serializeAssessProgramForDownload } from "@/lib/assess/assessProgramIO";
 import { getAssessProgram } from "@/lib/localStore";
 
-type Section = "samples" | "backup";
+type Section = "templates" | "backup";
 
 /**
- * Quiet drawer with non-destructive program tools — empty templates, sample
- * workbook, JSON export, status links. Every program-wide destructive action
- * (load sample, import, re-seed, restore assumptions) is reached through the
- * `Program admin` link in the global footer, never from working surfaces.
+ * Quiet drawer with non-destructive program tools — empty templates, JSON
+ * export, status links. Every program-wide destructive action (import,
+ * restore assumptions) is reached through the `Program admin` link in the
+ * global footer, never from working surfaces.
  *
  * Renders at the bottom of the Capability Map and Configure Impact Levers
  * hubs, collapsed by default.
  */
 export function ProgramToolsDrawer() {
   const [open, setOpen] = React.useState(false);
-  const [section, setSection] = React.useState<Section>("samples");
-
-  const sampleWorkbookOp = useAsyncOp<void, []>({
-    run: async () => {
-      await downloadAllTowersSampleWorkbook();
-    },
-    messages: {
-      loadingTitle: "Building 13-tower sample workbook...",
-      successTitle: "Sample workbook downloaded",
-      successDescription: "Excel file with one sheet per tower.",
-      errorTitle: "Couldn't generate workbook",
-    },
-  });
+  const [section, setSection] = React.useState<Section>("templates");
 
   const exportOp = useAsyncOp<void, []>({
     run: async () => {
@@ -89,11 +77,11 @@ export function ProgramToolsDrawer() {
         <div className="border-t border-forge-border">
           <div className="flex flex-wrap items-center gap-1 border-b border-forge-border bg-forge-well/30 px-3 py-2 text-xs">
             <SectionTab
-              active={section === "samples"}
-              onClick={() => setSection("samples")}
+              active={section === "templates"}
+              onClick={() => setSection("templates")}
               icon={<Download className="h-3 w-3" />}
             >
-              Templates &amp; samples
+              Templates
             </SectionTab>
             <SectionTab
               active={section === "backup"}
@@ -105,11 +93,11 @@ export function ProgramToolsDrawer() {
           </div>
 
           <div className="px-4 py-4">
-            {section === "samples" ? (
+            {section === "templates" ? (
               <div className="space-y-3">
                 <p className="text-xs text-forge-subtle">
-                  Empty templates and the 13-tower sample workbook for handoff outside
-                  the portal.
+                  Empty upload templates for tower leads working outside the portal.
+                  Download a tower&rsquo;s current map from its Capability Map page.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <a
@@ -127,17 +115,6 @@ export function ProgramToolsDrawer() {
                   >
                     Empty template (CSV)
                   </a>
-                  <button
-                    type="button"
-                    onClick={() => void sampleWorkbookOp.fire()}
-                    disabled={sampleWorkbookOp.state === "loading"}
-                    className="inline-flex items-center gap-2 rounded-lg border border-forge-border bg-forge-surface px-3 py-2 text-xs text-forge-body hover:border-accent-purple/30 disabled:opacity-60"
-                  >
-                    <Download className="h-3.5 w-3.5 text-accent-teal" />
-                    {sampleWorkbookOp.state === "loading"
-                      ? "Building..."
-                      : "13-tower sample workbook"}
-                  </button>
                 </div>
               </div>
             ) : null}

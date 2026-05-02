@@ -100,8 +100,8 @@ export function markRowsStaleByHash(rows: L3WorkforceRow[]): L3WorkforceRow[] {
  * Read-path helper: rows that have NEVER been seen by the pipeline (no
  * `curationContentHash`) get one stamped on first read with stage `idle`.
  *
- * This protects the seeded program (and any localStorage payload predating
- * this migration) from blasting the StaleCurationBanner on first load.
+ * This protects any legacy localStorage payload predating the staleness
+ * migration from blasting the StaleCurationBanner on first load.
  * The selector still uses the deterministic composer for these rows on
  * render — the bootstrap is purely about the staleness predicate.
  *

@@ -5,7 +5,6 @@ import { useToast } from "@/components/feedback/ToastProvider";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import type { L3WorkforceRow, TowerId } from "@/data/assess/types";
 import { defaultTowerBaseline, defaultTowerState } from "@/data/assess/types";
-import { getTowerSeedState } from "@/data/assess/seedAssessProgram";
 import {
   applyTowerStarterDefaults,
   countBlankL3Defaults,
@@ -60,9 +59,9 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     };
   }, []);
 
-  const tState = program.towers[towerId] ?? { ...defaultTowerState() };
+  const tState = program.towers[towerId] ?? defaultTowerState(towerId);
   const rows = tState.l4Rows;
-  const global = program.global;
+  const rates = tState.rates;
   const isComplete = tState.status === "complete";
 
   const hasHeadcount = rows.some(
@@ -73,7 +72,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
 
   const patchRow = React.useCallback(
     (id: string, patch: Partial<L3WorkforceRow>) => {
-      const cur = getAssessProgram().towers[towerId] ?? defaultTowerState();
+      const cur = getAssessProgram().towers[towerId] ?? defaultTowerState(towerId);
       if (isL1L3TreeLocked(cur)) return;
       setTowerAssess(towerId, {
         l4Rows: cur.l4Rows.map((r) => (r.id === id ? { ...r, ...patch } : r)),
@@ -129,45 +128,6 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     },
   });
 
-  const sampleLoadOp = useAsyncOp<{ rows: number; wasReload: boolean }, []>({
-    run: async () => {
-      const hadRows =
-        (getAssessProgram().towers[towerId]?.l4Rows ?? []).length > 0;
-      const seed = getTowerSeedState(towerId);
-      // Sample loads are seed data, NOT a tower-lead authored map. Clear
-      // confirmations, downstream step stamps, and initiative review keys so
-      // the journey and AI Initiatives view stay consistent with a fresh seed.
-      setTowerAssess(towerId, {
-        l4Rows: seed.l4Rows,
-        baseline: seed.baseline,
-        status: seed.status,
-        capabilityMapConfirmedAt: undefined,
-        l1L5TreeValidatedAt: undefined,
-        l1L3TreeValidatedAt: undefined,
-        headcountConfirmedAt: undefined,
-        offshoreConfirmedAt: undefined,
-        aiConfirmedAt: undefined,
-        impactEstimateValidatedAt: undefined,
-        aiInitiativesValidatedAt: undefined,
-        initiativeReviews: {},
-      });
-      if (sync?.canSync) await sync.flushSave();
-      return { rows: seed.l4Rows.length, wasReload: hadRows };
-    },
-    messages: {
-      loadingTitle: `Loading sample for ${towerName}`,
-      successTitle: ({ wasReload, rows: r }) =>
-        wasReload
-          ? "Starter sample reloaded"
-          : `Loaded ${r} starter row${r === 1 ? "" : "s"} for ${towerName}`,
-      successDescription: ({ wasReload }) =>
-        wasReload
-          ? `Current edits for ${towerName} were replaced with the original sample.`
-          : "Heuristic starter defaults applied. Review and override per L3 in Configure Impact Levers.",
-      errorTitle: "Could not load sample",
-    },
-  });
-
   const blanks = React.useMemo(() => countBlankL3Defaults(rows), [rows]);
 
   const fillBlanksOp = useAsyncOp<{ changedRows: number; changedCells: number }, []>({
@@ -177,7 +137,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       if (result.changedCells === 0) {
         throw new Error("No blanks to fill — every row already has explicit values.");
       }
-      const w = weightedTowerLevers(result.rows, tState.baseline, global);
+      const w = weightedTowerLevers(result.rows, tState.baseline, rates);
       setTowerAssess(towerId, {
         l4Rows: result.rows,
         baseline: {
@@ -205,7 +165,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     run: async () => {
       if (!rows.length) throw new Error("Load a capability map & headcount first.");
       const result = applyTowerStarterDefaults(rows, towerId, "overwriteAll");
-      const w = weightedTowerLevers(result.rows, tState.baseline, global);
+      const w = weightedTowerLevers(result.rows, tState.baseline, rates);
       setTowerAssess(towerId, {
         l4Rows: result.rows,
         baseline: {
@@ -233,7 +193,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       toast.error({ title: "Load a capability map & headcount first" });
       return false;
     }
-    const w = weightedTowerLevers(rows, tState.baseline, global);
+    const w = weightedTowerLevers(rows, tState.baseline, rates);
     const now = new Date().toISOString();
     setTowerAssess(towerId, {
       baseline: {
@@ -264,7 +224,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       durationMs: 8000,
     });
     return true;
-  }, [global, rows, sync, toast, towerId, towerName, tState.baseline]);
+  }, [rates, rows, sync, toast, towerId, towerName, tState.baseline]);
 
   const doUnmarkComplete = React.useCallback(async () => {
     setTowerAssess(towerId, { status: rows.length ? "data" : "empty" });
@@ -309,7 +269,7 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     program,
     tState,
     rows,
-    global,
+    rates,
     blanks,
     isComplete,
     hasHeadcount,
@@ -317,7 +277,6 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     hasAnyAiInput,
     patchRow,
     importOp,
-    sampleLoadOp,
     fillBlanksOp,
     overwriteAllOp,
     doMarkComplete,

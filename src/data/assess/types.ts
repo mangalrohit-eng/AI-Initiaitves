@@ -240,8 +240,9 @@ export type L4WorkforceRow = {
    *   - "llm"       → "> AI-scored" purple chip.
    *   - "heuristic" → "> heuristic" subtle chip (LLM unavailable, deterministic
    *                   `applyTowerStarterDefaults` filled in).
-   *   - "starter"   → "> starter" low-emphasis chip (sample-loaded seed
-   *                   values, never explicitly scored).
+   *   - "starter"   → "> starter" low-emphasis chip (deterministic starter
+   *                   values from `applyTowerStarterDefaults`, never
+   *                   explicitly scored).
    *   - undefined   → no chip; the StaleDialsBanner above tells the user
    *                   the dials are awaiting refresh.
    */
@@ -401,6 +402,16 @@ export type InitiativeReview = {
 export type TowerAssessState = {
   l4Rows: L4WorkforceRow[];
   baseline: TowerBaseline;
+  /**
+   * Per-tower cost rates. Source of truth for every $ in the tower's
+   * scenario math (`rowAnnualCost`, `rowModeledSaving`, etc.). Seeded from
+   * the workshop pivot via `defaultTowerRates(towerId)` on first read;
+   * tower leads can edit on their tower's Configure Impact Levers page.
+   *
+   * Read-time backfilled in `migrateAssessProgram` when absent so legacy
+   * snapshots (pre per-tower rate migration) load cleanly.
+   */
+  rates: TowerRates;
   status: TowerAssessStatus;
   lastUpdated?: string;
   /**
@@ -422,14 +433,16 @@ export type ChecklistStepId =
   | "complete";
 
 /**
- * Global assumptions for the Configure Impact Levers flow. These are the ONLY
- * knobs on the Assumptions tab and the ONLY rates the savings math reads.
+ * Per-tower cost rates. Source of truth for every $ in the tower's scenario
+ * math (`rowAnnualCost`, `rowModeledSaving`, etc.). Same four-field shape as
+ * the (now removed) global assumptions — but each tower owns its own copy on
+ * `TowerAssessState.rates`.
  *
- * Every $ in the app is derived from these four rates plus per-L4 headcount
- * mix and per-L4 dials. No magic lever weights, no caps, no combine-mode
- * toggles — see `scenarioModel.ts` for the math.
+ * Tower leads edit these on the Configure Impact Levers page via
+ * `TowerRatesCard`; the existing tower-scoped PUT guard ensures a tower lead
+ * can only edit their own tower's rates.
  */
-export type GlobalAssessAssumptions = {
+export type TowerRates = {
   /** Illustrative $ / FTE-year (user-entered, not Versant-reported). */
   blendedFteOnshore: number;
   blendedFteOffshore: number;
@@ -437,12 +450,96 @@ export type GlobalAssessAssumptions = {
   blendedContractorOffshore: number;
 };
 
-export const defaultGlobalAssessAssumptions: GlobalAssessAssumptions = {
+/**
+ * Per-tower seeded onshore FTE rates. Sourced from the Forge Function Map
+ * "Average of Fully Loaded Cost (USD)" workshop pivot, rounded to nearest
+ * $100. Offshore = round(onshore / 3); contractor on/off = round(FTE on/off
+ * × 0.80) — see `defaultTowerRates`.
+ */
+const SEEDED_TOWER_FTE_ONSHORE_USD: Record<TowerId, number> = {
+  "corp-services": 151_600,
+  "editorial-news": 171_500,
+  finance: 154_600,
+  hr: 164_300,
+  legal: 167_000,
+  "marketing-comms": 150_000,
+  production: 176_000,
+  "programming-dev": 135_600,
+  "research-analytics": 185_400,
+  sales: 122_600,
+  service: 76_200,
+  "tech-engineering": 208_200,
+  "operations-technology": 175_200,
+};
+
+const PROGRAM_AVG_FTE_ONSHORE_USD = 165_800;
+
+/** Round a positive number to the nearest $100 — matches the seed precision. */
+function roundToHundred(n: number): number {
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.round(n / 100) * 100;
+}
+
+/**
+ * Compute the four seeded per-tower rates for a given tower:
+ *   - blendedFteOnshore   = workshop pivot ($ rounded to nearest $100)
+ *   - blendedFteOffshore  = round(onshore / 3 / 100) * 100
+ *   - blendedContractorOnshore  = round(onshore × 0.80 / 100) * 100
+ *   - blendedContractorOffshore = round(offshore × 0.80 / 100) * 100
+ *
+ * Tower id outside the canonical 13 falls back to the program-wide average
+ * onshore rate (so any future tower added without a workshop number still
+ * gets sensible defaults).
+ */
+export function defaultTowerRates(towerId: TowerId): TowerRates {
+  const onshore =
+    SEEDED_TOWER_FTE_ONSHORE_USD[towerId] ?? PROGRAM_AVG_FTE_ONSHORE_USD;
+  const offshore = roundToHundred(onshore / 3);
+  return {
+    blendedFteOnshore: roundToHundred(onshore),
+    blendedFteOffshore: offshore,
+    blendedContractorOnshore: roundToHundred(onshore * 0.8),
+    blendedContractorOffshore: roundToHundred(offshore * 0.8),
+  };
+}
+
+/**
+ * @deprecated Replaced by per-tower {@link TowerRates} on
+ * `TowerAssessState.rates`. The four-field shape is identical, so legacy
+ * snapshots that still carry `program.global` are honored once at read-time
+ * via `migrateAssessProgram` (any non-default field is copied onto every
+ * tower whose rates are still at default seeds).
+ */
+export type GlobalAssessAssumptions = TowerRates;
+
+/**
+ * The exact four-rate defaults that shipped with the previous global-rates
+ * platform. Frozen as a historical constant so the legacy → per-tower
+ * carry-over in `migrateAssessProgram` can correctly recognize a stored
+ * `program.global` that was never customized (and therefore should NOT
+ * overwrite the new per-tower workshop-pivot seeds).
+ *
+ * Do NOT change these numbers. If they ever drift away from what was
+ * actually shipped, every existing production workshop will have its
+ * per-tower seeds silently replaced with the historical defaults — which
+ * is exactly the bug this constant exists to prevent.
+ */
+export const LEGACY_PROGRAM_GLOBAL_DEFAULTS: GlobalAssessAssumptions = {
   blendedFteOnshore: 180_000,
   blendedFteOffshore: 90_000,
   blendedContractorOnshore: 120_000,
   blendedContractorOffshore: 60_000,
 };
+
+/**
+ * @deprecated Use {@link defaultTowerRates} for the canonical per-tower
+ * defaults. This export is retained only as a stable fallback for the
+ * `parseGlobal` back-compat reader in `assessProgramIO.ts` — it returns the
+ * historical platform defaults so a missing-or-malformed legacy
+ * `program.global` blob parses to the same shape it used to.
+ */
+export const defaultGlobalAssessAssumptions: GlobalAssessAssumptions =
+  LEGACY_PROGRAM_GLOBAL_DEFAULTS;
 
 /**
  * Step-5 (Offshore Plan) editable assumptions.
@@ -482,11 +579,24 @@ export const DEFAULT_OFFSHORE_ASSUMPTIONS: OffshoreAssumptions = {
  * V4 lives in `localStore.ts` (renames `l3Rows` → `l4Rows`, stamps `l2`
  * with the tower function name from `towerFunctionNames.ts`, renames
  * `l4Activities`/`l4Items` → `l5Activities`/`l5Items`).
+ *
+ * Per-tower rates: `program.global` was retired in favor of per-tower
+ * `TowerAssessState.rates`. The optional `global?` field is retained on the
+ * envelope for one release so legacy snapshots / file imports still parse;
+ * `migrateAssessProgram` honors any customized values once by copying them
+ * onto each tower's `rates`.
  */
 export type AssessProgramV5 = {
   version: 5;
   towers: Partial<Record<TowerId, TowerAssessState>>;
-  global: GlobalAssessAssumptions;
+  /**
+   * @deprecated Removed in the per-tower rates migration. Each
+   * `TowerAssessState` now owns its own `rates`. Retained here as optional
+   * read-side input only — never written by this app — so legacy snapshots
+   * with customized values can be carried over to per-tower rates exactly
+   * once at read time.
+   */
+  global?: GlobalAssessAssumptions;
   /** Program admin: due-by dates per tower for Steps 1–4 (optional). */
   leadDeadlines?: Partial<Record<TowerId, TowerLeadDeadlines>>;
   /**
@@ -511,10 +621,19 @@ export const defaultTowerBaseline: TowerBaseline = {
   baselineAIPct: 15,
 };
 
-export function defaultTowerState(): TowerAssessState {
+/**
+ * Empty starter `TowerAssessState` for a tower id. Attaches the seeded
+ * per-tower rates so the math layer always has a non-zero rate set, even
+ * for towers the lead has never visited.
+ *
+ * The `towerId` argument is required (was no-arg pre per-tower rates) so
+ * `defaultTowerRates(towerId)` can pick the right workshop-pivot rate.
+ */
+export function defaultTowerState(towerId: TowerId): TowerAssessState {
   return {
     l4Rows: [],
     baseline: { ...defaultTowerBaseline },
+    rates: defaultTowerRates(towerId),
     status: "empty",
   };
 }
@@ -523,7 +642,6 @@ export function defaultAssessProgramV2(): AssessProgramV5 {
   return {
     version: 5,
     towers: {},
-    global: { ...defaultGlobalAssessAssumptions },
     leadDeadlines: buildDefaultProgramLeadDeadlines(),
   };
 }

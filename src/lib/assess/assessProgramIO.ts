@@ -3,9 +3,16 @@ import type {
   GlobalAssessAssumptions,
   L4WorkforceRow,
   TowerId,
+  TowerRates,
 } from "@/data/assess/types";
 import { mergeLeadDeadlines, parseLeadDeadlines } from "@/lib/program/leadDeadlines";
-import { defaultGlobalAssessAssumptions, defaultTowerBaseline, defaultTowerState } from "@/data/assess/types";
+import {
+  defaultGlobalAssessAssumptions,
+  defaultTowerBaseline,
+  defaultTowerRates,
+  defaultTowerState,
+  LEGACY_PROGRAM_GLOBAL_DEFAULTS,
+} from "@/data/assess/types";
 import { getTowerFunctionName } from "@/data/towerFunctionNames";
 import { towers } from "@/data/towers";
 import { coerceInitiativeReviews, groupL4RowsToL3RowsForImport } from "@/lib/localStore";
@@ -163,9 +170,26 @@ function asL4Row(x: unknown, towerId: TowerId): L4WorkforceRow | null {
 }
 
 /**
- * Coalesce the global assumptions blob, ignoring fields that no longer exist
- * (offshoreLeverWeight, aiLeverWeight, combineMode, combinedCapPct from v2).
- * v2 / v3 exports load cleanly — the obsolete fields are silently dropped.
+ * Coalesce a per-tower rates blob, defaulting any missing field to the
+ * tower's seeded rate (`defaultTowerRates(towerId)`). Used by the per-tower
+ * import loop to populate `TowerAssessState.rates` from JSON exports.
+ */
+function parseRates(x: unknown, towerId: TowerId): TowerRates {
+  const d = defaultTowerRates(towerId);
+  if (!isRecord(x)) return d;
+  return {
+    blendedFteOnshore: coalesceNumber(x.blendedFteOnshore, d.blendedFteOnshore),
+    blendedFteOffshore: coalesceNumber(x.blendedFteOffshore, d.blendedFteOffshore),
+    blendedContractorOnshore: coalesceNumber(x.blendedContractorOnshore, d.blendedContractorOnshore),
+    blendedContractorOffshore: coalesceNumber(x.blendedContractorOffshore, d.blendedContractorOffshore),
+  };
+}
+
+/**
+ * @deprecated Per-tower rates replaced the program-level global. Retained
+ * only for back-compat reads of legacy `program.global` blobs — the parsed
+ * values are then carried onto each tower's `rates` once via
+ * `migrateAssessProgram`.
  */
 function parseGlobal(x: unknown): GlobalAssessAssumptions {
   if (!isRecord(x)) return { ...defaultGlobalAssessAssumptions };
@@ -234,9 +258,30 @@ export function importAssessProgramFromJsonText(
 
   const inputVersion = programRaw.version;
 
+  // Legacy `program.global` carry-over: any field that was customized vs.
+  // the *historical* platform defaults gets copied onto every imported tower
+  // whose own `rates` blob is absent. Per-tower rates always win when
+  // present.
+  //
+  // CRITICAL: compare against LEGACY_PROGRAM_GLOBAL_DEFAULTS (the frozen
+  // historical numbers), NOT today's per-tower seeds. See the matching
+  // comment in `migrateAssessProgram` for why.
+  const legacyGlobal = parseGlobal(programRaw.global);
+  const legacyOverrides: Partial<TowerRates> = {};
+  for (const k of [
+    "blendedFteOnshore",
+    "blendedFteOffshore",
+    "blendedContractorOnshore",
+    "blendedContractorOffshore",
+  ] as const) {
+    if (legacyGlobal[k] !== LEGACY_PROGRAM_GLOBAL_DEFAULTS[k]) {
+      legacyOverrides[k] = legacyGlobal[k];
+    }
+  }
+  const hasLegacyGlobal = Object.keys(legacyOverrides).length > 0;
+
   const program: AssessProgramV2 = {
     version: 5,
-    global: parseGlobal(programRaw.global),
     towers: {},
   };
 
@@ -244,7 +289,7 @@ export function importAssessProgramFromJsonText(
   if (towersObj !== null && isRecord(towersObj)) {
     for (const [k, v] of Object.entries(towersObj)) {
       if (!isTowerId(k) || !isRecord(v)) continue;
-      const base = defaultTowerState();
+      const base = defaultTowerState(k);
       // V5 stores rows under `l4Rows`; V4 used `l3Rows`; V2/V3 used the
       // pre-collapse `l4Rows` (per-L4-Activity granularity). All three
       // shapes round-trip through `asL4Row` / `groupL4RowsToL3RowsForImport`
@@ -275,6 +320,14 @@ export function importAssessProgramFromJsonText(
       // doesn't silently strip the field on the way to / from Postgres.
       const reviews = coerceInitiativeReviews(v.initiativeReviews);
 
+      // Per-tower rates: prefer the snapshot's own `rates` blob; otherwise
+      // start from seeded defaults and overlay any one-shot legacy
+      // `program.global` carry-over.
+      const ratesFromSnapshot = isRecord(v.rates) ? parseRates(v.rates, k) : null;
+      const rates: TowerRates =
+        ratesFromSnapshot ??
+        (hasLegacyGlobal ? { ...defaultTowerRates(k), ...legacyOverrides } : defaultTowerRates(k));
+
       program.towers[k] = {
         l4Rows,
         baseline: {
@@ -284,6 +337,7 @@ export function importAssessProgramFromJsonText(
           ),
           baselineAIPct: coalesceNumber(bRaw.baselineAIPct, defaultTowerBaseline.baselineAIPct),
         },
+        rates,
         status,
         lastUpdated: typeof v.lastUpdated === "string" ? v.lastUpdated : base.lastUpdated,
         capabilityMapConfirmedAt:

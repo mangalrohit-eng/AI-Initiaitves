@@ -8,7 +8,6 @@ import {
   Download,
   FileSpreadsheet,
   Info,
-  Sparkles,
   Upload,
   Wand2,
 } from "lucide-react";
@@ -30,7 +29,7 @@ import {
 } from "@/lib/assess/capabilityMapTree";
 import {
   downloadBlob,
-  downloadSingleTowerSampleCsv,
+  downloadCurrentTowerCapabilityMapCsv,
 } from "@/lib/assess/downloadAssessSamples";
 import { serializeAssessProgramForDownload } from "@/lib/assess/assessProgramIO";
 import { clientGenerateL4Activities } from "@/lib/assess/assessClientApi";
@@ -50,10 +49,6 @@ import {
   ReplaceUploadConfirmDialog,
   type ReplaceUploadBusyState,
 } from "@/components/feedback/ReplaceUploadConfirmDialog";
-import {
-  ReloadSampleConfirmDialog,
-  type ReloadSampleBusyState,
-} from "@/components/feedback/ReloadSampleConfirmDialog";
 
 type Props = { towerId: TowerId; towerName: string };
 
@@ -76,7 +71,6 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
     rows,
     tState,
     importOp,
-    sampleLoadOp,
     patchRow,
     markL1L3TreeValidated,
     clearL1L3TreeValidation,
@@ -189,10 +183,10 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
     },
   });
 
-  // Source-of-truth precedence: uploaded rows always win. The predefined
-  // capability map (`src/data/capabilityMap/*.ts`) is a seed used by the
-  // "Load sample" button and as a Preview when no rows exist yet — it never
-  // overlays user data once anything has been uploaded.
+  // Source-of-truth precedence: uploaded rows always win. The canonical
+  // capability map (`src/data/capabilityMap/*.ts`) is the structural reference
+  // — it renders as a Preview when no rows exist yet, but never overlays user
+  // data once anything has been uploaded.
   const def = getCapabilityMapForTower(towerId);
   const isPreview = rows.length === 0 && def != null;
   const view = React.useMemo(() => {
@@ -213,9 +207,6 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   const [pendingFile, setPendingFile] = React.useState<File | null>(null);
   const [replaceBusy, setReplaceBusy] =
     React.useState<ReplaceUploadBusyState>(null);
-  const [reloadSampleDialogOpen, setReloadSampleDialogOpen] = React.useState(false);
-  const [reloadSampleBusy, setReloadSampleBusy] =
-    React.useState<ReloadSampleBusyState>(null);
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -239,49 +230,6 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
     closeReplaceDialog();
     if (f) void importOp.fire(f);
   }, [pendingFile, importOp, closeReplaceDialog]);
-
-  const closeReloadSampleDialog = React.useCallback(() => {
-    setReloadSampleDialogOpen(false);
-    setReloadSampleBusy(null);
-  }, []);
-
-  const onLoadSample = React.useCallback(() => {
-    if (rows.length === 0) {
-      void sampleLoadOp.fire();
-      return;
-    }
-    setReloadSampleDialogOpen(true);
-  }, [rows.length, sampleLoadOp]);
-
-  const onReloadSampleConfirm = React.useCallback(() => {
-    closeReloadSampleDialog();
-    void sampleLoadOp.fire();
-  }, [closeReloadSampleDialog, sampleLoadOp]);
-
-  const onExportThenReloadSample = React.useCallback(async () => {
-    setReloadSampleBusy("exporting");
-    try {
-      const program = getAssessProgram();
-      const body = serializeAssessProgramForDownload(program);
-      const name = `forge-assess-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      downloadBlob(name, body, "application/json;charset=utf-8");
-      toast.success({
-        title: "Backup downloaded",
-        description:
-          "Save the JSON somewhere safe (SharePoint / Teams). Restore via Program tools > Import backup.",
-        durationMs: 6000,
-      });
-    } catch (err) {
-      toast.error({
-        title: "Couldn't export backup",
-        description: err instanceof Error ? err.message : undefined,
-      });
-      setReloadSampleBusy(null);
-      return;
-    }
-    closeReloadSampleDialog();
-    void sampleLoadOp.fire();
-  }, [closeReloadSampleDialog, sampleLoadOp, toast]);
 
   const onExportThenReplace = React.useCallback(async () => {
     const f = pendingFile;
@@ -315,13 +263,13 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
     void importOp.fire(f);
   }, [pendingFile, importOp, toast, closeReplaceDialog]);
 
-  const onTemplateDownload = React.useCallback(() => {
+  const onCurrentMapDownload = React.useCallback(() => {
     try {
-      downloadSingleTowerSampleCsv(towerId, towerName);
-      toast.success({ title: `Sample CSV for ${towerName} downloaded` });
+      downloadCurrentTowerCapabilityMapCsv(towerId, towerName);
+      toast.success({ title: `Current capability map for ${towerName} downloaded` });
     } catch (e) {
       toast.error({
-        title: "Couldn't download sample",
+        title: "Couldn't download capability map",
         description: e instanceof Error ? e.message : undefined,
       });
     }
@@ -392,11 +340,9 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
           rowsCount={rows.length}
           lastUpdated={tState.lastUpdated}
           uploading={importOp.state === "loading"}
-          loadingSample={sampleLoadOp.state === "loading"}
           mapLocked={mapStepLocked}
           onPickFile={() => fileRef.current?.click()}
-          onLoadSample={onLoadSample}
-          onDownloadSample={onTemplateDownload}
+          onDownloadCurrentMap={onCurrentMapDownload}
         />
 
         {importOp.data && importOp.data.warnings.length > 0 ? (
@@ -436,7 +382,7 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
         {view.l2.length === 0 && rows.length === 0 ? (
           <p className="mt-6 rounded-xl border border-dashed border-forge-border bg-forge-well/40 p-4 text-sm text-forge-subtle">
             No <Term termKey="capability map">capability map</Term> is defined for this tower and no headcount is loaded yet. Use the
-            CTA above to upload your file or load the sample.
+            CTA above to upload your file.
           </p>
         ) : null}
 
@@ -494,14 +440,6 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
       onReplace={onReplaceWithoutBackup}
       onExportThenReplace={() => void onExportThenReplace()}
     />
-    <ReloadSampleConfirmDialog
-      open={reloadSampleDialogOpen}
-      towerName={towerName}
-      busy={reloadSampleBusy}
-      onCancel={closeReloadSampleDialog}
-      onReload={onReloadSampleConfirm}
-      onExportThenReload={() => void onExportThenReloadSample()}
-    />
     </>
   );
 }
@@ -523,7 +461,7 @@ function MapSourceBanner({
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent-amber/35 bg-accent-amber/8 px-3 py-1.5">
         <span className="inline-flex items-center gap-2 text-xs font-medium text-accent-amber">
           <Info className="h-3.5 w-3.5" aria-hidden />
-          Default seed map · awaiting tower lead upload
+          Canonical capability map · awaiting tower lead upload
         </span>
         <span className="text-[11px] text-forge-subtle">
           Step 1 stays open until you upload your tower&rsquo;s capability map &amp; headcount.
@@ -563,10 +501,10 @@ function MapSourceBanner({
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-forge-border bg-forge-well/40 px-3 py-1.5">
         <span className="inline-flex items-center gap-2 text-xs font-medium text-forge-body">
           <Info className="h-3.5 w-3.5 text-accent-purple-dark" aria-hidden />
-          Sample seed loaded · {rowsCount} Activity Group{rowsCount === 1 ? "" : "s"}
+          Workshop data loaded · {rowsCount} Activity Group{rowsCount === 1 ? "" : "s"}
         </span>
         <span className="text-[11px] text-forge-subtle">
-          Upload your capability map &amp; headcount to confirm the tower lead version.
+          Confirm or upload a new map to mark as tower-lead authored.
         </span>
       </div>
       {l1L5TreeValidatedAt ? (
@@ -682,24 +620,23 @@ function CapabilityMapCta({
   rowsCount,
   lastUpdated,
   uploading,
-  loadingSample,
   mapLocked,
   onPickFile,
-  onLoadSample,
-  onDownloadSample,
+  onDownloadCurrentMap,
 }: {
   rowsCount: number;
   lastUpdated?: string;
   uploading: boolean;
-  loadingSample: boolean;
   mapLocked?: boolean;
   onPickFile: () => void;
-  onLoadSample: () => void;
-  onDownloadSample: () => void;
+  onDownloadCurrentMap: () => void;
 }) {
   const isEmpty = rowsCount === 0;
   const fileDisabled = uploading || mapLocked;
-  const sampleDisabled = loadingSample || mapLocked;
+  const currentMapDisabled = isEmpty;
+  const currentMapTooltip = isEmpty
+    ? "Upload your map first to download a current copy."
+    : undefined;
 
   if (isEmpty) {
     return (
@@ -733,15 +670,6 @@ function CapabilityMapCta({
               <Upload className="h-4 w-4" aria-hidden />
               {uploading ? "Uploading..." : "Upload .csv / .xlsx"}
             </button>
-            <button
-              type="button"
-              onClick={onLoadSample}
-              disabled={sampleDisabled}
-              className="inline-flex items-center gap-2 rounded-lg border border-accent-teal/40 bg-accent-teal/10 px-4 py-2 text-sm font-medium text-accent-teal transition hover:border-accent-teal/60 disabled:opacity-60"
-            >
-              <Sparkles className="h-4 w-4" aria-hidden />
-              {loadingSample ? "Loading..." : "Load sample"}
-            </button>
           </div>
         </div>
 
@@ -751,7 +679,7 @@ function CapabilityMapCta({
               <span className="transition-transform group-open:rotate-90" aria-hidden>
                 ›
               </span>
-              Templates &amp; sample downloads
+              Templates
             </span>
           </summary>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -770,21 +698,12 @@ function CapabilityMapCta({
             >
               Empty template (CSV)
             </a>
-            <button
-              type="button"
-              onClick={onDownloadSample}
-              className="inline-flex items-center gap-1.5 rounded-md border border-forge-border bg-forge-surface px-2 py-1 text-[11px] text-forge-body hover:border-accent-purple/30"
-            >
-              <Download className="h-3 w-3 text-accent-teal" />
-              Sample for this tower (CSV)
-            </button>
           </div>
         </details>
       </section>
     );
   }
 
-  // Loaded state — slim toolbar with replace / reload / templates.
   return (
     <section
       data-capability-cta="loaded"
@@ -808,15 +727,6 @@ function CapabilityMapCta({
         >
           <Upload className="h-3.5 w-3.5" aria-hidden />
           {uploading ? "Uploading..." : "Update map & headcount"}
-        </button>
-        <button
-          type="button"
-          onClick={onLoadSample}
-          disabled={sampleDisabled}
-          className="inline-flex items-center gap-1.5 rounded-md border border-accent-teal/35 bg-accent-teal/10 px-2.5 py-1.5 text-xs font-medium text-accent-teal transition hover:border-accent-teal/55 disabled:opacity-60"
-        >
-          <Sparkles className="h-3.5 w-3.5" aria-hidden />
-          {loadingSample ? "Loading..." : "Reload sample"}
         </button>
         <details className="group relative">
           <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md border border-forge-border bg-forge-surface px-2 py-1.5 text-[11px] text-forge-body hover:border-accent-purple/30">
@@ -843,11 +753,13 @@ function CapabilityMapCta({
             </a>
             <button
               type="button"
-              onClick={onDownloadSample}
-              className="inline-flex items-center gap-1.5 rounded px-1.5 py-1 text-left text-[11px] text-forge-body hover:bg-forge-well/60"
+              onClick={onDownloadCurrentMap}
+              disabled={currentMapDisabled}
+              title={currentMapTooltip}
+              className="inline-flex items-center gap-1.5 rounded px-1.5 py-1 text-left text-[11px] text-forge-body hover:bg-forge-well/60 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Download className="h-3 w-3 text-accent-teal" />
-              Sample for this tower (CSV)
+              Current capability map (CSV)
             </button>
           </div>
         </details>

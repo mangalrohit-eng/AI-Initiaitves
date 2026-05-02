@@ -51,7 +51,7 @@ export function buildCapabilityMapExportCsv(params: {
 }): string {
   const { towerId, towerName, program } = params;
   const exportedAt = new Date().toISOString();
-  const tState = program.towers[towerId] ?? defaultTowerState();
+  const tState = program.towers[towerId] ?? defaultTowerState(towerId);
   const assessRows = tState.l4Rows ?? [];
   const map = getCapabilityMapForTower(towerId);
 
@@ -193,7 +193,7 @@ export function buildDialsExportCsv(params: {
 }): string {
   const { towerId, towerName, program } = params;
   const exportedAt = new Date().toISOString();
-  const tState = program.towers[towerId] ?? defaultTowerState();
+  const tState = program.towers[towerId] ?? defaultTowerState(towerId);
   const baseline = tState.baseline;
   const rows = tState.l4Rows ?? [];
   const map = getCapabilityMapForTower(towerId);

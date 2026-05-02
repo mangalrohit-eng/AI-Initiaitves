@@ -3,9 +3,9 @@ import { Suspense } from "react";
 import { AssumptionsClient } from "@/components/assess/AssumptionsClient";
 
 export const metadata: Metadata = {
-  title: "Assumptions — Versant Forge Program",
+  title: "Methodology — Versant Forge Program",
   description:
-    "Program-level globals — blended FTE rates, contractor rates, lever weights, combine mode, and cap — that drive every estimate in Configure Impact Levers and the Impact Estimate.",
+    "How the savings model works — pool, offshore arbitrage, AI savings, sequential combine, and roll-up. Per-tower cost rates are edited on each tower's Configure Impact Levers page.",
 };
 
 export default function AssumptionsPage() {

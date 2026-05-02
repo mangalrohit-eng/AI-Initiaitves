@@ -4,6 +4,7 @@ import * as React from "react";
 import { CheckCircle2, Cpu, Globe2, TrendingUp } from "lucide-react";
 import { MoneyCounter, formatMoney } from "@/components/ui/MoneyCounter";
 import type { AssessProgramV2, L3WorkforceRow, TowerId } from "@/data/assess/types";
+import { defaultTowerRates } from "@/data/assess/types";
 import {
   programImpactSummary,
   rowAnnualCost,
@@ -107,9 +108,10 @@ export function AssessmentScoreboard(props: Props) {
 
   const { program, towerId, rows, className } = props;
   const tState = program.towers[towerId];
-  const weighted = rows.length && tState ? weightedTowerLevers(rows, tState.baseline, program.global) : null;
+  const rates = tState?.rates ?? defaultTowerRates(towerId);
+  const weighted = rows.length && tState ? weightedTowerLevers(rows, tState.baseline, rates) : null;
   const outcome = towerOutcomeForState(towerId, program);
-  const pool = rows.reduce((s, r) => s + rowAnnualCost(r, program.global), 0);
+  const pool = rows.reduce((s, r) => s + rowAnnualCost(r, rates), 0);
 
   return (
     <div

@@ -46,6 +46,7 @@ import {
   programImpactSummary,
   rowAnnualCost,
   rowModeledSaving,
+  towerRatesFromState,
   type ProgramImpactSummary,
 } from "@/lib/assess/scenarioModel";
 
@@ -352,7 +353,6 @@ export function selectOffshorePlan(
   program: AssessProgramV2,
   options: SelectOffshorePlanOptions = {},
 ): OffshorePlanResult {
-  const g = program.global;
   const assumptions = options.assumptions ?? program.offshoreAssumptions ?? DEFAULT_OFFSHORE_ASSUMPTIONS;
   const llmLanes = options.llmLanes;
 
@@ -372,6 +372,7 @@ export function selectOffshorePlan(
     if (!state || state.l4Rows.length === 0) continue;
 
     const baseline = state.baseline;
+    const rates = towerRatesFromState(towerId, program);
     const towerDefault = TOWER_DEFAULT_CARVE_OUT[towerId];
     const tsaTag = TOWER_TSA_DEPENDENCY[towerId];
     const fromLocations = TOWER_ONSHORE_LOCATION_HINT[towerId];
@@ -395,8 +396,8 @@ export function selectOffshorePlan(
         assumptions,
       );
       const head = computeMovableHeadcount(r, baseline);
-      const pool = rowAnnualCost(r, g);
-      const saving = rowModeledSaving(r, baseline, g);
+      const pool = rowAnnualCost(r, rates);
+      const saving = rowModeledSaving(r, baseline, rates);
       const todayOnshore = r.fteOnshore + r.contractorOnshore;
       const todayOffshore = r.fteOffshore + r.contractorOffshore;
 

@@ -39,7 +39,7 @@
  */
 
 import { towers } from "../src/data/towers";
-import { buildSeededAssessProgramV2 } from "../src/data/assess/seedAssessProgram";
+import { buildSeededAssessProgramV2 } from "./lib/seedFixture";
 import { getCapabilityMapForTower } from "../src/data/capabilityMap/maps";
 import {
   rowModeledSaving,
@@ -49,8 +49,8 @@ import {
 } from "../src/lib/assess/scenarioModel";
 import { selectInitiativesForTower } from "../src/lib/initiatives/select";
 import {
-  defaultGlobalAssessAssumptions,
   defaultTowerBaseline,
+  defaultTowerRates,
   type AssessProgramV2,
   type TowerId,
 } from "../src/data/assess/types";
@@ -124,7 +124,7 @@ function runTower(
 
   const tState = program.towers[towerId];
   const baseline = tState?.baseline ?? defaultTowerBaseline;
-  const global = program.global ?? defaultGlobalAssessAssumptions;
+  const rates = tState?.rates ?? defaultTowerRates(towerId);
   const rows = tState?.l3Rows ?? [];
 
   // Step 1 — canonical capability map
@@ -150,7 +150,7 @@ function runTower(
 
   // Step 2 — per-L3 + tower modeled savings
   const towerSummary = rows.length
-    ? modeledSavingsForTower(rows, baseline, global)
+    ? modeledSavingsForTower(rows, baseline, rates)
     : { pool: 0, offshorePct: 0, aiPct: 0, offshore: 0, ai: 0, combined: 0 };
   const step2AiUsd = towerSummary.ai;
 
@@ -160,7 +160,7 @@ function runTower(
   let rowsMatchingCanonical = 0;
   let rowsSynthesized = 0;
   for (const r of rows) {
-    const s = rowModeledSaving(r, baseline, global);
+    const s = rowModeledSaving(r, baseline, rates);
     step2RowSum += s.ai;
     if (s.ai > 0) {
       rowsWithAi += 1;
@@ -248,7 +248,7 @@ function runTower(
         );
         continue;
       }
-      const expected = rowModeledSaving(r, baseline, global).ai;
+      const expected = rowModeledSaving(r, baseline, rates).ai;
       assertCloseEnough(
         towerId,
         "F",

@@ -1,51 +1,44 @@
-import { getCapabilityMapForTower } from "@/data/capabilityMap/maps";
-import type { CapabilityMapDefinition } from "@/data/capabilityMap/types";
-import { towers } from "@/data/towers";
-import { weightedTowerLevers } from "@/lib/assess/scenarioModel";
-import type { AssessProgramV2, L4WorkforceRow, TowerAssessState, TowerId } from "./types";
+/**
+ * SCRIPT-ONLY fixture builder for dev/CI tests. Builds a populated
+ * `AssessProgramV2` from the canonical L1–L5 capability map plus modeled
+ * Versant headcount, so smoke / consistency / verification scripts have
+ * realistic data to exercise.
+ *
+ * IMPORTANT: This file lives under `scripts/lib/` because the live app no
+ * longer ships a sample-seed program. Do NOT import this from `src/` — app
+ * code starts empty and is populated by tower-lead uploads or by syncing
+ * from the workshop database.
+ *
+ * Modeled allocation of Versant's reported 3,748 employees (source:
+ * `docs/headcount.csv`, 24 locations × ~55 sub-business units). Each
+ * sub-business is mapped to one or more Forge towers; pure corporate
+ * functions (Versant Finance, HR, Legal, Communications) map 1:1. Tower
+ * totals are apportioned to the capability-map L2 buckets using
+ * weight-of-effort, anchored to Versant's actual operating context
+ * (post-Comcast standup, hyper-hiring, MS NOW progressive positioning,
+ * BB- credit, $2.45B programming spend, Fandango / GolfNow / SportsEngine
+ * consumer SaaS).
+ */
+import { getCapabilityMapForTower } from "../../src/data/capabilityMap/maps";
+import type { CapabilityMapDefinition } from "../../src/data/capabilityMap/types";
+import { towers } from "../../src/data/towers";
+import { weightedTowerLevers } from "../../src/lib/assess/scenarioModel";
+import type {
+  AssessProgramV2,
+  L4WorkforceRow,
+  TowerAssessState,
+  TowerId,
+} from "../../src/data/assess/types";
 import {
   buildDefaultProgramLeadDeadlines,
-  defaultGlobalAssessAssumptions,
   defaultTowerBaseline,
-} from "./types";
-import { inferL3Defaults } from "./seedAssessmentDefaults";
-import { rowStarterRationale } from "./rowRationale";
+  defaultTowerRates,
+} from "../../src/data/assess/types";
+import { inferL3Defaults } from "../../src/data/assess/seedAssessmentDefaults";
+import { rowStarterRationale } from "../../src/data/assess/rowRationale";
 
-/**
- * Seeded headcount — modeled allocation of Versant's reported 3,748 employees
- * (source: `docs/headcount.csv`, 24 locations × ~55 sub-business units).
- *
- * Method: each sub-business in the CSV is mapped to one or more Forge towers
- * (vertically integrated brands like CNBC linear / GolfNow / Fandango span
- * Editorial, Production, Tech, Sales, etc.); pure corporate functions
- * (Versant Finance, HR, Legal, Communications) map 1:1. Tower totals are then
- * apportioned to the capability-map L2 buckets below using qualitative weight-
- * of-effort, anchored to Versant's actual operating context (post-Comcast
- * standup, hyper-hiring, MS NOW progressive positioning, BB- credit, $2.45B
- * programming spend, Fandango / GolfNow / SportsEngine consumer SaaS).
- *
- * Numbers are MODELED estimates, not Versant-reported. Contractor counts are
- * set to 0 — the CSV captures employees only, and tower leads can layer in
- * their actual contractor footprint via the upload flow. Baseline offshore
- * dial for scenarios starts at 0 until tower leads dial it in.
- *
- * Reconciles to 3,745 (~3-person rounding delta vs CSV 3,748).
- */
-export const ASSESS_SEED_REFERENCE_AT = "2026-04-26T00:00:00.000Z";
+export const SEED_FIXTURE_REFERENCE_AT = "2026-04-26T00:00:00.000Z";
 
-/**
- * Versant's reported total employee headcount per `docs/headcount.csv` (24
- * locations, ~55 sub-business units). Used by the Capability Map scoreboard
- * to render a "gap vs Versant" indicator next to the program-wide FTE total —
- * i.e. how much of the 3,748-person footprint is currently represented in
- * tower-lead-confirmed capability maps.
- *
- * Source-of-truth note: the CSV is employees only (no contractors), so this
- * baseline only compares against onshore + offshore FTE.
- */
-export const VERSANT_REPORTED_FTE = 3748;
-
-/** Per-tower onshore FTE and contractor — modeled from `docs/headcount.csv`. */
 const TOWER_HEADCOUNT: Record<TowerId, { fte: number; contractor: number }> = {
   finance: { fte: 133, contractor: 0 },
   hr: { fte: 129, contractor: 0 },
@@ -62,19 +55,6 @@ const TOWER_HEADCOUNT: Record<TowerId, { fte: number; contractor: number }> = {
   "programming-dev": { fte: 165, contractor: 0 },
 };
 
-/**
- * Per-tower L3-level FTE allocation — keyed by capability-map L3 (Job Family)
- * name. When present, FTE is concentrated in the listed Job Families (then
- * evenly spread across the L4 Activity Group rows within each Job Family).
- * When a tower is omitted here, FTE falls back to an even spread across all
- * L4 rows.
- *
- * Pre-migration this was keyed by L2 (Pillar) names — same string values,
- * since the 5-layer migration renamed Pillar → Job Family (L2 → L3) without
- * splitting any names.
- *
- * Sums for each tower must equal `TOWER_HEADCOUNT[towerId].fte`.
- */
 const TOWER_L3_HEADCOUNT: Partial<Record<TowerId, Record<string, number>>> = {
   finance: {
     "Record to Report": 40,
@@ -151,15 +131,6 @@ const TOWER_L3_HEADCOUNT: Partial<Record<TowerId, Record<string, number>>> = {
   },
 };
 
-/**
- * Per-tower hint of which L3 (Job Family) buckets house the bulk of contractor
- * labor (used to seed starter contractor counts in the right places). Optional
- * — falls back to round-robin across all rows if not provided or no rows match.
- *
- * Currently unused while contractor counts are 0 across the board, but retained
- * so tower-lead uploads of contractor data continue to land in the right Job
- * Family buckets.
- */
 const CONTRACTOR_L3_HINT: Partial<Record<TowerId, string[]>> = {
   hr: ["HR Services"],
   finance: ["Procurement & Vendor Management", "Record to Report"],
@@ -176,16 +147,6 @@ const CONTRACTOR_L3_HINT: Partial<Record<TowerId, string[]>> = {
   "programming-dev": ["Content Development & Greenlight", "Content Acquisition & Licensing"],
 };
 
-/**
- * Walk a capability map definition into per-L4 (Activity Group) workforce
- * rows. Each row gets the canonical L5 Activity names (display-only
- * `l5Activities`) but no headcount yet. Headcount and dials are layered on
- * by `applyHeadcountToRows` / `withL3Defaults`.
- *
- * In the 5-layer model the dummy L2 wrapper is a single Job Grouping per
- * tower (named after the function), so every row in the same map shares the
- * same `l2` value.
- */
 function flattenCapabilityMap(map: CapabilityMapDefinition): L4WorkforceRow[] {
   const rows: L4WorkforceRow[] = [];
   for (const l2 of map.l2) {
@@ -208,7 +169,6 @@ function flattenCapabilityMap(map: CapabilityMapDefinition): L4WorkforceRow[] {
   return rows;
 }
 
-/** Spread `total` evenly across `n` slots, with the first `remainder` slots getting +1. */
 function evenSpread(total: number, n: number): number[] {
   if (n === 0) return [];
   const base = Math.floor(total / n);
@@ -216,18 +176,6 @@ function evenSpread(total: number, n: number): number[] {
   return Array.from({ length: n }, (_, i) => base + (i < rem ? 1 : 0));
 }
 
-/**
- * Distribute FTE across L4 Activity Group rows. When `l3Headcount` is
- * provided (preferred — used to honor the modeled per-Job-Family allocation
- * from `TOWER_L3_HEADCOUNT`; map name retained for back-compat), FTE is
- * concentrated in the named Job Families and then evenly spread across the
- * L4 Activity Group rows within each Job Family. Otherwise FTE falls back to
- * an even spread across every row.
- *
- * Contractor counts use the `contractorL3Hint` to concentrate in the right
- * Job Family buckets. With contractor=0 in the seed, this is a no-op today
- * but kept so tower-lead uploads land contractor headcount correctly.
- */
 function applyHeadcountToRows(
   rows: L4WorkforceRow[],
   fte: number,
@@ -287,23 +235,9 @@ function applyHeadcountToRows(
   return rows;
 }
 
-/**
- * Apply Versant-aware starter offshore% / AI% to every L4 Activity Group
- * row. Rounded to the nearest 5 so seeded sliders sit on tidy positions.
- * Tower leads can adjust each dial individually on the Configure Impact
- * Levers page.
- *
- * Each seeded row also gets the deterministic `rowStarterRationale` text
- * baked onto `offshoreRationale` / `aiImpactRationale`, with
- * `dialsRationaleSource: "starter"` so the Configure Impact Levers chip
- * reads "starter" (not "AI-scored") and `getTowerStaleState.dialsStale`
- * doesn't flag sample-loaded data as needing refresh.
- */
 function withL3Defaults(rows: L4WorkforceRow[], towerId: TowerId): L4WorkforceRow[] {
-  const generatedAt = ASSESS_SEED_REFERENCE_AT;
+  const generatedAt = SEED_FIXTURE_REFERENCE_AT;
   return rows.map((r) => {
-    // Heuristic still keys off the bucket+row name pair — under the 5-layer
-    // model that's (Job Family, Activity Group) = (r.l3, r.l4).
     const d = inferL3Defaults(towerId, r.l3, r.l4);
     const seeded = {
       ...r,
@@ -315,20 +249,13 @@ function withL3Defaults(rows: L4WorkforceRow[], towerId: TowerId): L4WorkforceRo
       ...seeded,
       offshoreRationale: rationale.offshore,
       aiImpactRationale: rationale.ai,
-      dialsRationaleSource: "starter",
+      dialsRationaleSource: "starter" as const,
       dialsRationaleAt: generatedAt,
     };
   });
 }
 
-/**
- * L4 Activity Group sample rows for one tower (used by the seeded program
- * and by sample downloads). No offshore FTE/contractor — the assessment
- * fills that via the offshore lever. Each row carries a starter
- * `offshoreAssessmentPct` / `aiImpactAssessmentPct` plus the canonical
- * `l5Activities` list for display in the capability map.
- */
-export function getTowerSeedRows(towerId: TowerId): L4WorkforceRow[] {
+export function buildTowerFixtureRows(towerId: TowerId): L4WorkforceRow[] {
   const map = getCapabilityMapForTower(towerId);
   if (!map) return [];
   const tw = towers.find((t) => t.id === towerId);
@@ -345,38 +272,28 @@ export function getTowerSeedRows(towerId: TowerId): L4WorkforceRow[] {
   return withL3Defaults(sized, towerId);
 }
 
-/**
- * Full per-tower starter state: rows with L4 Activity Group assessments, plus
- * baseline computed as the cost-weighted roll-up of those assessments (so the
- * baseline matches what the summary shows for the seeded scenario).
- */
-export function getTowerSeedState(towerId: TowerId): TowerAssessState {
-  const rows = getTowerSeedRows(towerId);
+export function buildTowerFixtureState(towerId: TowerId): TowerAssessState {
+  const rates = defaultTowerRates(towerId);
+  const rows = buildTowerFixtureRows(towerId);
   if (rows.length === 0) {
     return {
       l4Rows: rows,
       baseline: { ...defaultTowerBaseline },
+      rates,
       status: "empty",
-      lastUpdated: ASSESS_SEED_REFERENCE_AT,
+      lastUpdated: SEED_FIXTURE_REFERENCE_AT,
     };
   }
-  const w = weightedTowerLevers(
-    rows,
-    defaultTowerBaseline,
-    defaultGlobalAssessAssumptions,
-  );
-  // Seed rows are illustrative — they land towers at "data" (rows present,
-  // not signed off). Only an explicit Mark-complete on the Configure Impact Levers page
-  // should promote a tower to "complete". Otherwise the hub falsely reads
-  // "Reviewed by Tower Lead" before any human review has happened.
+  const w = weightedTowerLevers(rows, defaultTowerBaseline, rates);
   return {
     l4Rows: rows,
     baseline: {
       baselineOffshorePct: Math.round(w.offshorePct),
       baselineAIPct: Math.round(w.aiPct),
     },
+    rates,
     status: "data",
-    lastUpdated: ASSESS_SEED_REFERENCE_AT,
+    lastUpdated: SEED_FIXTURE_REFERENCE_AT,
   };
 }
 
@@ -384,12 +301,11 @@ export function buildSeededAssessProgramV2(): AssessProgramV2 {
   const tmap: Partial<Record<TowerId, TowerAssessState>> = {};
   for (const tw of towers) {
     const id = tw.id as TowerId;
-    tmap[id] = getTowerSeedState(id);
+    tmap[id] = buildTowerFixtureState(id);
   }
   return {
     version: 5,
     towers: tmap,
-    global: { ...defaultGlobalAssessAssumptions },
     leadDeadlines: buildDefaultProgramLeadDeadlines(),
   };
 }

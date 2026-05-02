@@ -25,6 +25,7 @@ import {
   subscribe,
 } from "@/lib/localStore";
 import type { AssessProgramV2, TowerId } from "@/data/assess/types";
+import { defaultTowerRates } from "@/data/assess/types";
 import {
   rowAnnualCost,
   towerOutcomeForState,
@@ -225,9 +226,10 @@ export function AssessmentHubClient() {
             const sc = dialStatusCopy(status);
             const isMine = minePicked && mine.includes(tid);
             const isComplete = t?.status === "complete";
-            const pool = t ? t.l4Rows.reduce((s, r) => s + rowAnnualCost(r, program.global), 0) : 0;
+            const towerRates = t?.rates ?? defaultTowerRates(tid);
+            const pool = t ? t.l4Rows.reduce((s, r) => s + rowAnnualCost(r, towerRates), 0) : 0;
             const weighted = t && t.l4Rows.length
-              ? weightedTowerLevers(t.l4Rows, t.baseline, program.global)
+              ? weightedTowerLevers(t.l4Rows, t.baseline, towerRates)
               : null;
             const outcome = towerOutcomeForState(tid, program);
 

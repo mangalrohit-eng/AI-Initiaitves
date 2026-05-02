@@ -37,9 +37,9 @@ export function resolveCapabilityMapGuidance(
   if (!input.l1L3JourneyStepComplete) {
     return {
       tier: 2,
-      title: "Review this tower’s L1–L4 hierarchy and headcount, then confirm below.",
+      title: "Review this tower’s L1–L4 hierarchy and headcount, then mark Step 1 reviewed below.",
       staleKind: null,
-      actionLabel: "Confirm L1–L4 reviewed",
+      actionLabel: "Mark Step 1 reviewed",
       actionKind: "confirm",
     };
   }
@@ -105,7 +105,7 @@ export function resolveImpactLeversGuidance(
 export function resolveAiInitiativesGuidance(
   input: AiInitiativesGuidanceInput,
 ): ResolvedJourneyGuidance {
-  const { stale, pendingReviewCount, towerName, towerId } = input;
+  const { stale, pendingReviewCount, towerName, towerId, stepFourValidated } = input;
   if (stale.missingL4ForRefresh) {
     return {
       tier: 1,
@@ -129,6 +129,15 @@ export function resolveAiInitiativesGuidance(
       tier: 2,
       title: `Validate or reject each L5 Activity below — ${pendingReviewCount} still pending in the header chip.`,
       staleKind: null,
+    };
+  }
+  if (!stepFourValidated) {
+    return {
+      tier: 2,
+      title: `Mark Step 4 reviewed for ${towerName} when the AI roadmap and agent architectures are workshop-ready.`,
+      staleKind: null,
+      actionHref: "#tower-lead-signoff",
+      actionLabel: "Jump to sign-off",
     };
   }
   return {
@@ -186,7 +195,10 @@ export function hubImpactLeversLine(
   };
 }
 
-export function impactEstimateSummaryLine(hasFootprint: boolean): ResolvedJourneyGuidance {
+export function impactEstimateSummaryLine(
+  hasFootprint: boolean,
+  pendingStep3Count = 0,
+): ResolvedJourneyGuidance {
   if (!hasFootprint) {
     return {
       tier: 0,
@@ -194,10 +206,17 @@ export function impactEstimateSummaryLine(hasFootprint: boolean): ResolvedJourne
       staleKind: null,
     };
   }
+  if (pendingStep3Count > 0) {
+    return {
+      tier: 2,
+      title: `${pendingStep3Count} tower${pendingStep3Count === 1 ? "" : "s"} still awaiting Step 3 validation — scroll to each tower row and mark reviewed once the roll-up matches your workshop read.`,
+      staleKind: null,
+    };
+  }
   return {
     tier: 3,
     title:
-      "Validate the program roll-up against your workshop read — open Assumptions if blended offshore or AI rates need changing.",
+      "Every tower's impact estimate is signed off. Open Assumptions if blended offshore or AI rates need changing before you brief leadership.",
     staleKind: null,
     actionHref: "/assumptions",
     actionLabel: "Open Assumptions",

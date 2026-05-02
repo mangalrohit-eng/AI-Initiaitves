@@ -16,6 +16,7 @@ import {
   deadlineChipCopy,
   dueYmdForStep,
   isLeadStepDone,
+  leadStepCompletedAtIso,
   type LeadProgramStep,
 } from "@/lib/program/leadStepStatus";
 import { cn } from "@/lib/utils";
@@ -50,22 +51,31 @@ function TrackerStepCell({
   const t = program.towers[towerId];
   const due = dueYmdForStep(step, program.leadDeadlines?.[towerId]);
   const done = isLeadStepDone(step, t);
+  const completedAt = leadStepCompletedAtIso(step, t);
   const href = stepHref(towerId, step);
 
   if (done) {
-    const { dueDisplay } = deadlineChipCopy(towerName, step, due, true, now);
+    const { dueDisplay } = deadlineChipCopy(
+      towerName,
+      step,
+      due,
+      true,
+      now,
+      undefined,
+      completedAt,
+    );
     return (
       <Link
         href={href}
         className="group inline-flex flex-col items-start gap-0.5 rounded-md px-1 py-0.5 text-left transition hover:bg-accent-green/10"
-        aria-label={`${towerName}, ${STEP_HEADERS.find((s) => s.step === step)?.hint ?? `Step ${step}`}, complete. Open workspace.`}
+        aria-label={`${towerName}, ${STEP_HEADERS.find((s) => s.step === step)?.hint ?? `Step ${step}`}, complete${dueDisplay ? `, validated ${dueDisplay}` : ""}. Open workspace.`}
       >
         <span className="inline-flex items-center gap-1 text-xs font-semibold text-accent-green">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
           Complete
         </span>
         {dueDisplay ? (
-          <span className="font-mono text-[10px] text-forge-hint">Due {dueDisplay}</span>
+          <span className="font-mono text-[10px] text-forge-hint">Validated {dueDisplay}</span>
         ) : null}
       </Link>
     );

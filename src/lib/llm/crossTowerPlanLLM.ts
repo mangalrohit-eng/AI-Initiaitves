@@ -31,6 +31,7 @@ import {
   type LLMRoadmapPhase,
   type LLMRoadmapPhases,
 } from "@/lib/llm/prompts/crossTowerAiPlan.v1";
+import { resolveOpenAiBaseUrl } from "@/lib/llm/openaiBase";
 import type { Tier } from "@/lib/priority";
 
 const DEFAULT_MODEL = "gpt-5.5";
@@ -126,15 +127,6 @@ function resolveMaxTokens(override?: number): number {
     if (Number.isFinite(n) && n > 0) return n;
   }
   return DEFAULT_MAX_TOKENS;
-}
-
-function resolveBaseUrl(): string {
-  const raw = process.env.OPENAI_BASE_URL?.trim();
-  if (raw && raw.length > 0) {
-    // Trim trailing slashes for predictable concatenation.
-    return raw.replace(/\/+$/, "");
-  }
-  return "https://api.openai.com";
 }
 
 /**
@@ -251,7 +243,7 @@ export async function generateCrossTowerPlan(
           verbosity: "medium",
         },
       };
-      res = await fetch(`${resolveBaseUrl()}/v1/responses`, {
+      res = await fetch(`${resolveOpenAiBaseUrl()}/v1/responses`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -261,7 +253,7 @@ export async function generateCrossTowerPlan(
         signal: controller.signal,
       });
     } else {
-      res = await fetch(`${resolveBaseUrl()}/v1/chat/completions`, {
+      res = await fetch(`${resolveOpenAiBaseUrl()}/v1/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

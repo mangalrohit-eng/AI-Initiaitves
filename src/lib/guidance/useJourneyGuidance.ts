@@ -95,11 +95,14 @@ export function useGuidanceAiInitiatives(tower: Tower): ResolvedJourneyGuidance 
   return React.useMemo(() => {
     const tid = tower.id as TowerId;
     const stale = getTowerStaleState(program.towers[tid]);
+    const stepFourValidated =
+      program.towers[tid]?.aiInitiativesValidatedAt != null;
     return resolveAiInitiativesGuidance({
       stale,
       pendingReviewCount: counts.pending,
       towerName: tower.name,
       towerId: tid,
+      stepFourValidated,
     });
   }, [program, tower, counts.pending]);
 }
@@ -178,10 +181,17 @@ export function useGuidanceImpactEstimateSummary(): ResolvedJourneyGuidance {
     return subscribe("assessProgram", () => setProgram(getAssessProgram()));
   }, []);
   return React.useMemo(() => {
-    const hasFootprint = towers.some(
-      (t) => (program.towers[t.id as TowerId]?.l4Rows.length ?? 0) > 0,
-    );
-    return impactEstimateSummaryLine(hasFootprint);
+    let hasFootprint = false;
+    let pendingStep3Count = 0;
+    for (const t of towers) {
+      const tid = t.id as TowerId;
+      const ts = program.towers[tid];
+      if (ts && ts.l4Rows.length > 0) {
+        hasFootprint = true;
+        if (ts.impactEstimateValidatedAt == null) pendingStep3Count += 1;
+      }
+    }
+    return impactEstimateSummaryLine(hasFootprint, pendingStep3Count);
   }, [program]);
 }
 

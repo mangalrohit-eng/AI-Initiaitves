@@ -920,9 +920,54 @@ function migrateBootstrapCurationHash(program: AssessProgramV2): AssessProgramV2
   return touched ? { ...program, towers } : program;
 }
 
+/**
+ * Read-time migration: older workshops pre-date the Step-1 capability-map
+ * validation timestamp. They marked the tower `status: "complete"` on Step 2
+ * without ever stamping `l1L5TreeValidatedAt` because the field didn't
+ * exist yet. `isCapabilityMapJourneyStepDone` used to fall through to
+ * `status === "complete"` to cover that case, but that coupling broke
+ * Step 1 invalidation: invalidating Step 1 on a tower with Step 2 already
+ * complete had no visible effect.
+ *
+ * We now treat Step 1 as strictly timestamp-driven. This migration
+ * backfills the timestamp once at read time from the best available
+ * predecessor stamp so the legacy green check survives the decoupling:
+ *
+ *   `capabilityMapConfirmedAt` (set on tower-lead upload) →
+ *   `headcountConfirmedAt`     (set inside `doMarkComplete`) →
+ *   `lastUpdated`              (general-purpose fallback).
+ *
+ * Only applied when `status === "complete"` and no Step-1 timestamp is
+ * already present — idempotent and safe to run on every boot.
+ */
+function migrateBackfillStep1Validated(program: AssessProgramV2): AssessProgramV2 {
+  let touched = false;
+  const towers: AssessProgramV2["towers"] = {};
+  for (const [k, t] of Object.entries(program.towers)) {
+    if (!t) continue;
+    if (
+      t.status === "complete" &&
+      !t.l1L5TreeValidatedAt &&
+      !t.l1L3TreeValidatedAt
+    ) {
+      const backfill =
+        t.capabilityMapConfirmedAt ?? t.headcountConfirmedAt ?? t.lastUpdated;
+      if (backfill) {
+        towers[k as TowerId] = { ...t, l1L5TreeValidatedAt: backfill };
+        touched = true;
+        continue;
+      }
+    }
+    towers[k as TowerId] = t;
+  }
+  return touched ? { ...program, towers } : program;
+}
+
 function finalizeAssessProgramFromRaw(raw: unknown): AssessProgramV2 {
   return migrateBootstrapCurationHash(
-    migrateBuggySeedComplete(migrateAssessProgram(raw)),
+    migrateBackfillStep1Validated(
+      migrateBuggySeedComplete(migrateAssessProgram(raw)),
+    ),
   );
 }
 

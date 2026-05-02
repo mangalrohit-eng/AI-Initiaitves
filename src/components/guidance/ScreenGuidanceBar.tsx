@@ -24,18 +24,35 @@ export function ScreenGuidanceBar({
   guidance,
   className,
   onConfirm,
-  onUnlock,
-  mapStepLocked,
+  onReopenSignoff,
+  reopenLabel,
+  signoffActive,
 }: {
   guidance: ResolvedJourneyGuidance;
   className?: string;
   onConfirm?: () => void;
-  onUnlock?: () => void;
   /**
-   * When the tower lead has marked L1–L4 as reviewed (lock). Shows an
-   * secondary Unlock control on the Capability Map.
+   * Invalidate / reopen the tower-lead sign-off for the current step. Used
+   * by Step 1 (Capability Map) and Step 2 (Impact Levers) to surface a
+   * secondary action inline with the page's primary guidance — so leads
+   * don't have to hunt for the sign-off card.
    */
-  mapStepLocked?: boolean;
+  onReopenSignoff?: () => void;
+  /**
+   * Copy for the secondary reopen/invalidate button. Defaults to
+   * "Reopen tower-lead review" — reopening Step 1 also unlocks the
+   * map/headcount for edit (same timestamp drives both), so the label
+   * communicates the dual effect. Callers can override when the action
+   * is purely about invalidating sign-off.
+   */
+  reopenLabel?: string;
+  /**
+   * True when the tower lead has signed off the current step. Drives the
+   * secondary reopen button. Named `signoffActive` (not `locked`) to make
+   * the meaning step-agnostic — it works for any step that toggles a
+   * validate/invalidate timestamp.
+   */
+  signoffActive?: boolean;
 }) {
   const pathname = usePathname();
   const {
@@ -70,7 +87,7 @@ export function ScreenGuidanceBar({
   const isSecondaryLink = secondaryHref && secondaryActionLabel;
 
   const hasActions =
-    (mapStepLocked && onUnlock) ||
+    (signoffActive && onReopenSignoff) ||
     (isConfirm && actionLabel && onConfirm) ||
     isLinkPrimary ||
     isSecondaryLink;
@@ -113,13 +130,13 @@ export function ScreenGuidanceBar({
         </div>
         {hasActions ? (
           <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-nowrap sm:items-center sm:justify-end">
-            {mapStepLocked && onUnlock ? (
+            {signoffActive && onReopenSignoff ? (
               <button
                 type="button"
-                onClick={onUnlock}
+                onClick={onReopenSignoff}
                 className="inline-flex w-full min-w-0 items-center justify-center rounded-lg border border-forge-border bg-forge-well/50 px-3.5 py-2 text-sm font-medium text-forge-body transition hover:border-accent-purple/35 hover:text-forge-ink sm:w-auto"
               >
-                Unlock to edit map
+                {reopenLabel ?? "Reopen tower-lead review"}
               </button>
             ) : null}
             {isConfirm && actionLabel && onConfirm ? (

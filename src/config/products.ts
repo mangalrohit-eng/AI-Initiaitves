@@ -217,6 +217,15 @@ const STATIC_LINKS: StaticNavLink[] = [
     audience: "both",
     showLabel: true,
   },
+  {
+    id: "ask",
+    name: "Ask Forge",
+    path: "/ask",
+    order: 18,
+    iconId: "messages-square",
+    audience: "both",
+    showLabel: true,
+  },
 ];
 
 export function getStaticNavLinks(audience: PortalAudience = getPortalAudience()): StaticNavLink[] {

@@ -7,6 +7,7 @@ import {
   deadlineChipCopy,
   dueYmdForStep,
   isLeadStepDone,
+  leadStepCompletedAtIso,
   type LeadProgramStep,
 } from "@/lib/program/leadStepStatus";
 
@@ -32,7 +33,16 @@ export function LeadDeadlineChip({ towerName, towerId, step, program, tickMs = 6
   const t = program.towers[towerId];
   const due = dueYmdForStep(step, program.leadDeadlines?.[towerId]);
   const done = isLeadStepDone(step, t);
-  const { urgency, label, dueDisplay, ariaLabel } = deadlineChipCopy(towerName, step, due, done, now);
+  const completedAt = leadStepCompletedAtIso(step, t);
+  const { urgency, label, dueDisplay, ariaLabel } = deadlineChipCopy(
+    towerName,
+    step,
+    due,
+    done,
+    now,
+    undefined,
+    completedAt,
+  );
 
   if (urgency === "none") return null;
 

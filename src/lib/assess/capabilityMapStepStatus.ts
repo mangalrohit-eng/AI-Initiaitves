@@ -22,9 +22,12 @@ export const isL1L3TreeLocked = isL1L5TreeLocked;
 
 /**
  * Green check for "Capability map" in [`TowerJourneyStepper`]: user confirmed
- * the L1–L5 review in the bar, or legacy program where the tower is already
- * `status === "complete"` (tower-lead sign-off on Configure Impact Levers)
- * before the journey field existed.
+ * the L1–L5 review in the bar. Decoupled from `status === "complete"` (the
+ * Step 2 sign-off) so invalidating Step 1 actually reopens Step 1 regardless
+ * of Step 2 state. Legacy workshops that only have Step 2 complete are
+ * backfilled at read time by `parseTowerAssessState` in `localStore.ts`,
+ * which stamps `l1L5TreeValidatedAt` from `capabilityMapConfirmedAt` /
+ * `lastUpdated` so their green check survives the migration.
  */
 export function isCapabilityMapJourneyStepDone(
   t: TowerAssessState | undefined,
@@ -32,6 +35,5 @@ export function isCapabilityMapJourneyStepDone(
   if (!t) return false;
   if (t.l1L5TreeValidatedAt != null) return true;
   if (t.l1L3TreeValidatedAt != null) return true;
-  if (t.status === "complete") return true;
   return false;
 }

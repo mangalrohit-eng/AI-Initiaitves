@@ -379,6 +379,38 @@ function ImpactSummaryTowerRow({
     }
   };
 
+  const onReopenStep3 = async () => {
+    setBusy(true);
+    try {
+      setTowerAssess(towerId, { impactEstimateValidatedAt: undefined });
+      if (sync?.canSync) await sync.flushSave();
+      toast.info({
+        title: `${towerName} · Step 3 reopened for review`,
+        description:
+          "Impact estimate is back to awaiting tower lead sign-off. Re-validate once the roll-up matches your workshop read.",
+        action: { label: "Undo", onClick: () => void onMarkStep3() },
+        durationMs: 7000,
+      });
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const fmtReviewed = (iso?: string) => {
+    if (!iso) return null;
+    try {
+      return new Date(iso).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } catch {
+      return null;
+    }
+  };
+
   return (
     <li className="rounded-2xl border border-forge-border bg-forge-surface p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -485,7 +517,25 @@ function ImpactSummaryTowerRow({
             </Link>
           </div>
           {step3Done ? (
-            <span className="font-mono text-[11px] text-accent-green">Step 3 reviewed</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-green/40 bg-accent-green/10 px-2 py-0.5 text-[11px] font-medium text-accent-green">
+                Reviewed
+                {fmtReviewed(st.impactEstimateValidatedAt) ? (
+                  <span className="font-mono text-[10px] text-accent-green/80">
+                    · {fmtReviewed(st.impactEstimateValidatedAt)}
+                  </span>
+                ) : null}
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void onReopenStep3()}
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-forge-border bg-forge-surface px-3 py-1.5 text-xs font-medium text-forge-body transition hover:border-forge-border-strong disabled:opacity-50"
+                title={`Reopen ${towerName} Step 3 for review`}
+              >
+                {busy ? "Saving…" : "Reopen for review"}
+              </button>
+            </div>
           ) : (
             <button
               type="button"

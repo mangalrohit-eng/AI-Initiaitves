@@ -8,6 +8,7 @@ import {
   Globe2,
   Grid3X3,
   Map,
+  MessagesSquare,
   Network,
   SlidersHorizontal,
   Sparkles,
@@ -31,6 +32,7 @@ const staticIconMap: Record<string, LucideIcon> = {
   "book-open": BookOpen,
   bell: Bell,
   calculator: Calculator,
+  "messages-square": MessagesSquare,
 };
 
 export function getProductIcon(iconId: string): LucideIcon {

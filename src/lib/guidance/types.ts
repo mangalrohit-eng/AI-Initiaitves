@@ -47,6 +47,8 @@ export type AiInitiativesGuidanceInput = {
   pendingReviewCount: number;
   towerName: string;
   towerId: import("@/data/assess/types").TowerId;
+  /** Whether the tower lead has signed Step 4 off (drives the trailing nudge). */
+  stepFourValidated: boolean;
 };
 
 export type { TowerStaleState };

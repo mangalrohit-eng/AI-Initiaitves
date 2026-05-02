@@ -4,10 +4,13 @@ import * as React from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  Check,
   CheckCircle2,
   Download,
   FileSpreadsheet,
   Info,
+  Lock,
+  Unlock,
   Upload,
   Wand2,
 } from "lucide-react";
@@ -305,8 +308,8 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
           guidance={journeyGuidance}
           className="mt-3"
           onConfirm={onConfirmGuidance}
-          onUnlock={mapStepLocked ? () => void clearL1L3TreeValidation() : undefined}
-          mapStepLocked={mapStepLocked}
+          onReopenSignoff={mapStepLocked ? () => void clearL1L3TreeValidation() : undefined}
+          signoffActive={mapStepLocked}
         />
 
         <div className="mt-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -404,6 +407,19 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
         ) : null}
 
         {rows.length > 0 ? (
+          <div className="mt-10">
+            <Step1LeadSignoff
+              towerName={towerName}
+              isComplete={mapStepLocked}
+              hasRows={rows.length > 0}
+              reviewedAtIso={tState.l1L5TreeValidatedAt ?? tState.l1L3TreeValidatedAt}
+              onMarkReviewed={() => void markL1L3TreeValidated()}
+              onReopen={() => void clearL1L3TreeValidation()}
+            />
+          </div>
+        ) : null}
+
+        {rows.length > 0 ? (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-accent-purple/30 bg-accent-purple/5 p-5">
             <div>
               <p className="font-display text-base font-semibold text-forge-ink">
@@ -485,11 +501,11 @@ function MapSourceBanner({
         {l1L5TreeValidatedAt ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent-teal/35 bg-accent-teal/8 px-3 py-1.5">
             <span className="text-xs font-medium text-accent-teal">
-              L1–L5 review confirmed — map and headcount are locked for editing.
+              Step 1 reviewed — map and headcount are locked for editing.
             </span>
             <span className="text-[11px] text-forge-subtle">
-              Confirmed {formatRelative(l1L5TreeValidatedAt)} · use Unlock to edit map in the action
-              bar above.
+              Validated {formatRelative(l1L5TreeValidatedAt)} · use Reopen tower-lead review in the
+              action bar above to edit.
             </span>
           </div>
         ) : null}
@@ -504,16 +520,17 @@ function MapSourceBanner({
           Workshop data loaded · {rowsCount} Activity Group{rowsCount === 1 ? "" : "s"}
         </span>
         <span className="text-[11px] text-forge-subtle">
-          Confirm or upload a new map to mark as tower-lead authored.
+          Mark Step 1 reviewed or upload a new map to stamp as tower-lead authored.
         </span>
       </div>
       {l1L5TreeValidatedAt ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent-teal/35 bg-accent-teal/8 px-3 py-1.5">
           <span className="text-xs font-medium text-accent-teal">
-            L1–L5 review confirmed — map and headcount are locked for editing.
+            Step 1 reviewed — map and headcount are locked for editing.
           </span>
           <span className="text-[11px] text-forge-subtle">
-            Confirmed {formatRelative(l1L5TreeValidatedAt)} · use Unlock in the action bar above.
+            Validated {formatRelative(l1L5TreeValidatedAt)} · use Reopen tower-lead review in the
+            action bar above to edit.
           </span>
         </div>
       ) : null}
@@ -780,6 +797,117 @@ function formatRelative(iso: string): string {
   const d = Math.round(hr / 24);
   if (d < 30) return `${d}d ago`;
   return new Date(t).toLocaleDateString();
+}
+
+/**
+ * Step-1 tower-lead sign-off card. Mirrors Step 2's `TowerLeadSignoff`
+ * shape so leads see the same validate / invalidate pattern on every step:
+ *
+ *   - Pending → prominent `Mark reviewed` CTA, amber pill.
+ *   - Done    → `Reviewed · {timestamp}` green pill + `Reopen for review`
+ *               secondary button.
+ *
+ * Anchored with `id="tower-lead-signoff"` so the ScreenGuidanceBar and
+ * MapSourceBanner can deep-link here.
+ */
+function Step1LeadSignoff({
+  towerName,
+  isComplete,
+  hasRows,
+  reviewedAtIso,
+  onMarkReviewed,
+  onReopen,
+}: {
+  towerName: string;
+  isComplete: boolean;
+  hasRows: boolean;
+  reviewedAtIso?: string;
+  onMarkReviewed: () => void;
+  onReopen: () => void;
+}) {
+  const fmt = (iso?: string) => {
+    if (!iso) return null;
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } catch {
+      return null;
+    }
+  };
+  const ts = fmt(reviewedAtIso);
+
+  return (
+    <section
+      id="tower-lead-signoff"
+      aria-label="Tower lead sign-off — Step 1"
+      className={
+        "rounded-2xl border p-5 transition " +
+        (isComplete
+          ? "border-accent-green/30 bg-accent-green/5"
+          : "border-accent-purple/30 bg-accent-purple/5")
+      }
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-display text-base font-semibold text-forge-ink">
+              Tower lead sign-off — Step 1
+            </h2>
+            {isComplete ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-green/40 bg-accent-green/10 px-2 py-0.5 text-[11px] font-medium text-accent-green">
+                <Check className="h-3 w-3" />
+                Reviewed
+                {ts ? (
+                  <span className="font-mono text-[10px] text-accent-green/80">· {ts}</span>
+                ) : null}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-amber/40 bg-accent-amber/10 px-2 py-0.5 text-[11px] font-medium text-accent-amber">
+                Pending tower lead review
+              </span>
+            )}
+          </div>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-forge-body">
+            {isComplete
+              ? `${towerName}'s L1–L4 capability map and headcount are locked. Reopen only if the map or FTE counts need to change — downstream dials and initiatives re-key off this baseline.`
+              : `Once the L1–L4 hierarchy and headcount for ${towerName} match your workshop read, mark Step 1 reviewed. The map and headcount lock; downstream steps (Impact Levers, Impact Estimate, AI Initiatives) anchor on the baseline.`}
+          </p>
+        </div>
+        <div className="flex flex-shrink-0 items-center">
+          {!isComplete ? (
+            <button
+              type="button"
+              onClick={onMarkReviewed}
+              disabled={!hasRows}
+              title={
+                !hasRows
+                  ? "Upload the capability map & headcount first."
+                  : "Sign off Step 1 as reviewed."
+              }
+              className="inline-flex items-center gap-2 rounded-lg bg-accent-purple px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-purple-dark disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Lock className="h-4 w-4" />
+              Mark reviewed
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onReopen}
+              className="inline-flex items-center gap-2 rounded-lg border border-forge-border bg-forge-surface px-4 py-2 text-sm font-medium text-forge-body transition hover:border-forge-border-strong"
+            >
+              <Unlock className="h-4 w-4" />
+              Reopen for review
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function HeadcountTable({

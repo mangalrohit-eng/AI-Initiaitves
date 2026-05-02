@@ -311,7 +311,14 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
 
         {towerVm ? <TowerDataExports tower={towerVm} className="mt-3" /> : null}
 
-        <ScreenGuidanceBar guidance={impactGuidance} className="mt-3" />
+        <ScreenGuidanceBar
+          guidance={impactGuidance}
+          className="mt-3"
+          onReopenSignoff={
+            isComplete ? () => setConfirmUnmarkOpen(true) : undefined
+          }
+          signoffActive={isComplete}
+        />
 
         <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
           <div>

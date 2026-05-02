@@ -3,27 +3,32 @@
 import * as React from "react";
 
 /**
- * Client-view runtime toggle.
+ * Client-view runtime toggle — Protected by default.
  *
- * Lets an Accenture tower lead flip between "internal" (default) and "client"
- * presentation in-session. When client mode is on, every modeled-dollar
- * surface in the assessment pipeline (pool $, modeled saving, blended rates,
- * AI $ chips, capability-map spend overrides, lever scoreboards, the
- * Recharts modeled-by-tower bar chart, CSV export entry points, etc.) is
- * either replaced with a neutral placeholder or hidden outright — so the
- * lead can hand the laptop to the client without exposing in-progress
- * financial figures.
+ * Lets an Accenture tower lead flip between "Protected" (the default) and
+ * "Normal" presentation in-session. When Protected is on, every modeled-
+ * dollar surface in the assessment pipeline (pool $, modeled saving,
+ * blended rates, AI $ chips, capability-map spend overrides, lever
+ * scoreboards, the Recharts modeled-by-tower bar chart, CSV export entry
+ * points, etc.) is either replaced with a neutral placeholder or hidden
+ * outright — so the lead can hand the laptop to the client at any moment
+ * without exposing in-progress financial figures.
  *
  * The static Versant-published narrative figures (revenue, EBITDA, debt,
  * dividend, etc.) baked into `src/data/*.ts` copy are intentionally NOT
  * redacted — they come from the public 10-K context and aren't Accenture's
  * working model.
  *
- * Persistence: `sessionStorage`. The toggle clears on a new browser session
- * so a forgotten "client view" can't leak into the next day's work.
+ * Default model: Protected ON until the lead explicitly opts out for the
+ * session. The opt-out is stored as `forge_client_mode = "false"` in
+ * `sessionStorage`; a missing key (or the legacy `"true"` value) means
+ * Protected. Each new browser session resets back to Protected so a
+ * forgotten "Normal view" can't leak into the next day's work.
  *
- * Cross-tab: a `storage` listener keeps every tab in sync the moment the
- * lead toggles in any one of them.
+ * Cross-tab note: `sessionStorage` is per-tab/window and does not raise
+ * `storage` events across tabs. The listener below covers the same-tab
+ * storage-clear edge case only; new tabs always start fresh in Protected,
+ * which is the safe behaviour for a client-handoff scenario.
  */
 
 const STORAGE_KEY = "forge_client_mode";
@@ -40,26 +45,26 @@ type ClientModeContextValue = {
 const ClientModeContext = React.createContext<ClientModeContextValue | null>(null);
 
 function readStored(): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") return true;
   try {
-    return window.sessionStorage.getItem(STORAGE_KEY) === "true";
+    return window.sessionStorage.getItem(STORAGE_KEY) !== "false";
   } catch {
-    return false;
+    return true;
   }
 }
 
 function writeStored(next: boolean) {
   if (typeof window === "undefined") return;
   try {
-    if (next) window.sessionStorage.setItem(STORAGE_KEY, "true");
-    else window.sessionStorage.removeItem(STORAGE_KEY);
+    if (next) window.sessionStorage.removeItem(STORAGE_KEY);
+    else window.sessionStorage.setItem(STORAGE_KEY, "false");
   } catch {
     // ignore — safari private mode etc.
   }
 }
 
 export function ClientModeProvider({ children }: { children: React.ReactNode }) {
-  const [clientMode, setClientModeState] = React.useState(false);
+  const [clientMode, setClientModeState] = React.useState(true);
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
@@ -99,7 +104,7 @@ export function useClientMode(): ClientModeContextValue {
   const ctx = React.useContext(ClientModeContext);
   if (!ctx) {
     return {
-      clientMode: false,
+      clientMode: true,
       mounted: false,
       setClientMode: () => {},
       toggleClientMode: () => {},
@@ -110,12 +115,14 @@ export function useClientMode(): ClientModeContextValue {
 
 /**
  * Sugar for the most common case — components that only need the boolean.
- * Returns `false` until the provider has mounted to avoid SSR / hydration
- * mismatch (matches the pattern used in NavActions).
+ * Returns `true` (Protected) until the provider has mounted, so a fresh
+ * visit never paints modeled-$ before the storage read resolves. The
+ * provider's initial state is also `true`, so SSR HTML and the first
+ * client render agree and there is no hydration mismatch.
  */
 export function useRedactDollars(): boolean {
   const { clientMode, mounted } = useClientMode();
-  return mounted && clientMode;
+  return mounted ? clientMode : true;
 }
 
 /**

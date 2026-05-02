@@ -31,7 +31,7 @@ export function ContextRail({ digest, clientMode, briefCount }: Props) {
       />
       <Pill
         icon={clientMode ? <EyeOff className="h-3 w-3" aria-hidden /> : <Eye className="h-3 w-3" aria-hidden />}
-        label={clientMode ? "ClientMode ON" : "ClientMode OFF"}
+        label={clientMode ? "Protected mode" : "Normal mode"}
         sublabel={clientMode ? "$ figures hidden" : "$ figures visible"}
         tone={clientMode ? "warn" : "default"}
       />

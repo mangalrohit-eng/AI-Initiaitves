@@ -5,16 +5,19 @@ import { Shield, ShieldCheck } from "lucide-react";
 import { useClientMode } from "@/lib/clientMode";
 
 /**
- * Discreet top-nav button that toggles between Normal and Protected
- * presentation. Icon-only by design — the active state is communicated
- * through colour and a subtle indicator dot, not a visible label, so a
- * client looking at the screen has no obvious cue that an alternate view
- * exists. The accessible label is delivered through the `title` and
- * `aria-pressed` attributes.
+ * Discreet top-nav button that toggles between Protected (default) and
+ * Normal presentation. Icon-only by design — the active state is
+ * communicated through colour and a subtle indicator dot, not a visible
+ * label, so a client looking at the screen has no obvious cue that an
+ * alternate view exists. The accessible label is delivered through the
+ * `title` and `aria-pressed` attributes.
+ *
+ * Pre-mount the button paints the Protected state so a fresh visit never
+ * flashes the Normal icon before sessionStorage is read.
  */
 export function ClientModeToggle() {
   const { clientMode, mounted, toggleClientMode } = useClientMode();
-  const isOn = mounted && clientMode;
+  const isOn = mounted ? clientMode : true;
 
   return (
     <button

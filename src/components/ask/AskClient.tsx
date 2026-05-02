@@ -259,58 +259,77 @@ export function AskClient() {
   const showHero = hydrated && messages.length === 0;
 
   return (
-    <div className="space-y-5">
-      {showHero ? <AskHero /> : null}
+    <>
+      {/*
+        Bottom padding clears the fixed input bar (~96px tall + 16px gap).
+        Without this, the last message scrolls behind the input.
+      */}
+      <div className="space-y-5 pb-44">
+        {showHero ? <AskHero /> : null}
 
-      <ContextRail
-        digest={programDigest}
-        clientMode={redact}
-        briefCount={staticCorpus?.briefs.length ?? 0}
-      />
-
-      {showHero ? (
-        <StarterChips
-          hasWorkshopData={programDigest.hasWorkshopData}
-          onSelect={handleStarter}
+        <ContextRail
+          digest={programDigest}
+          clientMode={redact}
+          briefCount={staticCorpus?.briefs.length ?? 0}
         />
-      ) : null}
 
-      <ConversationView
-        messages={messages}
-        pending={pending}
-        pendingLabel={pendingLabel}
-        onRetry={handleRetry}
-        onSelectCitation={(c) => setActiveCitation(c)}
-        onFollowUp={handleFollowUp}
+        {showHero ? (
+          <StarterChips
+            hasWorkshopData={programDigest.hasWorkshopData}
+            onSelect={handleStarter}
+          />
+        ) : null}
+
+        <ConversationView
+          messages={messages}
+          pending={pending}
+          pendingLabel={pendingLabel}
+          onRetry={handleRetry}
+          onSelectCitation={(c) => setActiveCitation(c)}
+          onFollowUp={handleFollowUp}
+        />
+
+        {!showHero ? (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={pending}
+              className="inline-flex items-center gap-1.5 rounded-md border border-forge-border bg-forge-canvas px-2.5 py-1 text-[11px] font-medium text-forge-subtle transition hover:border-accent-purple/40 hover:text-accent-purple-dark disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Trash2 className="h-3 w-3" aria-hidden />
+              Clear conversation
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {/*
+        Fade-to-page-bg gradient — sits behind the input so any conversation
+        content scrolling toward the input dissolves into the page background
+        instead of getting hard-cropped by an opaque box.
+      */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-20 h-32 bg-gradient-to-t from-forge-page via-forge-page/85 to-transparent"
       />
 
-      {!showHero ? (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleClear}
-            disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-md border border-forge-border bg-forge-canvas px-2.5 py-1 text-[11px] font-medium text-forge-subtle transition hover:border-accent-purple/40 hover:text-accent-purple-dark disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Trash2 className="h-3 w-3" aria-hidden />
-            Clear conversation
-          </button>
-        </div>
-      ) : null}
-
+      {/* Fixed input bar — always at viewport bottom, aligned with content max-width. */}
       <motion.div
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, delay: 0.05 }}
-        className="sticky bottom-4 z-10"
+        className="fixed inset-x-0 bottom-4 z-30 px-4 sm:px-6 lg:px-8"
       >
-        <MessageInput
-          onSend={handleSend}
-          onStop={handleStop}
-          disabled={!hydrated}
-          pending={pending}
-          prefill={prefill}
-        />
+        <div className="mx-auto max-w-6xl">
+          <MessageInput
+            onSend={handleSend}
+            onStop={handleStop}
+            disabled={!hydrated}
+            pending={pending}
+            prefill={prefill}
+          />
+        </div>
       </motion.div>
 
       <ProvenanceDrawer
@@ -320,7 +339,7 @@ export function AskClient() {
         staticBriefs={staticCorpus?.briefs ?? []}
         onClose={() => setActiveCitation(null)}
       />
-    </div>
+    </>
   );
 }
 

@@ -24,17 +24,17 @@ export function ConversationView({
   onSelectCitation,
   onFollowUp,
 }: Props) {
-  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const endRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    // Smooth-scroll to bottom on new turn / pending state.
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages, pending]);
+    // Window-level smooth scroll via a sentinel. `scrollMarginBottom` (set
+    // inline below) keeps the latest message above the fixed input bar so
+    // new answers always land in view, not behind the chrome.
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, pending]);
 
   return (
-    <div ref={scrollRef} className="space-y-5">
+    <div className="space-y-5">
       {messages.map((m) => (
         <div key={m.id}>
           {m.role === "user" ? (
@@ -61,6 +61,17 @@ export function ConversationView({
           </motion.div>
         ) : null}
       </AnimatePresence>
+      {/*
+        Sentinel for window scrollIntoView — height 1px so it doesn't add
+        visible space; scrollMarginBottom is sized to clear the fixed input
+        (~96px input + 16px gap + breathing room).
+      */}
+      <div
+        ref={endRef}
+        aria-hidden
+        className="pointer-events-none"
+        style={{ height: 1, scrollMarginBottom: "11rem" }}
+      />
     </div>
   );
 }

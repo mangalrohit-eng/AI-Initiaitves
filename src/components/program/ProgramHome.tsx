@@ -9,7 +9,6 @@ import {
   Cpu,
   Globe2,
   Map as MapIcon,
-  MessagesSquare,
   Sliders,
   Sparkles,
   Table2,
@@ -169,53 +168,8 @@ export function ProgramHome() {
             Design initiatives — steps 4–5
           </span>
         </div>
-
-        {/* ========== ASK FORGE CTA — horizontal capability ========== */}
-        <AskForgeCta />
       </div>
     </PageShell>
-  );
-}
-
-/* ============== ASK FORGE CTA ============== */
-
-function AskForgeCta() {
-  return (
-    <Link
-      href="/ask"
-      className="group mt-6 flex flex-col gap-3 overflow-hidden rounded-2xl border border-accent-purple/30 bg-forge-surface px-5 py-4 transition hover:border-accent-purple/60 hover:shadow-[0_0_0_1px_rgba(161,0,255,0.22)] sm:flex-row sm:items-center sm:gap-5"
-    >
-      <span
-        aria-hidden
-        className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border border-accent-purple/30 bg-accent-purple/10 text-accent-purple-dark"
-      >
-        <MessagesSquare className="h-5 w-5" />
-      </span>
-      <div className="flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-accent-purple-dark">
-            <span aria-hidden className="font-mono">
-              &gt;
-            </span>{" "}
-            Ask Forge
-          </span>
-          <span className="rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-accent-purple-dark">
-            New · LLM
-          </span>
-        </div>
-        <h3 className="mt-1 font-display text-base font-semibold text-forge-ink">
-          Ask anything across the Forge corpus and your live workshop data
-        </h3>
-        <p className="mt-1 text-xs leading-relaxed text-forge-subtle">
-          Headcount, offshoring, modeled savings, P1 initiatives, brand mentions.
-          Answers come back as charts, snapshots, and sourced summaries — not flat text.
-        </p>
-      </div>
-      <span className="inline-flex flex-shrink-0 items-center gap-1 self-start text-xs font-medium text-accent-purple-dark group-hover:text-accent-purple sm:self-center">
-        Open
-        <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" aria-hidden />
-      </span>
-    </Link>
   );
 }
 

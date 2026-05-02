@@ -7,6 +7,7 @@ import { impactTierScore, operatingModelTotals } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { ChangedSinceBadge } from "@/components/collab/ChangedSinceBadge";
+import { TowerFreshnessChip } from "@/components/towers/TowerFreshnessChip";
 
 function Sparkline({ tower }: { tower: Tower }) {
   const values = tower.processes.map((p) => impactTierScore(p.impactTier));
@@ -51,8 +52,9 @@ export function TowerCard({
         <div className="rounded-2xl border border-forge-border bg-forge-surface p-5 shadow-card transition hover:border-accent-purple hover:shadow-md">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <div className="font-display text-lg font-semibold text-forge-ink">{tower.name}</div>
+                <TowerFreshnessChip towerId={tower.id} />
                 <ChangedSinceBadge
                   kind="tower"
                   id={tower.id}

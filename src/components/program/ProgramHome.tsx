@@ -15,6 +15,8 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { ProgramJourneyGuidance } from "@/components/program/ProgramJourneyGuidance";
+import { PresencePill } from "@/components/program/PresencePill";
+import { RecentUpdatesPill } from "@/components/program/RecentUpdatesPill";
 import { PageShell } from "@/components/PageShell";
 import { useRedactDollars } from "@/lib/clientMode";
 
@@ -111,6 +113,10 @@ export function ProgramHome() {
             <Sparkles className="h-3 w-3" aria-hidden />
             Forge Program · Accenture × Versant
           </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <PresencePill />
+            <RecentUpdatesPill />
+          </div>
         </header>
 
         <ProgramJourneyGuidance />

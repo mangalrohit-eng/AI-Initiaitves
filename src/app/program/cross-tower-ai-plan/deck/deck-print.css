@@ -1,0 +1,48 @@
+/**
+ * Print rules for Cross-Tower deck only (import from deck page).
+ * Named @page isolates 4:3 from global A4 @page in globals.css.
+ */
+
+@page deck {
+  size: 10in 7.5in;
+  margin: 0.35in;
+}
+
+@media print {
+  html,
+  body {
+    background: #ffffff !important;
+    color: #1a1a2e !important;
+  }
+
+  .deck-root {
+    page: deck;
+  }
+
+  /* Undo globals.css print rule that appends URLs to links */
+  .deck-root a[href]::after {
+    content: none !important;
+  }
+
+  .deck-slide {
+    break-after: page;
+    break-inside: avoid;
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+
+  .deck-slide.deck-slide-last {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .shadow-sm,
+  .shadow-card,
+  .shadow-lg {
+    box-shadow: none !important;
+  }
+}

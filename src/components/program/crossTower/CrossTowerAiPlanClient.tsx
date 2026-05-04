@@ -2,8 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  FileDown,
   RefreshCw,
   Sparkles,
   ArrowLeft,
@@ -44,6 +46,11 @@ import { ProgramRisksPanel } from "./ProgramRisksPanel";
 import { AssumptionsTab } from "./AssumptionsTab";
 import { ProjectBriefDrawer } from "./ProjectBriefDrawer";
 import type { AIProjectResolved } from "@/lib/cross-tower/aiProjects";
+import {
+  buildDeckPayload,
+  writeDeckPayloadToLocalStorage,
+} from "@/lib/cross-tower/deckPayload";
+import { useRedactDollars } from "@/lib/clientMode";
 
 /**
  * Cross-Tower AI Plan v3 — page-level shell.
@@ -76,6 +83,8 @@ import type { AIProjectResolved } from "@/lib/cross-tower/aiProjects";
  * Assumptions) without a page reload.
  */
 export function CrossTowerAiPlanClient() {
+  const router = useRouter();
+  const redactDollars = useRedactDollars();
   // ---------------------------------------------------------------------
   //   Assumptions + program substrate
   // ---------------------------------------------------------------------
@@ -85,6 +94,9 @@ export function CrossTowerAiPlanClient() {
     program,
     assumptions,
   });
+  const [deckExportError, setDeckExportError] = React.useState<string | null>(
+    null,
+  );
 
   const isLoading = state.status === "loading";
   const isError = state.status === "error";
@@ -210,6 +222,54 @@ export function CrossTowerAiPlanClient() {
   const openProject = React.useCallback((p: AIProjectResolved) => {
     setActiveProjectId(p.id);
   }, []);
+
+  const handleExportDeck = React.useCallback(() => {
+    if (!isReady || state.projects.length === 0 || isLoading || debouncing) return;
+    setDeckExportError(null);
+    const payload = buildDeckPayload({
+      projects: state.projects,
+      buildup: state.buildup,
+      kpis: state.kpis,
+      synthesis: state.synthesis,
+      generatedAt: state.generatedAt,
+      assumptionsForFootnote: state.appliedAssumptions ?? assumptions,
+      program,
+      redactDollars,
+      isFirstRunForCopy: isFirstRun,
+    });
+    const w = writeDeckPayloadToLocalStorage(payload);
+    if (!w.ok) {
+      setDeckExportError(
+        w.error === "quota"
+          ? "Deck data exceeded browser storage. Close other tabs or try again."
+          : "Could not save deck data for export.",
+      );
+      return;
+    }
+    const opened = window.open(
+      "/program/cross-tower-ai-plan/deck",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    if (!opened) {
+      router.push("/program/cross-tower-ai-plan/deck");
+    }
+  }, [
+    assumptions,
+    debouncing,
+    isFirstRun,
+    isLoading,
+    isReady,
+    program,
+    redactDollars,
+    router,
+    state.appliedAssumptions,
+    state.buildup,
+    state.generatedAt,
+    state.kpis,
+    state.projects,
+    state.synthesis,
+  ]);
 
   // TabGroup runs in controlled mode so the Approach tab's CTAs can deep-link
   // into Lineage, Projects, Matrix, Roadmap, and Assumptions. Default to
@@ -394,15 +454,37 @@ export function CrossTowerAiPlanClient() {
           </div>
 
           <div className="flex flex-col items-stretch gap-3 lg:items-end">
-            <RegenerateAction
-              state={state}
-              isLoading={isLoading || debouncing}
-              hydratingFromDb={state.hydratingFromDb}
-              persistenceMode={state.persistenceMode}
-              isFirstRun={isFirstRun}
-              isStale={isStale}
-              onClick={handleRegenerate}
-            />
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+              <button
+                type="button"
+                onClick={handleExportDeck}
+                disabled={
+                  !isReady ||
+                  state.projects.length === 0 ||
+                  isLoading ||
+                  debouncing
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-forge-border bg-forge-surface px-3 py-2 text-sm font-medium text-forge-body shadow-sm transition hover:border-accent-purple/40 hover:text-accent-purple-dark disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Export 4:3 executive deck for print or save as PDF"
+              >
+                <FileDown className="h-4 w-4 shrink-0" aria-hidden />
+                Export PDF deck
+              </button>
+              <RegenerateAction
+                state={state}
+                isLoading={isLoading || debouncing}
+                hydratingFromDb={state.hydratingFromDb}
+                persistenceMode={state.persistenceMode}
+                isFirstRun={isFirstRun}
+                isStale={isStale}
+                onClick={handleRegenerate}
+              />
+            </div>
+            {deckExportError ? (
+              <p className="max-w-sm text-right text-[11px] text-accent-red">
+                {deckExportError}
+              </p>
+            ) : null}
           </div>
         </header>
 

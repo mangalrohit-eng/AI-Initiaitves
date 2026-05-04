@@ -14,15 +14,15 @@
  *     them — so the chart caption / KPI strip can surface the truth without
  *     fabricating it.
  *
- * Phase-start-month convention is INTENTIONALLY UNCHANGED from the legacy
- * model (P1=M1, P2=M7, P3=M13). What changed is the SEMANTIC meaning of
- * each tier — see the 2x2 in `lib/initiatives/programTier.ts`:
+ * Phase start months align with the Cross-Tower AI Plan assumptions:
+ * P1=M1, P2=M6, P3=M12 (see `CrossTowerAssumptions` defaults). Semantic
+ * meaning of each tier comes from the 2x2 in `lib/initiatives/programTier.ts`:
  *
  *   P1 — Quick Wins        (HF / HBI) → start M1; leverage proven platforms.
- *   P2 — Fill-ins          (HF / LBI) → start M7; high-feasibility but
+ *   P2 — Fill-ins          (HF / LBI) → start M6; high-feasibility but
  *                                       smaller-impact rows slot in once
  *                                       Quick Wins are in flight.
- *   P3 — Strategic Builds  (LF / HBI) → start M13. The later start reflects
+ *   P3 — Strategic Builds  (LF / HBI) → start M12. The later start reflects
  *                                       longer build / change-management
  *                                       runways, NOT lower importance —
  *                                       these are the high-impact, lower-
@@ -41,9 +41,9 @@
  *            not net-new platform stand-up.
  *       P2 → 6 months: mid-complexity new agent fleet on existing platform;
  *            modest data-fabric build.
- *       P3 → 9 months: heavy lifts — multi-system integrations, new vendor
- *            onboarding, larger workforce-impact change-management. Reflects
- *            the lower-feasibility nature of the LF/HBI bucket.
+ *       P3 → 4 months default when `timelineMonths` absent — aligned to the
+ *            Cross-Tower AI project phase defaults; row-level
+ *            `timelineMonths` still carries longer builds when present.
  *       Unphased → 6 months: median assumption when no priority set.
  *   - Ramp is a fixed 6 months for every initiative (rationale documented at
  *     the call sites + on the Gantt legend).
@@ -75,8 +75,8 @@ export const RAMP_MONTHS = 6;
 /** First month of build for each phase. Parallel-within-phase. */
 export const PHASE_START_MONTHS: Record<BuildScalePhase, number> = {
   P1: 1,
-  P2: 7,
-  P3: 13,
+  P2: 6,
+  P3: 12,
   Unphased: 17,
 };
 
@@ -84,7 +84,7 @@ export const PHASE_START_MONTHS: Record<BuildScalePhase, number> = {
 export const PHASE_BUILD_DEFAULTS: Record<BuildScalePhase, number> = {
   P1: 4,
   P2: 6,
-  P3: 9,
+  P3: 4,
   Unphased: 6,
 };
 

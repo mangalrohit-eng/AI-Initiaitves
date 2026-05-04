@@ -24,14 +24,13 @@ import { formatUsdCompact } from "@/lib/format";
  * Regenerate. The staleness banner (managed by the page shell) flips on
  * the first edit and clears after the next successful regenerate.
  *
- * Knobs are grouped into six panels:
+ * Knobs are grouped into five panels:
  *
  *   1) Plan threshold      — minimum L4 Activity Group prize (LLM-affecting)
  *   2) Program window      — start month + ramp                (timing)
- *   3) High-Effort timing  — build / value start               (timing)
- *   4) Low-Effort timing   — build / value start               (timing)
- *   5) Brief depth         — Concise / Full                    (LLM-affecting)
- *   6) Versant lens emphases — TSA, BB-, Editorial, Broadcast  (LLM-affecting)
+ *   3) Phase timing        — P1/P2/P3 first build month + build duration (timing)
+ *   4) Brief depth         — Concise / Full                    (LLM-affecting)
+ *   5) Versant lens emphases — TSA, BB-, Editorial, Broadcast  (LLM-affecting)
  *
  * Plus a compact "Reset to defaults" action.
  */
@@ -170,65 +169,38 @@ export function AssumptionsTab({
         </div>
       </Panel>
 
-      {/* ============= 3. High-Effort timing ============= */}
+      {/* ============= 3. Phase timing (program tier) ============= */}
       <Panel
         icon={<Wrench className="h-4 w-4 text-accent-purple-dark" aria-hidden />}
-        title="High-Effort timing"
-        subtitle="Build window and value-clock start month for High-Effort projects (Strategic Bets / Deprioritized)."
+        title="Phase timing (P1 / P2 / P3)"
+        subtitle="First build month within the 24-month plan window (1-indexed) and build duration per program tier. Value accrues linearly over the adoption ramp after build completes. P2/P3 start months are clamped so P1 ≤ P2 ≤ P3 when saved."
       >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <NumberField
-            label="Build duration (months)"
-            value={assumptions.highEffortBuildMonths}
-            min={1}
-            max={36}
-            onChange={(n) => onChange({ highEffortBuildMonths: n })}
+        <div className="space-y-4">
+          <PhaseTierRow
+            label="P1 — Quick Wins"
+            startMonth={assumptions.p1PhaseStartMonth}
+            buildMonths={assumptions.p1BuildMonths}
+            onStart={(n) => onChange({ p1PhaseStartMonth: n })}
+            onBuild={(n) => onChange({ p1BuildMonths: n })}
           />
-          <NumberField
-            label="Value-clock start (month)"
-            value={assumptions.highEffortValueStartMonth}
-            min={1}
-            max={36}
-            onChange={(n) => onChange({ highEffortValueStartMonth: n })}
+          <PhaseTierRow
+            label="P2 — Fill-ins"
+            startMonth={assumptions.p2PhaseStartMonth}
+            buildMonths={assumptions.p2BuildMonths}
+            onStart={(n) => onChange({ p2PhaseStartMonth: n })}
+            onBuild={(n) => onChange({ p2BuildMonths: n })}
+          />
+          <PhaseTierRow
+            label="P3 — Strategic Builds"
+            startMonth={assumptions.p3PhaseStartMonth}
+            buildMonths={assumptions.p3BuildMonths}
+            onStart={(n) => onChange({ p3PhaseStartMonth: n })}
+            onBuild={(n) => onChange({ p3BuildMonths: n })}
           />
         </div>
       </Panel>
 
-      {/* ============= 4. Low-Effort timing ============= */}
-      <Panel
-        icon={<Wrench className="h-4 w-4 text-accent-teal" aria-hidden />}
-        title="Low-Effort timing"
-        subtitle="Build window and value-clock start month for Low-Effort projects (Quick Wins / Fill-ins)."
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <NumberField
-            label="Build duration (months)"
-            value={assumptions.lowEffortBuildMonths}
-            min={1}
-            max={36}
-            onChange={(n) => onChange({ lowEffortBuildMonths: n })}
-          />
-          <NumberField
-            label="Value-clock start (month)"
-            value={assumptions.lowEffortValueStartMonth}
-            min={1}
-            max={36}
-            onChange={(n) => onChange({ lowEffortValueStartMonth: n })}
-          />
-        </div>
-        <div className="mt-4">
-          <NumberField
-            label="Fill-in start offset (months)"
-            help="Months Fill-ins (Low-value × Low-effort) start after Quick Wins, so the Gantt staggers visibly."
-            value={assumptions.fillInStartOffsetMonths}
-            min={0}
-            max={12}
-            onChange={(n) => onChange({ fillInStartOffsetMonths: n })}
-          />
-        </div>
-      </Panel>
-
-      {/* ============= 5. Brief depth ============= */}
+      {/* ============= 4. Brief depth ============= */}
       <Panel
         icon={<Sparkles className="h-4 w-4 text-accent-purple" aria-hidden />}
         title="Brief depth"
@@ -251,7 +223,7 @@ export function AssumptionsTab({
         </div>
       </Panel>
 
-      {/* ============= 6. Versant lens emphases ============= */}
+      {/* ============= 5. Versant lens emphases ============= */}
       <Panel
         icon={<ShieldCheck className="h-4 w-4 text-accent-purple" aria-hidden />}
         title="Versant lens emphases"
@@ -288,11 +260,12 @@ export function AssumptionsTab({
 
       <p className="text-[11px] text-forge-hint">
         Defaults: threshold {formatUsdCompact(DEFAULT_ASSUMPTIONS.planThresholdUsd)},
-        High-Effort {DEFAULT_ASSUMPTIONS.highEffortBuildMonths}-month build / value
-        from M{DEFAULT_ASSUMPTIONS.highEffortValueStartMonth}, Low-Effort{" "}
-        {DEFAULT_ASSUMPTIONS.lowEffortBuildMonths}-month build / value from M
-        {DEFAULT_ASSUMPTIONS.lowEffortValueStartMonth}, ramp{" "}
-        {DEFAULT_ASSUMPTIONS.rampMonths} months.
+        program M{DEFAULT_ASSUMPTIONS.programStartMonth}, ramp{" "}
+        {DEFAULT_ASSUMPTIONS.rampMonths}mo. Phase starts M
+        {DEFAULT_ASSUMPTIONS.p1PhaseStartMonth} / M{DEFAULT_ASSUMPTIONS.p2PhaseStartMonth}{" "}
+        / M{DEFAULT_ASSUMPTIONS.p3PhaseStartMonth}, builds{" "}
+        {DEFAULT_ASSUMPTIONS.p1BuildMonths} / {DEFAULT_ASSUMPTIONS.p2BuildMonths} /{" "}
+        {DEFAULT_ASSUMPTIONS.p3BuildMonths} months.
       </p>
     </div>
   );
@@ -441,6 +414,43 @@ function NumberField({
       />
       {help ? <span className="text-[11px] text-forge-hint">{help}</span> : null}
     </label>
+  );
+}
+
+function PhaseTierRow({
+  label,
+  startMonth,
+  buildMonths,
+  onStart,
+  onBuild,
+}: {
+  label: string;
+  startMonth: number;
+  buildMonths: number;
+  onStart: (n: number) => void;
+  onBuild: (n: number) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-forge-border bg-forge-well/30 p-3">
+      <div className="mb-2 text-xs font-semibold text-forge-body">{label}</div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <NumberField
+          label="First build month (plan M#)"
+          help="1-indexed month within the 24-month plan window."
+          value={startMonth}
+          min={1}
+          max={36}
+          onChange={onStart}
+        />
+        <NumberField
+          label="Build duration (months)"
+          value={buildMonths}
+          min={1}
+          max={36}
+          onChange={onBuild}
+        />
+      </div>
+    </div>
   );
 }
 

@@ -350,7 +350,6 @@ function ProjectTreeRow({
                 key={l5.id}
                 l5={l5}
                 rationale={rationaleById.get(l5.id)}
-                redact={redact}
               />
             ))
           )}
@@ -363,19 +362,14 @@ function ProjectTreeRow({
 function ConstituentRow({
   l5,
   rationale,
-  redact,
 }: {
   l5: ProgramInitiativeRow;
   rationale: string | undefined;
-  redact: boolean;
 }) {
   return (
     <li className="rounded-lg border border-forge-border bg-forge-well/30 p-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <div className="text-sm font-medium text-forge-ink">{l5.name}</div>
-        <div className="font-mono text-[11px] text-forge-subtle">
-          {redact ? "—" : formatUsdCompact(l5.attributedAiUsd)}
-        </div>
       </div>
       <div className="mt-0.5 text-[11px] text-forge-subtle">
         {l5.l2Name}
@@ -414,7 +408,6 @@ type MatrixRow = {
   projectName: string;
   quadrant: string;
   programTier: string;
-  attributedAiUsd: number;
   rationale: string;
   isStub: boolean;
   project: AIProjectResolved;
@@ -436,7 +429,6 @@ function buildMatrixRows(projects: AIProjectResolved[]): MatrixRow[] {
         projectName: project.name,
         quadrant: project.quadrant ?? "—",
         programTier: l5.programTier,
-        attributedAiUsd: l5.attributedAiUsd,
         rationale: rationaleById.get(l5.id) ?? "",
         isStub: project.isStub,
         project,
@@ -472,7 +464,7 @@ function MatrixView({
               <th className="px-3 py-2.5">Project</th>
               <th className="px-3 py-2.5">Quadrant</th>
               <th className="px-3 py-2.5">Tier</th>
-              <th className="px-3 py-2.5 text-right">$</th>
+              <th className="px-3 py-2.5 text-right">L4 modeled AI $</th>
               <th className="px-3 py-2.5">Rationale</th>
             </tr>
           </thead>
@@ -514,7 +506,7 @@ function MatrixView({
                 </td>
                 <td className="px-3 py-2.5 text-right align-top">
                   <span className="font-mono text-forge-body">
-                    {redact ? "—" : formatUsdCompact(row.attributedAiUsd)}
+                    {redact ? "—" : formatUsdCompact(row.project.attributedAiUsd)}
                   </span>
                 </td>
                 <td className="px-3 py-2.5 align-top text-[11px] text-forge-body">
@@ -674,7 +666,7 @@ function CsvExport({
       "Project",
       "Quadrant",
       "Tier",
-      "$ Attributed",
+      "L4 modeled AI USD",
       "Rationale",
     ];
     const body = rows.map((r) => [
@@ -685,7 +677,7 @@ function CsvExport({
       csv(r.projectName),
       csv(r.quadrant),
       csv(r.programTier),
-      redact ? "—" : `${Math.round(r.attributedAiUsd)}`,
+      redact ? "—" : `${Math.round(r.project.attributedAiUsd)}`,
       csv(r.rationale),
     ]);
     const text = [headers.join(","), ...body.map((row) => row.join(","))].join(

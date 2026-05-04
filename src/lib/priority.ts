@@ -90,9 +90,9 @@ export const TIER_STYLES: Record<Tier, { badge: string; row: string; dot: string
 //
 // `label` carries the new 2x2 semantics — "Quick Wins" / "Fill-ins" /
 // "Strategic Builds" — replacing the old "Immediate / Near-term / Medium-term"
-// horizon framing. Phase start months stay UNCHANGED (P1=M1, P2=M7, P3=M13)
-// per direction; the windows below are the planning horizons those starts
-// imply, not statements of relative importance.
+// horizon framing. Default phase starts align with `PHASE_START_MONTHS`
+// (P1=M1, P2=M6, P3=M12); the windows below are planning horizons those
+// starts imply, not statements of relative importance.
 export const TIER_META: Record<
   Tier,
   { label: string; window: string; gradient: string; ring: string; icon: LucideIcon }

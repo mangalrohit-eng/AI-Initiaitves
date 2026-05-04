@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import type { ValueBuildupPoint } from "@/lib/initiatives/selectProgram";
+import { PHASE_START_MONTHS } from "@/lib/initiatives/buildScaleModel";
 import { TIER_HEX } from "@/lib/priority";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
@@ -22,14 +23,16 @@ import { useRedactDollars } from "@/lib/clientMode";
  * each initiative's per-month contribution under the build / 6-month-ramp /
  * at-scale model. The LLM has no influence on this surface.
  *
- * Reference lines mark phase build-start months (M7 = P2 build kickoff,
- * M13 = P3 build kickoff) so the executive read aligns to the three-horizon
- * narrative. Note: the curve no longer changes shape strictly at those
+ * Reference lines mark P2 / P3 phase build-start months from
+ * `PHASE_START_MONTHS` (defaults M6 / M12) so the executive read aligns to the
+ * three-horizon narrative. The curve does not change shape strictly at those
  * boundaries — initiatives ramp asynchronously based on each row's build
  * duration, so the inflection markers are guidance, not hard transitions.
  */
 export function ValueBuildupChart({ data }: { data: ValueBuildupPoint[] }) {
   const redact = useRedactDollars();
+  const p2Start = PHASE_START_MONTHS.P2;
+  const p3Start = PHASE_START_MONTHS.P3;
   return (
     <div className="h-[320px] w-full min-w-0">
       <ResponsiveContainer width="100%" height="100%">
@@ -88,7 +91,7 @@ export function ValueBuildupChart({ data }: { data: ValueBuildupPoint[] }) {
             labelFormatter={(label) => `Month ${label}`}
           />
           <ReferenceLine
-            x={7}
+            x={p2Start}
             stroke={TIER_HEX.P2.solid}
             strokeDasharray="4 4"
             strokeOpacity={0.6}
@@ -100,7 +103,7 @@ export function ValueBuildupChart({ data }: { data: ValueBuildupPoint[] }) {
             }}
           />
           <ReferenceLine
-            x={13}
+            x={p3Start}
             stroke={TIER_HEX.P3.solid}
             strokeDasharray="4 4"
             strokeOpacity={0.6}

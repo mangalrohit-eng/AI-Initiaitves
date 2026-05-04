@@ -18,11 +18,11 @@ import { useRedactDollars } from "@/lib/clientMode";
  * Cross-Tower AI Plan v3 — project-driven 24-month value buildup curve.
  *
  * The curve sums each live AI Project's per-month contribution under the
- * deterministic build/ramp/at-scale model from `composeProjects`. The
- * buckets the LLM authored (value/effort) drive the project's `quadrant`
- * which together with `Assumptions.fillInStartOffsetMonths` and the
- * effort-band timing knobs decide each project's start, value-start, and
- * full-scale months.
+ * deterministic build/ramp/at-scale model from `composeProjects`. Each
+ * cohort's first build month and build duration come from the program-tier
+ * rollup of its L5 constituents (P1 / P2 / P3) plus the Assumptions phase
+ * grid (`p*PhaseStartMonth`, `p*BuildMonths`); value begins after build, then
+ * a shared linear ramp to full run-rate.
  *
  * Stub projects and Deprioritize-quadrant projects do NOT contribute to
  * the curve.
@@ -51,11 +51,14 @@ export function ProjectsValueBuildupModule({
           24-month modeled AI value buildup
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
-          Sum of every live AI Project{"'"}s monthly contribution. Each project
-          builds for {assumptions.lowEffortBuildMonths}-
-          {assumptions.highEffortBuildMonths} months (effort-bucket-driven),
-          ramps over {assumptions.rampMonths} months, then runs at full scale.
-          No project contributes a dollar before its build completes.
+          Sum of every live AI Project{"'"}s monthly contribution. Start month
+          and build length follow the cohort program tier (P1 / P2 / P3) against
+          Assumptions (P1 M{assumptions.p1PhaseStartMonth} /{" "}
+          {assumptions.p1BuildMonths}mo build, P2 M{assumptions.p2PhaseStartMonth}{" "}
+          / {assumptions.p2BuildMonths}mo, P3 M{assumptions.p3PhaseStartMonth} /{" "}
+          {assumptions.p3BuildMonths}mo), then a {assumptions.rampMonths}
+          -month linear ramp to full attributed run-rate. No dollar accrues
+          before that project{"'"}s build completes.
         </p>
       </div>
       {!redact ? (
@@ -168,13 +171,13 @@ export function ProjectsValueBuildupModule({
 
   const Caption = (
     <p className="mt-3 text-[11px] leading-relaxed text-forge-subtle">
-      Build → {assumptions.rampMonths}-month adoption ramp → full scale. Build
-      durations come from the Assumptions tab — high-effort projects build for{" "}
-      {assumptions.highEffortBuildMonths}mo, low-effort for{" "}
-      {assumptions.lowEffortBuildMonths}mo. Adoption is a fixed{" "}
-      {assumptions.rampMonths}-month linear ramp across every project, sized
-      for Versant&apos;s 7-entity multi-brand operating model. Stub projects
-      and Deprioritize-quadrant projects are excluded from the curve.
+      Build → {assumptions.rampMonths}-month adoption ramp → full scale. Phase
+      starts and per-tier build windows are editable on the Assumptions tab;
+      each L4 cohort picks up P1, P2, or P3 timing from its constituent L5
+      program tiers (conservative tie-break: latest phase wins when mixed).
+      Adoption is a fixed {assumptions.rampMonths}-month linear ramp per
+      project. Stub projects and Deprioritize-quadrant projects are excluded
+      from the curve.
     </p>
   );
 

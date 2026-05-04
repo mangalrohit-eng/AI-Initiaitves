@@ -429,7 +429,7 @@ export function buildProgramSynthesisPrompt(
   lines.push("TIMING ASSUMPTIONS (for narrative alignment with the deterministic Gantt)");
   lines.push("===========================================================================");
   lines.push(
-    `Program window starts at month ${assumptions.programStartMonth}. High-Effort projects: build window ${assumptions.highEffortBuildMonths} months, value clock starts month ${assumptions.highEffortValueStartMonth}. Low-Effort projects: build window ${assumptions.lowEffortBuildMonths} months, value clock starts month ${assumptions.lowEffortValueStartMonth}. Adoption ramp ${assumptions.rampMonths} months across all projects. Fill-ins offset ${assumptions.fillInStartOffsetMonths} months after Quick Wins.`,
+    `Program window starts at month ${assumptions.programStartMonth}. P1 cohorts: first build month M${assumptions.p1PhaseStartMonth}, build duration ${assumptions.p1BuildMonths} months. P2 cohorts: first build month M${assumptions.p2PhaseStartMonth}, build duration ${assumptions.p2BuildMonths} months. P3 cohorts: first build month M${assumptions.p3PhaseStartMonth}, build duration ${assumptions.p3BuildMonths} months. Value accrual begins immediately after each cohort's build window; linear adoption ramp ${assumptions.rampMonths} months to full run-rate.`,
   );
   lines.push(
     "Use these to align the roadmap narrative to the Gantt the engine renders. Never echo the numbers themselves in your output — you may reference 'first half-year', 'second half-year', 'second year' as qualitative anchors.",

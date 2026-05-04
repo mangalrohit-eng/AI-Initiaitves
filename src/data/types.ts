@@ -26,8 +26,8 @@ export type Feasibility = "High" | "Low";
  *   - P3 — Strategic Builds  (LF/HBI)
  *   - Deprioritized          (LF/LBI — below the line, not in plan)
  *
- * Phase start months stay UNCHANGED from the previous model (P1=M1, P2=M7,
- * P3=M13) by direction; the labels above are the user-facing meaning.
+ * Default phase build-start months match program buildup (`buildScaleModel`):
+ * P1=M1, P2=M6, P3=M12 (editable on Cross-Tower Assumptions).
  */
 export type ProgramTier = "P1" | "P2" | "P3" | "Deprioritized";
 

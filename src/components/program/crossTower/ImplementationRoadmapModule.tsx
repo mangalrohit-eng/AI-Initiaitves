@@ -13,8 +13,7 @@ import { Sparkles } from "lucide-react";
  *
  *   - Phase windows + initiative membership: deterministic via the
  *     program-level 2x2 (`computeProgramTiers`); start months come from
- *     `PHASE_START_MONTHS` in `buildScaleModel.ts` and stay the same as the
- *     legacy P1/P2/P3 timeline (M1 / M7 / M13).
+ *     `PHASE_START_MONTHS` in `buildScaleModel.ts` (P1=M1, P2=M6, P3=M12).
  *   - Phase narrative, milestones, owner notes: LLM-authored when available.
  *
  * Each phase card shows the count + AI $ for that phase, then either the
@@ -49,9 +48,10 @@ export function ImplementationRoadmapModule({
           </h2>
           <p className="mt-1 text-sm text-forge-subtle">
             Three program tiers from the cross-tower 2x2: P1 Quick Wins (M1+),
-            P2 Fill-ins (M7+), P3 Strategic Builds (M13+). Tier comes from
-            feasibility × parent-L4 Activity Group business impact — start
-            months stay fixed from the legacy timeline.
+            P2 Fill-ins (M6+), P3 Strategic Builds (M12+). Tier comes from
+            feasibility × parent-L4 Activity Group business impact — phase
+            starts follow `buildScaleModel` (aligned with Cross-Tower
+            Assumptions defaults).
             {llmAuthored ? (
               <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">
                 <Sparkles className="h-2.5 w-2.5" aria-hidden /> AI-authored narrative

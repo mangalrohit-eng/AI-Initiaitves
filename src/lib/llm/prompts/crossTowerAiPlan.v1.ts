@@ -20,8 +20,8 @@
  * wide 2x2 over (feasibility, parent-L3 business impact under V4 / parent-L4
  * Activity Group business impact under V5). Phase semantics rewritten: P1 =
  * Quick Wins (HF/HBI), P2 = Fill-ins (HF/LBI), P3 = Strategic Builds (LF/HBI).
- * Deprioritized = below the line. Phase start months stay the same as v1
- * (P1=M1, P2=M7, P3=M13).
+ * Deprioritized = below the line. Phase start months align with program
+ * buildup defaults (P1=M1, P2=M6, P3=M12).
  *
  * v2.1.0 — 5-layer capability map cutover (`AssessProgramV5`). Initiatives
  * now attach at L5 Activity (formerly L4); the dial-bearing parent is L4
@@ -311,7 +311,7 @@ export function buildSystemPrompt(): string {
     "      P3 — Strategic Builds (LOW feasibility × HIGH parent-L4 Activity Group business impact)",
     "      Deprioritized (LOW feasibility × LOW parent-L4 Activity Group business impact) — never in keyInitiatives.",
     "  - You CANNOT move an initiative across tiers. Phase membership is supplied verbatim.",
-    "  - 'Strategic Builds' (P3) start in month 13 NOT because they're less important, but because they need longer build runways (lower feasibility = more integration / change-management). Treat them with the gravitas of P1 in narrative.",
+    "  - 'Strategic Builds' (P3) start later in the 24-month window NOT because they're less important, but because they need longer build runways (lower feasibility = more integration / change-management). Treat them with the gravitas of P1 in narrative.",
     "  - Deprioritized rows are passed as context only — you may reference them as 'work intentionally held outside the active plan,' but you may NOT echo their ids in `keyInitiatives`.",
     "",
     "RANKING + SELECTION:",
@@ -322,10 +322,10 @@ export function buildSystemPrompt(): string {
     "DEPENDENCIES:",
     "  - For each `keyInitiative`, list 0–4 supporting initiative ids in `dependsOn`. Use the same id strings from the input. Self-reference is forbidden.",
     "",
-    "ROADMAP PHASES (P1/P2/P3 → start months M1 / M7 / M13):",
+    "ROADMAP PHASES (P1/P2/P3 → default first build months M1 / M6 / M12):",
     "  - P1 narrative: Quick Wins — leverage proven Versant platforms (BlackLine, Workday, Eightfold, Amagi) to ship configuration + agent rollouts inside the first half-year. High-impact, high-feasibility.",
     "  - P2 narrative: Fill-ins — high-feasibility but smaller-impact rows that slot into team capacity once Quick Wins are in flight.",
-    "  - P3 narrative: Strategic Builds — high-impact, lower-feasibility rows that need M13+ for the longer build runway (multi-system integration, vendor onboarding, change management). Frame these as the high-prize program bets, not as the leftovers.",
+    "  - P3 narrative: Strategic Builds — high-impact, lower-feasibility rows that need the second-year runway for integration, vendor onboarding, and change management. Frame these as the high-prize program bets, not as the leftovers.",
     "  - For each phase, write a tight narrative (≤50 words), 3–5 concrete milestones, and 1–3 owner notes naming the towers / people accountable. No numerics — talk in qualitative shifts (e.g. 'close cycle compresses', 'ad sales pipeline becomes self-serve').",
     "",
     "ARCHITECTURE NARRATIVE:",

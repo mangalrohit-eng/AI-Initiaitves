@@ -33,6 +33,11 @@ import type {
 } from "@/lib/cross-tower/aiProjects";
 import { projectIdFor } from "@/lib/cross-tower/aiProjects";
 import type { CrossTowerAssumptions } from "@/lib/cross-tower/assumptions";
+import {
+  buildMonthsForTier,
+  effectiveProjectStartMonth,
+  resolveTierFromConstituents,
+} from "@/lib/cross-tower/phasePlanTiming";
 import type { ProgramInitiativeRow } from "@/lib/initiatives/selectProgram";
 import type { CohortStatus } from "@/lib/llm/crossTowerPlanLLM";
 
@@ -110,26 +115,10 @@ export function composeProjects(input: ComposeProjectsInput): AIProjectResolved[
       : deriveQuadrant(valueBucket, effortBucket);
     const isDeprioritized = quadrant === "Deprioritize";
 
-    const buildMonths = effortBucket
-      ? effortBucket === "High"
-        ? assumptions.highEffortBuildMonths
-        : assumptions.lowEffortBuildMonths
-      : assumptions.lowEffortBuildMonths;
-    const baseValueStart = effortBucket
-      ? effortBucket === "High"
-        ? assumptions.highEffortValueStartMonth
-        : assumptions.lowEffortValueStartMonth
-      : assumptions.lowEffortValueStartMonth;
-    const fillInOffset = quadrant === "Fill-in" ? assumptions.fillInStartOffsetMonths : 0;
-    const startMonth = Math.max(
-      1,
-      assumptions.programStartMonth + fillInOffset,
-    );
-    const valueStartMonth = isStub
-      ? Math.max(startMonth + buildMonths, baseValueStart)
-      : effortBucket === "High"
-        ? Math.max(startMonth + buildMonths, baseValueStart)
-        : Math.max(startMonth + buildMonths, baseValueStart);
+    const tier = resolveTierFromConstituents(constituents);
+    const startMonth = effectiveProjectStartMonth(assumptions, tier);
+    const buildMonths = buildMonthsForTier(assumptions, tier);
+    const valueStartMonth = Math.max(1, startMonth + buildMonths);
 
     return {
       id: projectIdFor(cohort.l4RowId),

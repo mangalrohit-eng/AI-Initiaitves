@@ -9,11 +9,11 @@ import type { BriefDepth } from "@/lib/cross-tower/aiProjects";
  * stale but never silently mutate the rendered numbers.
  *
  * The split between LLM-affecting and timing-only knobs matters for cost.
- * Timing knobs (`programStartMonth`, build/ramp/value-start months,
- * `fillInStartOffsetMonths`) are 0-token operations — we recompose
- * deterministically without hitting the model. LLM-affecting knobs
- * (`planThresholdUsd`, `briefDepth`, the four lens-emphasis toggles)
- * change the prompt input and DO require a regeneration call.
+ * Timing knobs (`programStartMonth`, per-phase start/build months, `rampMonths`)
+ * are 0-token operations — we recompose deterministically without hitting the
+ * model. LLM-affecting knobs (`planThresholdUsd`, `briefDepth`, the four
+ * lens-emphasis toggles) change the prompt input and DO require a regeneration
+ * call.
  *
  * `hashAssumptions` returns a deterministic key that the API route folds
  * into the per-cohort cache key — so toggling lens emphases or threshold
@@ -31,30 +31,24 @@ export type CrossTowerAssumptions = {
   planThresholdUsd: number;
 
   // ------- Program window -------------------------------------------------
-  /** Month 1 of the program (1-indexed). Leave at 1 unless a ramp delay is needed. */
+  /** Month 1 of the program (1-indexed). Shifts all phase anchors together. */
   programStartMonth: number;
-  /** Adoption ramp window after build completes, in months. */
+  /** Adoption ramp window after build completes, in months (linear to full $). */
   rampMonths: number;
 
-  // ------- High-Effort timing --------------------------------------------
-  /** Build duration for High-Effort projects, months. */
-  highEffortBuildMonths: number;
-  /** Earliest month a High-Effort project's value clock can start, 1-indexed. */
-  highEffortValueStartMonth: number;
-
-  // ------- Low-Effort timing ---------------------------------------------
-  /** Build duration for Low-Effort projects, months. */
-  lowEffortBuildMonths: number;
-  /** Earliest month a Low-Effort project's value clock can start, 1-indexed. */
-  lowEffortValueStartMonth: number;
-
-  // ------- Sequencing -----------------------------------------------------
-  /**
-   * Months Fill-in projects (Low value × Low effort) start after Quick Wins.
-   * Phases Quick Wins first, then Fill-ins start with this offset so the
-   * Gantt has a visible staggered cadence rather than a wall of M1 starts.
-   */
-  fillInStartOffsetMonths: number;
+  // ------- Phase timing (program tier P1 / P2 / P3) -------------------------
+  /** First calendar month of the plan window when P1-tier projects start build (1-indexed). */
+  p1PhaseStartMonth: number;
+  /** First calendar month when P2-tier projects start build (1-indexed). */
+  p2PhaseStartMonth: number;
+  /** First calendar month when P3-tier projects start build (1-indexed). */
+  p3PhaseStartMonth: number;
+  /** Build duration for P1-tier projects, months. */
+  p1BuildMonths: number;
+  /** Build duration for P2-tier projects, months. */
+  p2BuildMonths: number;
+  /** Build duration for P3-tier projects, months. */
+  p3BuildMonths: number;
 
   // ------- Brief depth (LLM cost knob) -----------------------------------
   /**
@@ -79,11 +73,12 @@ export const DEFAULT_ASSUMPTIONS: CrossTowerAssumptions = {
   planThresholdUsd: 1_000_000,
   programStartMonth: 1,
   rampMonths: 6,
-  highEffortBuildMonths: 9,
-  highEffortValueStartMonth: 13,
-  lowEffortBuildMonths: 4,
-  lowEffortValueStartMonth: 5,
-  fillInStartOffsetMonths: 3,
+  p1PhaseStartMonth: 1,
+  p2PhaseStartMonth: 6,
+  p3PhaseStartMonth: 12,
+  p1BuildMonths: 4,
+  p2BuildMonths: 6,
+  p3BuildMonths: 4,
   briefDepth: "Concise",
   emphasizeTsaReadiness: true,
   emphasizeBbCreditDiscipline: true,
@@ -138,23 +133,22 @@ export function clampAssumptions(
   partial: Partial<CrossTowerAssumptions>,
 ): CrossTowerAssumptions {
   const merged = { ...DEFAULT_ASSUMPTIONS, ...partial };
+  let p1s = clampInt(merged.p1PhaseStartMonth, 1, MAX_MONTHS);
+  let p2s = clampInt(merged.p2PhaseStartMonth, 1, MAX_MONTHS);
+  let p3s = clampInt(merged.p3PhaseStartMonth, 1, MAX_MONTHS);
+  if (p2s < p1s) p2s = p1s;
+  if (p3s < p2s) p3s = p2s;
+
   return {
     planThresholdUsd: clampInt(merged.planThresholdUsd, 0, MAX_THRESHOLD_USD),
     programStartMonth: clampInt(merged.programStartMonth, 1, MAX_MONTHS),
     rampMonths: clampInt(merged.rampMonths, 0, 18),
-    highEffortBuildMonths: clampInt(merged.highEffortBuildMonths, 1, MAX_MONTHS),
-    highEffortValueStartMonth: clampInt(
-      merged.highEffortValueStartMonth,
-      1,
-      MAX_MONTHS,
-    ),
-    lowEffortBuildMonths: clampInt(merged.lowEffortBuildMonths, 1, MAX_MONTHS),
-    lowEffortValueStartMonth: clampInt(
-      merged.lowEffortValueStartMonth,
-      1,
-      MAX_MONTHS,
-    ),
-    fillInStartOffsetMonths: clampInt(merged.fillInStartOffsetMonths, 0, 12),
+    p1PhaseStartMonth: p1s,
+    p2PhaseStartMonth: p2s,
+    p3PhaseStartMonth: p3s,
+    p1BuildMonths: clampInt(merged.p1BuildMonths, 1, MAX_MONTHS),
+    p2BuildMonths: clampInt(merged.p2BuildMonths, 1, MAX_MONTHS),
+    p3BuildMonths: clampInt(merged.p3BuildMonths, 1, MAX_MONTHS),
     briefDepth: merged.briefDepth === "Full" ? "Full" : "Concise",
     emphasizeTsaReadiness: Boolean(merged.emphasizeTsaReadiness),
     emphasizeBbCreditDiscipline: Boolean(merged.emphasizeBbCreditDiscipline),

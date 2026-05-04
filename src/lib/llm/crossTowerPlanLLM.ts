@@ -1487,11 +1487,12 @@ function hashTimingContext(a: CrossTowerAssumptions): string {
   const compact = {
     s: a.programStartMonth,
     r: a.rampMonths,
-    hb: a.highEffortBuildMonths,
-    hv: a.highEffortValueStartMonth,
-    lb: a.lowEffortBuildMonths,
-    lv: a.lowEffortValueStartMonth,
-    fo: a.fillInStartOffsetMonths,
+    p1s: a.p1PhaseStartMonth,
+    p2s: a.p2PhaseStartMonth,
+    p3s: a.p3PhaseStartMonth,
+    p1b: a.p1BuildMonths,
+    p2b: a.p2BuildMonths,
+    p3b: a.p3BuildMonths,
   };
   return djb2(JSON.stringify(compact));
 }

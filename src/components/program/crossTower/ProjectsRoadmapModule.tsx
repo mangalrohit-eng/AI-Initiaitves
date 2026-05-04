@@ -41,11 +41,11 @@ import { useRedactDollars } from "@/lib/clientMode";
  *   - `roadmapNarrative.milestones`— 3–5 named milestones, declarative.
  *   - `roadmapNarrative.ownerNotes`— 1–3 owner notes (towers / executives).
  *
- * Timing knobs (`programStartMonth`, `highEffortBuildMonths`,
- * `lowEffortBuildMonths`, value-start months, ramp months,
- * `fillInStartOffsetMonths`) come from Assumptions and are 0-token —
- * regenerating the plan is not required to re-flow the Gantt after a knob
- * change, but the LLM narrative will go stale until Regenerate is clicked.
+ * Timing knobs (`programStartMonth`, per-tier phase start + build months from
+ * the P1 / P2 / P3 grid, `rampMonths`) come from Assumptions and are 0-token
+ * for the Gantt engine — regenerating the plan is not required to re-flow the
+ * chart after a knob change, but the LLM narrative will go stale until
+ * Regenerate is clicked.
  */
 
 const HORIZON_MONTHS = 24;
@@ -595,9 +595,11 @@ function GanttLegend({ assumptions }: { assumptions: CrossTowerAssumptions }) {
         <span>full attributed run-rate</span>
       </div>
       <div className="ml-auto max-w-md text-right text-[10px] leading-snug text-forge-hint">
-        High-effort projects build {assumptions.highEffortBuildMonths}mo · low-
-        effort {assumptions.lowEffortBuildMonths}mo. Fill-ins start{" "}
-        {assumptions.fillInStartOffsetMonths}mo after program kickoff.
+        P1 kickoff M{assumptions.p1PhaseStartMonth} ({assumptions.p1BuildMonths}
+        mo build) · P2 M{assumptions.p2PhaseStartMonth} (
+        {assumptions.p2BuildMonths}mo) · P3 M{assumptions.p3PhaseStartMonth} (
+        {assumptions.p3BuildMonths}mo). Value starts after each cohort{"'"}s
+        build; ramp {assumptions.rampMonths}mo.
       </div>
     </div>
   );

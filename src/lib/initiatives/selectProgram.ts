@@ -16,10 +16,9 @@
  *     deterministic; the LLM is not allowed to move an initiative across
  *     tiers — it ranks within them and adds narrative.
  *   - 24-month cumulative modeled $ buildup, ramped per phase. Phase start
- *     months stay UNCHANGED from the legacy model (P1=M1, P2=M7, P3=M13)
- *     — the rewrite is in the SEMANTIC labels (Quick Wins / Fill-ins /
- *     Strategic Builds), not the timing math. The labels carry the 2x2 axes
- *     so the Gantt narrative is self-explanatory.
+ *     months match `PHASE_START_MONTHS` in `buildScaleModel.ts` (P1=M1,
+ *     P2=M6, P3=M12), aligned with Cross-Tower AI Plan assumptions. Tier
+ *     labels (Quick Wins / Fill-ins / Strategic Builds) come from the 2x2.
  *   - Architecture roll-up: orchestration pattern mix, agent type mix, and a
  *     deduped vendor stack drawn from `Process.workbench.post` + named
  *     vendors on agent toolsUsed. Scoped to in-plan (P1+P2+P3 whose parent
@@ -78,6 +77,7 @@ import {
 } from "@/lib/assess/scenarioModel";
 import {
   computeBuildScale,
+  PHASE_START_MONTHS,
   type BuildScaleResult,
   type BuildScaleInputRow,
 } from "@/lib/initiatives/buildScaleModel";
@@ -589,14 +589,24 @@ function toBuildScaleInputRow(row: ProgramInitiativeRow): BuildScaleInputRow {
  * matches what the chart label has always claimed ("Modeled AI run-rate").
  *
  * `activeTier` is computed by inspecting which phase is currently *driving*
- * the curve at month m: the latest phase whose `phaseStartMonth <= m`. P3
- * after M13, P2 after M7, otherwise P1.
+ * the curve at month m: the latest P1/P2/P3 phase whose build-start month
+ * (from `PHASE_START_MONTHS`) is <= m — same boundary logic as Cross-Tower
+ * program charts, derived from a single constant source.
  */
+function activeTierForProgramMonth(month: number): "P1" | "P2" | "P3" {
+  const p1 = PHASE_START_MONTHS.P1;
+  const p2 = PHASE_START_MONTHS.P2;
+  const p3 = PHASE_START_MONTHS.P3;
+  if (month >= p3) return "P3";
+  if (month >= p2) return "P2";
+  return "P1";
+}
+
 function monthlyToValueBuildup(buildScale: BuildScaleResult): ValueBuildupPoint[] {
   return buildScale.monthly.map(({ month, runRateAiUsd }) => ({
     month,
     cumulativeAiUsd: runRateAiUsd,
-    activeTier: month >= 13 ? "P3" : month >= 7 ? "P2" : "P1",
+    activeTier: activeTierForProgramMonth(month),
   }));
 }
 

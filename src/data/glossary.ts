@@ -124,7 +124,7 @@ export const glossary: GlossaryEntry[] = [
     category: "Prioritisation & delivery",
     term: "Program priority tier (P1 / P2 / P3 / Deprioritized)",
     short: "Where an AI initiative lands in the cross-tower 2x2.",
-    long: "Set on the Cross-Tower AI Plan by the deterministic 2x2 over feasibility × parent-L4 Activity Group business impact: P1 — Quick Wins (HF · HBI), shipped first. P2 — Fill-ins (HF · LBI), slotted in around the Quick Wins. P3 — Strategic Builds (LF · HBI), longer build runway for high-prize programs. Deprioritized (LF · LBI) sits below the line — visible for context but excluded from the active plan. P-tiers also drive Gantt staging (M1 / M7 / M13).",
+    long: "Set on the Cross-Tower AI Plan by the deterministic 2x2 over feasibility × parent-L4 Activity Group business impact: P1 — Quick Wins (HF · HBI), shipped first. P2 — Fill-ins (HF · LBI), slotted in around the Quick Wins. P3 — Strategic Builds (LF · HBI), longer build runway for high-prize programs. Deprioritized (LF · LBI) sits below the line — visible for context but excluded from the active plan. P-tiers also drive Gantt staging (defaults M1 / M6 / M12 first build months, editable on Assumptions).",
   },
   {
     id: "plan-threshold",

@@ -649,11 +649,12 @@ function timingMatches(
   return (
     applied.programStartMonth === draft.programStartMonth &&
     applied.rampMonths === draft.rampMonths &&
-    applied.highEffortBuildMonths === draft.highEffortBuildMonths &&
-    applied.highEffortValueStartMonth === draft.highEffortValueStartMonth &&
-    applied.lowEffortBuildMonths === draft.lowEffortBuildMonths &&
-    applied.lowEffortValueStartMonth === draft.lowEffortValueStartMonth &&
-    applied.fillInStartOffsetMonths === draft.fillInStartOffsetMonths
+    applied.p1PhaseStartMonth === draft.p1PhaseStartMonth &&
+    applied.p2PhaseStartMonth === draft.p2PhaseStartMonth &&
+    applied.p3PhaseStartMonth === draft.p3PhaseStartMonth &&
+    applied.p1BuildMonths === draft.p1BuildMonths &&
+    applied.p2BuildMonths === draft.p2BuildMonths &&
+    applied.p3BuildMonths === draft.p3BuildMonths
   );
 }
 

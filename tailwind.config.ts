@@ -15,6 +15,8 @@ const config: Config = {
         forge: {
           canvas: "#FFFFFF",
           page: "#F5F5F5",
+          /** App chrome / legacy alias — opaque (pairs with `surface` for panels). */
+          bg: "#F5F5F5",
           surface: "#FFFFFF",
           well: "#F0F0F0",
           "well-strong": "#E8E8E8",

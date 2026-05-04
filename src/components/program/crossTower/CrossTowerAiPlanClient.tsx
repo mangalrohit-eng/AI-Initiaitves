@@ -12,12 +12,26 @@ import {
 import { PageShell } from "@/components/PageShell";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { TabGroup, type TabItem } from "@/components/ui/TabGroup";
+import type { TowerId } from "@/data/assess/types";
+import { towers as allTowers } from "@/data/towers";
 import { useProgramInitiatives } from "@/lib/initiatives/useProgramInitiatives";
 import { useCrossTowerPlan } from "@/lib/llm/useCrossTowerPlan";
+import {
+  buildProjectsBuildScale,
+  summarizeProjects,
+} from "@/lib/cross-tower/composeProjects";
+import {
+  CROSS_TOWER_VIEW_PHASES,
+  crossTowerViewFiltersActive,
+  filterProjectsByView,
+  sliceProgramForView,
+  type CrossTowerViewPhaseId,
+} from "@/lib/cross-tower/filterCrossTowerView";
 import {
   useCrossTowerAssumptions,
   hashAssumptions,
 } from "@/lib/cross-tower/assumptions";
+import { programTierLabel } from "@/lib/programTierLabels";
 import { ApproachTab } from "./ApproachTab";
 import { ProjectsKpiStrip } from "./ProjectsKpiStrip";
 import { ProjectsValueBuildupModule } from "./ProjectsValueBuildupModule";
@@ -135,8 +149,64 @@ export function CrossTowerAiPlanClient() {
   const [activeProjectId, setActiveProjectId] = React.useState<string | null>(
     null,
   );
+
+  const [selectedTowerIds, setSelectedTowerIds] = React.useState<TowerId[]>(
+    [],
+  );
+  const [selectedPhases, setSelectedPhases] = React.useState<
+    CrossTowerViewPhaseId[]
+  >([]);
+
+  const filteredProjects = React.useMemo(
+    () =>
+      filterProjectsByView(state.projects, selectedTowerIds, selectedPhases),
+    [state.projects, selectedTowerIds, selectedPhases],
+  );
+
+  const filteredProgram = React.useMemo(
+    () => sliceProgramForView(program, selectedTowerIds, selectedPhases),
+    [program, selectedTowerIds, selectedPhases],
+  );
+
+  const filteredKpis = React.useMemo(
+    () => summarizeProjects(filteredProjects),
+    [filteredProjects],
+  );
+
+  const filteredBuildup = React.useMemo(
+    () => buildProjectsBuildScale(filteredProjects),
+    [filteredProjects],
+  );
+
+  const viewFiltersActive = crossTowerViewFiltersActive(
+    selectedTowerIds,
+    selectedPhases,
+  );
+
+  const toggleTower = React.useCallback((id: TowerId) => {
+    setSelectedTowerIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }, []);
+
+  const togglePhase = React.useCallback((phase: CrossTowerViewPhaseId) => {
+    setSelectedPhases((prev) =>
+      prev.includes(phase) ? prev.filter((x) => x !== phase) : [...prev, phase],
+    );
+  }, []);
+
   const activeProject =
-    state.projects.find((p) => p.id === activeProjectId) ?? null;
+    filteredProjects.find((p) => p.id === activeProjectId) ?? null;
+
+  React.useEffect(() => {
+    if (
+      activeProjectId !== null &&
+      !filteredProjects.some((p) => p.id === activeProjectId)
+    ) {
+      setActiveProjectId(null);
+    }
+  }, [activeProjectId, filteredProjects]);
+
   const openProject = React.useCallback((p: AIProjectResolved) => {
     setActiveProjectId(p.id);
   }, []);
@@ -150,113 +220,141 @@ export function CrossTowerAiPlanClient() {
   // ---------------------------------------------------------------------
   //   Tab definitions
   // ---------------------------------------------------------------------
-  const tabs: TabItem[] = [
-    {
-      id: "approach",
-      label: "Approach",
-      content: (
-        <ApproachTab
-          program={program}
-          projects={state.projects}
-          kpis={state.kpis}
-          onJump={setActiveTabId}
-        />
-      ),
-    },
-    {
-      id: "overview",
-      label: "Overview",
-      content: (
-        <div className="space-y-6">
-          <ProjectsValueBuildupModule
-            buildup={state.buildup}
-            fullScaleRunRateUsd={state.kpis.fullScaleRunRateUsd}
-            assumptions={assumptions}
+  const tabs: TabItem[] = React.useMemo(
+    () => [
+      {
+        id: "approach",
+        label: "Approach",
+        content: (
+          <ApproachTab
+            program={filteredProgram}
+            projects={filteredProjects}
+            kpis={filteredKpis}
+            onJump={setActiveTabId}
+          />
+        ),
+      },
+      {
+        id: "overview",
+        label: "Overview",
+        content: (
+          <div className="space-y-6">
+            <ProjectsValueBuildupModule
+              buildup={filteredBuildup}
+              fullScaleRunRateUsd={filteredKpis.fullScaleRunRateUsd}
+              assumptions={assumptions}
+              bare
+            />
+          </div>
+        ),
+      },
+      {
+        id: "projects",
+        label: `AI Projects${filteredProjects.length > 0 ? ` (${filteredProjects.length})` : ""}`,
+        content: (
+          <AIProjectsModule
+            projects={filteredProjects}
+            bare
+            onRetryCohort={retryCohort}
+            retryDisabled={isLoading || debouncing}
+          />
+        ),
+      },
+      {
+        id: "matrix",
+        label: "Value × Effort",
+        content: (
+          <ValueEffortMatrix
+            projects={filteredProjects}
+            onSelect={openProject}
             bare
           />
-        </div>
-      ),
-    },
-    {
-      id: "projects",
-      label: `AI Projects${state.projects.length > 0 ? ` (${state.projects.length})` : ""}`,
-      content: (
-        <AIProjectsModule
-          projects={state.projects}
-          bare
-          onRetryCohort={retryCohort}
-          retryDisabled={isLoading || debouncing}
-        />
-      ),
-    },
-    {
-      id: "matrix",
-      label: "Value × Effort",
-      content: (
-        <ValueEffortMatrix
-          projects={state.projects}
-          onSelect={openProject}
-          bare
-        />
-      ),
-    },
-    {
-      id: "roadmap",
-      label: "Roadmap",
-      content: (
-        <ProjectsRoadmapModule
-          projects={state.projects}
-          synthesis={state.synthesis}
-          assumptions={assumptions}
-          onSelectProject={openProject}
-          bare
-        />
-      ),
-    },
-    {
-      id: "lineage",
-      label: "Lineage",
-      content: (
-        <LineageTab
-          projects={state.projects}
-          program={program}
-          onOpenProject={openProject}
-        />
-      ),
-    },
-    {
-      id: "architecture",
-      label: "Architecture",
-      content: (
-        <ProgramArchitecturePanel
-          projects={state.projects}
-          synthesis={state.synthesis}
-          bare
-        />
-      ),
-    },
-    {
-      id: "assumptions",
-      label: "Assumptions",
-      content: (
-        <AssumptionsTab
-          assumptions={assumptions}
-          excludedCount={program.threshold.excludedCount}
-          excludedAiUsd={program.threshold.excludedAiUsd}
-          onChange={update}
-          onReset={reset}
-          isStale={isStale}
-        />
-      ),
-    },
-    {
-      id: "risks",
-      label: "Risks",
-      content: (
-        <ProgramRisksPanel synthesis={state.synthesis} bare />
-      ),
-    },
-  ];
+        ),
+      },
+      {
+        id: "roadmap",
+        label: "Roadmap",
+        content: (
+          <div className="space-y-4">
+            {viewFiltersActive ? <ViewFilterNarrativeNotice /> : null}
+            <ProjectsRoadmapModule
+              projects={filteredProjects}
+              synthesis={state.synthesis}
+              assumptions={assumptions}
+              onSelectProject={openProject}
+              bare
+            />
+          </div>
+        ),
+      },
+      {
+        id: "lineage",
+        label: "Lineage",
+        content: (
+          <LineageTab
+            projects={filteredProjects}
+            program={program}
+            onOpenProject={openProject}
+          />
+        ),
+      },
+      {
+        id: "architecture",
+        label: "Architecture",
+        content: (
+          <div className="space-y-4">
+            {viewFiltersActive ? <ViewFilterNarrativeNotice /> : null}
+            <ProgramArchitecturePanel
+              projects={filteredProjects}
+              synthesis={state.synthesis}
+              bare
+            />
+          </div>
+        ),
+      },
+      {
+        id: "assumptions",
+        label: "Assumptions",
+        content: (
+          <AssumptionsTab
+            assumptions={assumptions}
+            excludedCount={program.threshold.excludedCount}
+            excludedAiUsd={program.threshold.excludedAiUsd}
+            onChange={update}
+            onReset={reset}
+            isStale={isStale}
+          />
+        ),
+      },
+      {
+        id: "risks",
+        label: "Risks",
+        content: (
+          <div className="space-y-4">
+            {viewFiltersActive ? <ViewFilterNarrativeNotice /> : null}
+            <ProgramRisksPanel synthesis={state.synthesis} bare />
+          </div>
+        ),
+      },
+    ],
+    [
+      assumptions,
+      debouncing,
+      filteredBuildup,
+      filteredKpis,
+      filteredProgram,
+      filteredProjects,
+      isLoading,
+      isStale,
+      openProject,
+      program,
+      retryCohort,
+      state.synthesis,
+      update,
+      reset,
+      viewFiltersActive,
+    ],
+  );
 
   // ---------------------------------------------------------------------
   //   Render
@@ -287,6 +385,12 @@ export function CrossTowerAiPlanClient() {
               {state.synthesis?.executiveSummary ??
                 defaultExecutiveSummary(isFirstRun)}
             </p>
+            {viewFiltersActive ? (
+              <p className="mt-2 text-[11px] text-forge-subtle">
+                Tower and phase filters narrow KPIs and project surfaces below.
+                The executive summary reflects the full generated plan.
+              </p>
+            ) : null}
           </div>
 
           <div className="flex flex-col items-stretch gap-3 lg:items-end">
@@ -344,12 +448,109 @@ export function CrossTowerAiPlanClient() {
           </ul>
         ) : null}
 
+        {/* ============= VIEW FILTERS ============= */}
+        <section
+          className="mt-8 rounded-xl border border-forge-border bg-forge-surface/60 px-4 py-4"
+          aria-label="Tower and phase filters"
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <p className="max-w-2xl text-[11px] leading-snug text-forge-subtle">
+                Toggle towers and phases to narrow KPIs and project views.
+                Nothing selected means that dimension is unrestricted (full
+                program). Tower pills use short codes; hover for the full tower
+                name.
+              </p>
+              {viewFiltersActive ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedTowerIds([]);
+                    setSelectedPhases([]);
+                  }}
+                  className="shrink-0 text-xs font-medium text-accent-purple-dark underline-offset-2 hover:underline"
+                >
+                  Clear all
+                </button>
+              ) : null}
+            </div>
+
+            <div
+              className="flex flex-nowrap items-center gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-forge-border"
+            >
+              <div
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-forge-border/90 bg-forge-well/50 py-0.5 pl-1 pr-0.5"
+                role="group"
+                aria-label="Towers"
+              >
+                <span className="select-none whitespace-nowrap pl-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-accent-purple-dark">
+                  <span className="text-forge-hint" aria-hidden>
+                    &gt;{" "}
+                  </span>
+                  Towers
+                </span>
+                {allTowers.map((t) => {
+                  const pressed = selectedTowerIds.includes(t.id);
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      aria-pressed={pressed}
+                      title={t.name}
+                      onClick={() => toggleTower(t.id)}
+                      className={towerViewPillClasses(pressed)}
+                    >
+                      {compactTowerPillLabel(t.id)}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div
+                className="mx-1 flex h-7 shrink-0 flex-col items-center justify-center self-center px-1"
+                aria-hidden
+              >
+                <div className="h-full min-h-[1.25rem] w-px rounded-full bg-forge-border-strong" />
+              </div>
+
+              <div
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-forge-border/90 bg-forge-well/50 py-0.5 pl-1 pr-0.5"
+                role="group"
+                aria-label="Program phase"
+              >
+                <span className="select-none whitespace-nowrap pl-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-accent-teal">
+                  <span className="text-forge-hint" aria-hidden>
+                    &gt;{" "}
+                  </span>
+                  Phases
+                </span>
+                {CROSS_TOWER_VIEW_PHASES.map((pt) => {
+                  const L = programTierLabel(pt);
+                  const pressed = selectedPhases.includes(pt);
+                  return (
+                    <button
+                      key={pt}
+                      type="button"
+                      aria-pressed={pressed}
+                      title={L.axisLabel}
+                      onClick={() => togglePhase(pt)}
+                      className={phaseViewPillClasses(pressed, pt)}
+                    >
+                      {L.numeral}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ============= KPI STRIP ============= */}
-        <div className="mt-8">
+        <div className="mt-6">
           <ProjectsKpiStrip
-            kpis={state.kpis}
-            buildup={state.buildup}
-            stubProjectCount={state.kpis.stubProjects}
+            kpis={filteredKpis}
+            buildup={filteredBuildup}
+            stubProjectCount={filteredKpis.stubProjects}
             hasNarrative={state.synthesis !== null}
           />
         </div>
@@ -360,6 +561,7 @@ export function CrossTowerAiPlanClient() {
             tabs={tabs}
             value={activeTabId}
             onChange={setActiveTabId}
+            panelClassName="overflow-visible"
           />
         </div>
 
@@ -385,10 +587,60 @@ export function CrossTowerAiPlanClient() {
 }
 
 // ---------------------------------------------------------------------------
-//   Helpers — staleness, regenerate button, default copy
+//   Helpers — filtered-view notices, staleness, regenerate button, default copy
 // ---------------------------------------------------------------------------
 
 import type { CrossTowerAssumptions } from "@/lib/cross-tower/assumptions";
+
+function ViewFilterNarrativeNotice() {
+  return (
+    <div className="rounded-lg border border-accent-purple/25 bg-accent-purple/5 px-3 py-2 text-[11px] leading-snug text-forge-body">
+      <span className="font-semibold text-accent-purple-dark">
+        Filtered view.
+      </span>{" "}
+      Narrative below was authored for the full program; tables and charts on
+      this tab follow your tower and phase selections.
+    </div>
+  );
+}
+
+/** Short tower key for dense filter pills (full name in `title`). */
+function compactTowerPillLabel(towerId: string): string {
+  if (towerId === "hr") return "HR";
+  const parts = towerId.split("-").filter(Boolean);
+  if (parts.length <= 1) {
+    const w = parts[0] ?? towerId;
+    return w.length <= 3 ? w.toUpperCase() : w.slice(0, 3).toUpperCase();
+  }
+  return parts.map((p) => p.charAt(0).toUpperCase()).join("");
+}
+
+function towerViewPillClasses(active: boolean): string {
+  const base =
+    "shrink-0 min-w-[1.75rem] rounded-full border px-1.5 py-0.5 text-center font-mono text-[10px] font-semibold leading-none tracking-tight transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-purple/50 focus-visible:ring-offset-1 focus-visible:ring-offset-forge-bg";
+  if (active) {
+    return `${base} border-accent-purple/55 bg-accent-purple/15 text-accent-purple-dark`;
+  }
+  return `${base} border-forge-border bg-forge-well/30 text-forge-body hover:border-forge-border hover:bg-forge-well/55`;
+}
+
+function phaseViewPillClasses(
+  active: boolean,
+  phase: CrossTowerViewPhaseId,
+): string {
+  const base =
+    "shrink-0 inline-flex min-w-[1.75rem] items-center justify-center rounded-full border px-1.5 py-0.5 font-mono text-[10px] font-semibold leading-none transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-purple/50 focus-visible:ring-offset-1 focus-visible:ring-offset-forge-bg";
+  if (!active) {
+    return `${base} border-forge-border bg-forge-well/30 text-forge-body hover:border-forge-border hover:bg-forge-well/55`;
+  }
+  if (phase === "P1") {
+    return `${base} border-accent-red/55 bg-accent-red/10 text-forge-ink`;
+  }
+  if (phase === "P2") {
+    return `${base} border-accent-amber/55 bg-accent-amber/10 text-forge-ink`;
+  }
+  return `${base} border-accent-teal/55 bg-accent-teal/10 text-forge-ink`;
+}
 
 function timingMatches(
   applied: CrossTowerAssumptions,

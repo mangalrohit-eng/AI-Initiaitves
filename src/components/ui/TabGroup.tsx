@@ -19,11 +19,14 @@ export type TabItem = { id: string; label: string; content: React.ReactNode };
 export function TabGroup({
   tabs,
   className,
+  panelClassName,
   value,
   onChange,
 }: {
   tabs: TabItem[];
   className?: string;
+  /** Merged onto the animated tab panel (e.g. overflow-visible for nested horizontal layouts). */
+  panelClassName?: string;
   value?: string;
   onChange?: (id: string) => void;
 }) {
@@ -92,7 +95,10 @@ export function TabGroup({
           exit={{ opacity: 0, x: index % 2 === 0 ? 12 : -12 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
           role="tabpanel"
-          className="rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-card sm:p-6"
+          className={cn(
+            "rounded-2xl border border-forge-border bg-forge-surface p-4 shadow-card sm:p-6",
+            panelClassName,
+          )}
         >
           {activeTab?.content}
         </motion.div>

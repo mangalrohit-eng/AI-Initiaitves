@@ -66,16 +66,16 @@ export function ProjectBriefDrawer({
       <div
         aria-hidden
         onClick={onClose}
-        className={`fixed inset-0 z-40 bg-forge-bg/70 backdrop-blur-sm transition-opacity ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        className={`fixed inset-0 z-40 bg-forge-ink/45 backdrop-blur-[2px] transition-opacity ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
       />
       <aside
         role="dialog"
         aria-modal="true"
         aria-label={`${project.name} project brief`}
-        className={`fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl transform flex-col border-l border-forge-border bg-forge-bg shadow-2xl transition-transform ${open ? "translate-x-0" : "translate-x-full"}`}
+        className={`fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl transform flex-col border-l border-forge-border bg-forge-surface shadow-2xl transition-transform ${open ? "translate-x-0" : "translate-x-full"}`}
       >
         <DrawerHeader project={project} onClose={onClose} />
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto bg-forge-surface px-6 py-5">
           {project.isStub ? (
             <StubBody project={project} />
           ) : project.brief ? (
@@ -172,7 +172,7 @@ function DrawerHeader({
 function StubBody({ project }: { project: AIProjectResolved }) {
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-accent-amber/30 bg-accent-amber/5 p-4">
+      <div className="rounded-2xl border border-accent-amber/40 bg-forge-well p-4">
         <div className="flex items-start gap-2">
           <AlertTriangle
             className="mt-0.5 h-4 w-4 text-accent-amber"
@@ -220,7 +220,7 @@ function FullBody({
           <ul className="mt-3 space-y-1.5 text-sm text-forge-body">
             {brief.currentPainPoints.map((p, i) => (
               <li key={i} className="flex gap-2">
-                <span className="mt-1.5 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-accent-red/70" />
+                <span className="mt-1.5 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-accent-red" />
                 <span>{p}</span>
               </li>
             ))}
@@ -411,8 +411,8 @@ function WorkStateBlock({
 }) {
   const toneBorder =
     tone === "pre"
-      ? "border-forge-border bg-forge-well/30"
-      : "border-accent-purple/30 bg-accent-purple/[0.04]";
+      ? "border-forge-border bg-forge-well"
+      : "border-accent-purple/40 bg-forge-well";
   return (
     <div className={`rounded-xl border ${toneBorder} p-3`}>
       <div className="text-[10px] font-semibold uppercase tracking-wider text-forge-subtle">
@@ -455,8 +455,8 @@ function RoleColumn({
 }) {
   const toneBorder =
     tone === "pre"
-      ? "border-forge-border bg-forge-well/30"
-      : "border-accent-teal/30 bg-accent-teal/[0.04]";
+      ? "border-forge-border bg-forge-well"
+      : "border-accent-teal/40 bg-forge-well";
   return (
     <div className={`rounded-xl border ${toneBorder} p-3`}>
       <div className="text-[10px] font-semibold uppercase tracking-wider text-forge-subtle">
@@ -464,7 +464,7 @@ function RoleColumn({
       </div>
       <ul className="mt-2 space-y-2 text-xs">
         {roles.map((r, i) => (
-          <li key={i} className="border-b border-forge-border/40 pb-2 last:border-b-0 last:pb-0">
+          <li key={i} className="border-b border-forge-border pb-2 last:border-b-0 last:pb-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-forge-ink">
                 {r.role}
@@ -505,8 +505,8 @@ function ToolColumn({
 }) {
   const toneBorder =
     tone === "pre"
-      ? "border-forge-border bg-forge-well/30"
-      : "border-accent-purple/30 bg-accent-purple/[0.04]";
+      ? "border-forge-border bg-forge-well"
+      : "border-accent-purple/40 bg-forge-well";
   return (
     <div className={`rounded-xl border ${toneBorder} p-3`}>
       <div className="text-[10px] font-semibold uppercase tracking-wider text-forge-subtle">
@@ -539,7 +539,7 @@ function PlatformList({
         {platforms.map((p, i) => (
           <li
             key={i}
-            className="rounded-lg border border-forge-border bg-forge-well/30 p-2"
+            className="rounded-lg border border-forge-border bg-forge-well p-2"
           >
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium text-forge-ink">{p.platform}</span>
@@ -568,7 +568,7 @@ function AgentTable({ agents }: { agents: AgentLLM[] }) {
   return (
     <div className="mt-3 overflow-hidden rounded-xl border border-forge-border">
       <table className="w-full text-left text-xs">
-        <thead className="bg-forge-well/50 text-[10px] uppercase tracking-wider text-forge-subtle">
+        <thead className="bg-forge-well-strong text-[10px] uppercase tracking-wider text-forge-subtle">
           <tr>
             <th className="px-3 py-2">Agent</th>
             <th className="px-3 py-2">Type</th>
@@ -580,7 +580,7 @@ function AgentTable({ agents }: { agents: AgentLLM[] }) {
           {agents.map((a, i) => (
             <tr
               key={i}
-              className="border-t border-forge-border/60 align-top"
+              className="border-t border-forge-border align-top"
             >
               <td className="px-3 py-2 font-medium text-forge-ink">{a.name}</td>
               <td className="px-3 py-2">
@@ -707,12 +707,12 @@ function RationaleBlock({
   if (!text) return null;
   const toneClass =
     bucketTone === "purple"
-      ? "border-accent-purple/30 bg-accent-purple/5"
+      ? "border-accent-purple/40 bg-forge-well"
       : bucketTone === "green"
-        ? "border-accent-green/30 bg-accent-green/5"
+        ? "border-accent-green/40 bg-forge-well"
         : bucketTone === "amber"
-          ? "border-accent-amber/30 bg-accent-amber/5"
-          : "border-forge-border bg-forge-well/30";
+          ? "border-accent-amber/40 bg-forge-well"
+          : "border-forge-border bg-forge-well";
   return (
     <div className={`rounded-xl border p-3 ${toneClass}`}>
       <div className="flex items-center justify-between gap-2">
@@ -751,15 +751,15 @@ function Chip({
 }) {
   const toneClass =
     tone === "purple"
-      ? "border-accent-purple/40 bg-accent-purple/10 text-accent-purple-dark"
+      ? "border-accent-purple/50 bg-forge-well text-accent-purple-dark"
       : tone === "green"
-        ? "border-accent-green/40 bg-accent-green/10 text-accent-green"
+        ? "border-accent-green/50 bg-forge-well text-accent-green"
         : tone === "amber"
-          ? "border-accent-amber/40 bg-accent-amber/10 text-accent-amber"
+          ? "border-accent-amber/50 bg-forge-well text-accent-amber"
           : tone === "teal"
-            ? "border-accent-teal/40 bg-accent-teal/10 text-accent-teal"
+            ? "border-accent-teal/50 bg-forge-well text-accent-teal"
             : tone === "red"
-              ? "border-accent-red/30 bg-accent-red/5 text-accent-red"
+              ? "border-accent-red/45 bg-forge-well text-accent-red"
               : "border-forge-border bg-forge-well text-forge-body";
   return (
     <span
@@ -781,9 +781,9 @@ function SmallChip({ children }: { children: React.ReactNode }) {
 function priorityClasses(p: PlatformRequirementLLM["priority"]): string {
   switch (p) {
     case "Critical":
-      return "border-accent-red/40 bg-accent-red/10 text-accent-red";
+      return "border-accent-red/50 bg-forge-well text-accent-red";
     case "Important":
-      return "border-accent-amber/40 bg-accent-amber/10 text-accent-amber";
+      return "border-accent-amber/50 bg-forge-well text-accent-amber";
     default:
       return "border-forge-border bg-forge-well text-forge-body";
   }
@@ -792,15 +792,15 @@ function priorityClasses(p: PlatformRequirementLLM["priority"]): string {
 function agentTypeClasses(type: AgentLLM["type"]): string {
   switch (type) {
     case "Orchestrator":
-      return "border-accent-purple/40 bg-accent-purple/10 text-accent-purple-dark";
+      return "border-accent-purple/50 bg-forge-well text-accent-purple-dark";
     case "Specialist":
-      return "border-accent-teal/40 bg-accent-teal/10 text-accent-teal";
+      return "border-accent-teal/50 bg-forge-well text-accent-teal";
     case "Monitor":
-      return "border-blue-500/40 bg-blue-500/10 text-blue-500";
+      return "border-blue-500/50 bg-forge-well text-blue-600";
     case "Router":
-      return "border-accent-amber/40 bg-accent-amber/10 text-accent-amber";
+      return "border-accent-amber/50 bg-forge-well text-accent-amber";
     case "Executor":
-      return "border-accent-green/40 bg-accent-green/10 text-accent-green";
+      return "border-accent-green/50 bg-forge-well text-accent-green";
     default:
       return "border-forge-border bg-forge-well text-forge-body";
   }
@@ -809,9 +809,9 @@ function agentTypeClasses(type: AgentLLM["type"]): string {
 function impactTierClasses(tier: "High" | "Medium" | "Low"): string {
   switch (tier) {
     case "High":
-      return "border-accent-purple/40 bg-accent-purple/10 text-accent-purple-dark";
+      return "border-accent-purple/50 bg-forge-well text-accent-purple-dark";
     case "Medium":
-      return "border-accent-amber/40 bg-accent-amber/10 text-accent-amber";
+      return "border-accent-amber/50 bg-forge-well text-accent-amber";
     default:
       return "border-forge-border bg-forge-well text-forge-body";
   }

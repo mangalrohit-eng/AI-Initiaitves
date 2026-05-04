@@ -55,6 +55,8 @@ import {
 } from "@/lib/cross-tower/deckPayload";
 import { exportProjectsToExcel } from "@/lib/cross-tower/exportProjectsExcel";
 import { useRedactDollars } from "@/lib/clientMode";
+import { getAssessProgram, subscribe } from "@/lib/localStore";
+import { latestTowerIntakeImportedAtIso } from "@/lib/assess/towerReadinessIntake";
 
 /**
  * Cross-Tower AI Plan v3 — page-level shell.
@@ -135,6 +137,25 @@ export function CrossTowerAiPlanClient() {
   const isStale = programStale || assumptionsStale || timingStale;
   const isFirstRun =
     !hasGenerated && !isLoading && !state.hydratingFromDb;
+
+  const [intakeNudge, setIntakeNudge] = React.useState(false);
+  React.useEffect(() => {
+    const sync = () => {
+      const latest = latestTowerIntakeImportedAtIso(getAssessProgram());
+      const genAt = state.generatedAt;
+      setIntakeNudge(
+        Boolean(
+          state.status === "ready" &&
+            latest &&
+            genAt &&
+            latest > genAt &&
+            state.synthesis,
+        ),
+      );
+    };
+    sync();
+    return subscribe("assessProgram", sync);
+  }, [state.generatedAt, state.status, state.synthesis]);
 
   // Debounce regenerate clicks; force regeneration when the user clicks on
   // an unchanged scenario (they're asking for a *new* narrative for the
@@ -666,6 +687,17 @@ export function CrossTowerAiPlanClient() {
               </li>
             ))}
           </ul>
+        ) : null}
+
+        {intakeNudge ? (
+          <div className="mt-4 rounded-lg border border-accent-teal/40 bg-accent-teal/5 px-3 py-2 text-xs text-forge-body">
+            <span className="font-semibold text-accent-teal">
+              Tower AI readiness questionnaire updated
+            </span>{" "}
+            after this plan was generated. Regenerate to refresh program narrative
+            (risks, roadmap, architecture commentary) with the latest tower lead
+            intake.
+          </div>
         ) : null}
 
         {/* ============= VIEW FILTERS ============= */}

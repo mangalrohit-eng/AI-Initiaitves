@@ -29,6 +29,7 @@ import type {
 import type { GeneratedBrief, TowerId } from "@/data/assess/types";
 import { digitalCore, orchestration, role, tool, workState } from "@/data/helpers";
 import { VENDOR_ALLOW_LIST } from "./curateInitiativesLLM";
+import { TOWER_READINESS_MAX_DIGEST_CHARS } from "@/lib/assess/towerReadinessIntake";
 
 const HARDCODED_MODEL = "gpt-5.5";
 /** Override with `OPENAI_CURATE_BRIEF_MODEL`. GPT-5.x uses the Responses API + `reasoning` in this module. */
@@ -77,6 +78,8 @@ export type CurateBriefLLMInput = {
   aiRationale: string;
   agentOneLine?: string;
   primaryVendor?: string;
+  /** Tower AI readiness questionnaire digest (optional). */
+  towerIntakeDigest?: string;
 };
 
 export type CurateBriefLLMOptions = {
@@ -756,8 +759,18 @@ export function normalizeLlmProcess(rawRoot: unknown, input: CurateBriefLLMInput
   };
 }
 
-function buildSystemPrompt(towerId: TowerId): string {
+function buildSystemPrompt(towerId: TowerId, towerIntakeDigest?: string): string {
   const th = TOWER_BRAND_HINT[towerId] ?? "Versant tower (context not authored).";
+  const digest = towerIntakeDigest?.trim()
+    ? towerIntakeDigest.trim().slice(0, TOWER_READINESS_MAX_DIGEST_CHARS)
+    : "";
+  const digestBlock = digest
+    ? [
+        "",
+        "TOWER LEAD QUESTIONNAIRE (authoritative for this tower when it conflicts with generic hints):",
+        digest,
+      ].join("\n")
+    : "";
   return [
     "You are a senior Versant operating partner. Output ONE JSON object only (the root fields of a 'Process' initiative). Every string must be Versant-specific. Declarative voice. No emojis. No hedging (no 'may', 'could', 'leverage AI').",
     "",
@@ -779,7 +792,7 @@ function buildSystemPrompt(towerId: TowerId): string {
     VENDOR_ALLOW_LIST.map((v) => `  - ${v}`).join("\n"),
     "",
     "Return strict JSON. No keys outside the Process. No markdown fences.",
-  ].join("\n");
+  ].join("\n") + digestBlock;
 }
 
 function buildUserPrompt(input: CurateBriefLLMInput): string {
@@ -789,9 +802,18 @@ function buildUserPrompt(input: CurateBriefLLMInput): string {
   // `l4Id` fields for wire back-compat). When the optional `l4` Activity
   // Group context is supplied, surface it explicitly so the model anchors
   // the brief in the right rung of the hierarchy.
+  const digest = input.towerIntakeDigest?.trim()
+    ? truncate(
+        input.towerIntakeDigest.trim().slice(0, TOWER_READINESS_MAX_DIGEST_CHARS),
+        8_000,
+      )
+    : "";
   const hasL4 = typeof input.l4 === "string" && input.l4.trim().length > 0;
   const leafLabel = hasL4 ? "L5 Activity" : "leaf";
   return [
+    digest
+      ? `Tower questionnaire context (see system prompt):\n${digest}\n`
+      : "",
     `Author a complete Process for this ${leafLabel}. Operational metrics in work states must be labeled indicative / not client-specific if numeric.`,
     `Stable id: ${input.l4Id} (set Process.id to something stable like "llm-${input.l4Id}" or a slug derived from the name).`,
     `L2 Job Grouping: ${truncate(input.l2)}`,
@@ -802,7 +824,7 @@ function buildUserPrompt(input: CurateBriefLLMInput): string {
     input.agentOneLine ? `Agent one-liner: ${truncate(input.agentOneLine, 280)}` : "",
     input.primaryVendor ? `Primary vendor: ${input.primaryVendor}` : "",
   ]
-    .filter(Boolean)
+    .filter((line) => line !== "")
     .join("\n");
 }
 
@@ -827,8 +849,11 @@ async function fetchProcessJsonFromChatCompletions(
       temperature: 0.2,
       max_tokens: maxOut,
       response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: buildSystemPrompt(input.towerId) },
+        messages: [
+        {
+          role: "system",
+          content: buildSystemPrompt(input.towerId, input.towerIntakeDigest),
+        },
         { role: "user", content: buildUserPrompt(input) },
       ],
     }),
@@ -875,7 +900,7 @@ async function fetchProcessJsonFromResponsesApi(
     },
     body: JSON.stringify({
       model,
-      instructions: buildSystemPrompt(input.towerId),
+      instructions: buildSystemPrompt(input.towerId, input.towerIntakeDigest),
       // Responses API requires the word "json" in the user input when using text.format json_object
       input: `Return a single JSON object (Process shape per instructions).\n\n${buildUserPrompt(input)}`,
       reasoning: { effort: reasoningEffort },

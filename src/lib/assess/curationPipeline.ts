@@ -36,6 +36,7 @@ import type {
   TowerId,
 } from "@/data/assess/types";
 import { getAssessProgram, setTowerAssess } from "@/lib/localStore";
+import { buildTowerReadinessDigest } from "@/lib/assess/towerReadinessIntake";
 import {
   computeCurationContentHash,
   hasInFlightRows,
@@ -157,6 +158,9 @@ export async function runForRows(
   // Single batched call. The server route owns the LLM-vs-fallback decision
   // and validates vendor names + canonical not-eligible reasons before
   // returning.
+  const towerIntakeDigest = buildTowerReadinessDigest(
+    getAssessProgram().towers[opts.towerId]?.aiReadinessIntake,
+  );
   const apiRes = await clientCurateInitiatives(
     opts.towerId,
     eligibleInputs.map((e) => ({
@@ -170,6 +174,7 @@ export async function runForRows(
       l4: e.row.l4,
       l5Activities: e.l5Activities,
     })),
+    towerIntakeDigest ? { towerIntakeDigest } : undefined,
   );
 
   if (!apiRes.ok) {
@@ -520,17 +525,24 @@ export async function regenerateRowWithFeedback(
   }
 
   // ----- Stage 2: curate the new L4 list with the same feedback.
-  const curRes = await clientCurateInitiatives(towerId, [
-    {
-      rowId,
-      l2: targetRow.l2,
-      l3: targetRow.l3,
-      // V5 L4 Activity Group context — see the note in `runForRows`.
-      l4: targetRow.l4,
-      l5Activities: newL4Activities,
-      ...(feedback ? { feedback } : {}),
-    },
-  ]);
+  const digest = buildTowerReadinessDigest(
+    getAssessProgram().towers[towerId]?.aiReadinessIntake,
+  );
+  const curRes = await clientCurateInitiatives(
+    towerId,
+    [
+      {
+        rowId,
+        l2: targetRow.l2,
+        l3: targetRow.l3,
+        // V5 L4 Activity Group context — see the note in `runForRows`.
+        l4: targetRow.l4,
+        l5Activities: newL4Activities,
+        ...(feedback ? { feedback } : {}),
+      },
+    ],
+    digest ? { towerIntakeDigest: digest } : undefined,
+  );
   if (!curRes.ok) {
     const error = `Curate failed (${curRes.status}): ${curRes.error}`;
     rollbackRow(towerId, rowId, snapshot, error);

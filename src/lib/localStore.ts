@@ -25,6 +25,7 @@ import {
   markRowsStaleByHash,
 } from "@/lib/initiatives/curationHash";
 import { mergeLeadDeadlines, parseLeadDeadlines } from "@/lib/program/leadDeadlines";
+import { parseAiReadinessIntakeFromUnknown } from "@/lib/assess/towerReadinessIntake";
 //
 // Conventions:
 //   - Every key is prefixed `forge.` to avoid collisions with other apps.
@@ -876,6 +877,10 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
     // snapshots simply have no entries and every L4 reads as "pending".
     const reviews = coerceInitiativeReviews(v.initiativeReviews);
     if (reviews) towerState.initiativeReviews = reviews;
+    const intake = parseAiReadinessIntakeFromUnknown(
+      (v as Record<string, unknown>).aiReadinessIntake,
+    );
+    if (intake) towerState.aiReadinessIntake = intake;
     towers[k as TowerId] = towerState;
   }
 

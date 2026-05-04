@@ -41,6 +41,7 @@ import {
   type CurateBriefLLMInput,
 } from "@/lib/assess/curateBriefLLM";
 import type { GeneratedProcessCache, TowerId } from "@/data/assess/types";
+import { TOWER_READINESS_MAX_DIGEST_CHARS } from "@/lib/assess/towerReadinessIntake";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,6 +60,7 @@ type Body = {
   aiRationale?: unknown;
   agentOneLine?: unknown;
   primaryVendor?: unknown;
+  towerIntakeDigest?: unknown;
 };
 
 export async function POST(req: Request) {
@@ -99,6 +101,11 @@ export async function POST(req: Request) {
     typeof body.primaryVendor === "string" && body.primaryVendor.trim()
       ? body.primaryVendor.trim()
       : undefined;
+  const digestRaw =
+    typeof body.towerIntakeDigest === "string" ? body.towerIntakeDigest.trim() : "";
+  const towerIntakeDigest = digestRaw
+    ? digestRaw.slice(0, TOWER_READINESS_MAX_DIGEST_CHARS)
+    : undefined;
 
   const input: CurateBriefLLMInput = {
     towerId,
@@ -110,6 +117,7 @@ export async function POST(req: Request) {
     aiRationale,
     agentOneLine,
     primaryVendor,
+    ...(towerIntakeDigest ? { towerIntakeDigest } : {}),
   };
 
   let warning: string | undefined;

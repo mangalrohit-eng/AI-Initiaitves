@@ -24,6 +24,7 @@ import {
 } from "@/lib/localStore";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import { clientCurateBrief } from "@/lib/assess/assessClientApi";
+import { buildTowerReadinessDigest } from "@/lib/assess/towerReadinessIntake";
 import { ProcessMetrics } from "@/components/processes/ProcessMetrics";
 import { BusinessCase } from "@/components/processes/BusinessCase";
 import { ProcessExperience } from "@/components/processes/ProcessExperience";
@@ -34,6 +35,10 @@ import type {
 } from "@/data/assess/types";
 import type { Process } from "@/data/types";
 import { feasibilityChip } from "@/lib/feasibilityChip";
+import {
+  intakeHasMinimumSubstance,
+  TOWER_READINESS_ATTRIBUTION_LABEL,
+} from "@/lib/assess/towerReadinessIntake";
 
 type Params = { slug: string; rowId: string; l4Id: string };
 
@@ -101,6 +106,9 @@ export default function LLMBriefPage() {
     setGenerating(true);
     setWarning(undefined);
     setGenerationError(undefined);
+    const digest = buildTowerReadinessDigest(
+      getAssessProgram().towers[l4Context.towerId]?.aiReadinessIntake,
+    );
     const res = await clientCurateBrief({
       towerId: l4Context.towerId,
       l2: l4Context.l2,
@@ -111,6 +119,7 @@ export default function LLMBriefPage() {
       aiRationale: l4Context.aiRationale,
       agentOneLine: l4Context.agentOneLine,
       primaryVendor: l4Context.primaryVendor,
+      ...(digest ? { towerIntakeDigest: digest } : {}),
     });
     setGenerating(false);
     if (!res.ok) {
@@ -408,6 +417,12 @@ export default function LLMBriefPage() {
             ) : generatedLabel === "fallback" ? (
               "Source: placeholder structure (see warning above; configure API and Regenerate)."
             ) : null}
+            {generatedLabel === "llm" &&
+            intakeHasMinimumSubstance(
+              getAssessProgram().towers[tower.id as TowerId]?.aiReadinessIntake,
+            )
+              ? ` · ${TOWER_READINESS_ATTRIBUTION_LABEL}`
+              : ""}
             {l4Item.generatedProcess?.generatedAt
               ? ` · ${new Date(l4Item.generatedProcess.generatedAt).toLocaleString(undefined, {
                   month: "short",

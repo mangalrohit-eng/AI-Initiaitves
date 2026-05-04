@@ -9,6 +9,7 @@ import {
   getTowerStaleState,
   hasInFlightRows,
 } from "@/lib/initiatives/curationHash";
+import { shouldShowIntakeStaleBannerCopy } from "@/lib/assess/towerReadinessIntake";
 import {
   queuedRowIdsForTower,
   runForRows,
@@ -72,6 +73,7 @@ export function StaleCurationBanner({
   );
   const visible = stale.initiativesStale;
   const missingL4ForRefresh = stale.missingL4ForRefresh;
+  const intakeStaleCopy = shouldShowIntakeStaleBannerCopy(program.towers[towerId]);
 
   const [showDiff, setShowDiff] = React.useState(false);
   const [running, setRunning] = React.useState(false);
@@ -154,14 +156,23 @@ export function StaleCurationBanner({
                 hideTitle && "sr-only",
               )}
             >
-              Capability map updated.{" "}
-              <span className="font-mono text-accent-amber">
-                {queuedCount}
-              </span>{" "}
-              of{" "}
-              <span className="font-mono text-forge-body">{totalCount}</span>{" "}
-              {queuedCount === 1 ? "Activity Group has" : "Activity Groups have"} stale
-              AI guidance.
+              {intakeStaleCopy ? (
+                <>
+                  Tower AI readiness questionnaire updated.{" "}
+                  <span className="font-mono text-accent-amber">{queuedCount}</span>{" "}
+                  of <span className="font-mono text-forge-body">{totalCount}</span>{" "}
+                  {queuedCount === 1 ? "Activity Group has" : "Activity Groups have"} stale
+                  AI guidance.
+                </>
+              ) : (
+                <>
+                  Capability map updated.{" "}
+                  <span className="font-mono text-accent-amber">{queuedCount}</span>{" "}
+                  of <span className="font-mono text-forge-body">{totalCount}</span>{" "}
+                  {queuedCount === 1 ? "Activity Group has" : "Activity Groups have"} stale
+                  AI guidance.
+                </>
+              )}
             </h3>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-forge-subtle">

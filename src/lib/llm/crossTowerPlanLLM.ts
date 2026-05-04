@@ -106,6 +106,8 @@ export type GenerateCrossTowerPlanOptions = {
   modelOverride?: string;
   forceRegenerate?: boolean;
   retryCohortIds?: string[];
+  /** Tower AI readiness digest(s) for program synthesis narrative only. */
+  synthesisIntakeDigest?: string;
 };
 
 export type GenerateCrossTowerPlanResult = {
@@ -120,6 +122,16 @@ export type GenerateCrossTowerPlanResult = {
 
 export function isLLMConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
+}
+
+function intakeDigestFingerprint(digest: string | undefined): string {
+  if (!digest?.trim()) return "none";
+  let h = 5381;
+  const s = digest;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 33) ^ s.charCodeAt(i);
+  }
+  return (h >>> 0).toString(36);
 }
 
 export function resolveModelId(override?: string): string {
@@ -271,10 +283,12 @@ export async function generateCrossTowerPlan(
     );
     const projectsDigest = projectsDigestFor(projects);
     const timingHash = hashTimingContext(options.assumptions);
+    const intakeDigestHash = intakeDigestFingerprint(options.synthesisIntakeDigest);
     const cacheKey = {
       projectsDigest,
       timingHash,
       assumptionsHash,
+      intakeDigestHash,
       modelId,
       promptVersion: PROMPT_VERSION,
     } as const;
@@ -293,6 +307,7 @@ export async function generateCrossTowerPlan(
           assumptions: options.assumptions,
           modelId,
           authoredProjectIds: new Set(projects.map((p) => p.id)),
+          synthesisIntakeDigest: options.synthesisIntakeDigest,
         });
         putCachedSynthesis(cacheKey, {
           synthesis,
@@ -367,6 +382,7 @@ async function authorSynthesisWithRetry(args: {
   assumptions: CrossTowerAssumptions;
   modelId: string;
   authoredProjectIds: Set<string>;
+  synthesisIntakeDigest?: string;
 }): Promise<ProgramSynthesisLLM> {
   let lastReasons: string[] | null = null;
   let lastRaw: string | null = null;
@@ -375,6 +391,7 @@ async function authorSynthesisWithRetry(args: {
       projects: args.projects,
       stubbedCohortNames: args.stubbedCohortNames,
       assumptions: args.assumptions,
+      synthesisIntakeDigest: args.synthesisIntakeDigest,
     });
     const repair =
       attempt === 1 && lastReasons && lastRaw

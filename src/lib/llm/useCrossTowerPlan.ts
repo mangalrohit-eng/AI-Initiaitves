@@ -30,6 +30,8 @@ import type {
 } from "@/lib/llm/crossTowerPlanLLM";
 import { PROMPT_VERSION } from "@/lib/llm/prompts/crossTowerAiPlan.v3";
 import type { SelectProgramResult } from "@/lib/initiatives/selectProgram";
+import { getAssessProgram } from "@/lib/localStore";
+import { buildProgramWideTowerIntakeDigest } from "@/lib/assess/towerReadinessIntake";
 
 /** Sentinel when no LLM ran (zero in-plan cohorts after threshold). */
 const EMPTY_COHORT_PERSIST_MODEL_ID = "empty-cohort" as const;
@@ -396,6 +398,8 @@ export function useCrossTowerPlan(
       }));
 
       try {
+        const synthesisIntakeDigest =
+          buildProgramWideTowerIntakeDigest(getAssessProgram()) ?? undefined;
         const body = {
           inputHash: programNow.inputHash,
           assumptionsHash,
@@ -403,6 +407,7 @@ export function useCrossTowerPlan(
           assumptions: assumptionsNow,
           forceRegenerate: opts.forceRegenerate === true,
           retryCohortIds: opts.retryCohortIds,
+          ...(synthesisIntakeDigest ? { synthesisIntakeDigest } : {}),
         };
         const res = await fetch("/api/cross-tower-ai-plan/generate", {
           method: "POST",

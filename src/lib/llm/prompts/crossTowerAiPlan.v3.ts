@@ -51,7 +51,7 @@ import type {
   L4Cohort,
 } from "@/lib/cross-tower/aiProjects";
 
-export const PROMPT_VERSION = "v3.0.0";
+export const PROMPT_VERSION = "v3.1.0";
 
 // ---------------------------------------------------------------------------
 //   Static grounding (Versant context, brand/people/vendor allow-lists)
@@ -171,6 +171,8 @@ export type ProgramSynthesisPromptInput = {
   /** Cohorts that failed authoring — passed so synthesis can skirt them in narrative. */
   stubbedCohortNames: string[];
   assumptions: CrossTowerAssumptions;
+  /** Optional per-tower questionnaire digests for program narrative (risks, roadmap tone). */
+  synthesisIntakeDigest?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -403,7 +405,8 @@ function buildProjectSchemaSpec(): string {
 export function buildProgramSynthesisPrompt(
   input: ProgramSynthesisPromptInput,
 ): string {
-  const { projects, stubbedCohortNames, assumptions } = input;
+  const { projects, stubbedCohortNames, assumptions, synthesisIntakeDigest } =
+    input;
   const lines: string[] = [];
   lines.push(
     "CALL TYPE: Author the program-level synthesis given the authored AI Projects below.",
@@ -435,6 +438,18 @@ export function buildProgramSynthesisPrompt(
     "Use these to align the roadmap narrative to the Gantt the engine renders. Never echo the numbers themselves in your output — you may reference 'first half-year', 'second half-year', 'second year' as qualitative anchors.",
   );
   lines.push("");
+
+  if (synthesisIntakeDigest && synthesisIntakeDigest.trim()) {
+    lines.push("===========================================================================");
+    lines.push("TOWER LEAD QUESTIONNAIRES (Cross-tower)");
+    lines.push("===========================================================================");
+    lines.push(
+      "Tower leads submitted the following Forge Tower AI Readiness Intake content. Honor constraints, no-go zones, and systems named here in executive summary, roadmap, risks, and dependency narrative. Do not contradict explicit no-go language. Never invent financial figures.",
+    );
+    lines.push("");
+    lines.push(synthesisIntakeDigest.trim());
+    lines.push("");
+  }
 
   lines.push("===========================================================================");
   lines.push("OUTPUT SCHEMA — return STRICT JSON ONLY in exactly this shape:");

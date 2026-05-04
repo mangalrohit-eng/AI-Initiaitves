@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowUpRight, CalendarClock, Compass, Rocket } from "lucide-react";
@@ -9,7 +10,16 @@ import { feasibilityChip } from "@/lib/feasibilityChip";
 import { useInitiativeReviews } from "@/lib/initiatives/useInitiativeReviews";
 import type { InitiativeL3, InitiativeL4 } from "@/lib/initiatives/select";
 import type { UseInitiativeReviewsResult } from "@/lib/initiatives/useInitiativeReviews";
-import type { InitiativeReview } from "@/data/assess/types";
+import type { InitiativeReview, L4WorkforceRow, TowerId } from "@/data/assess/types";
+import {
+  getAssessProgram,
+  subscribe,
+} from "@/lib/localStore";
+import {
+  intakeHasMinimumSubstance,
+  rowCurationUsesCurrentIntake,
+  TOWER_READINESS_ATTRIBUTION_LABEL,
+} from "@/lib/assess/towerReadinessIntake";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
 import { InitiativeReviewActions } from "./InitiativeReviewActions";
@@ -46,12 +56,14 @@ function RoadmapCard({
   index,
   review,
   actions,
+  showQuestionnaireAttribution,
 }: {
   tower: Tower;
   item: RoadmapItem;
   index: number;
   review: InitiativeReview | undefined;
   actions: UseInitiativeReviewsResult["actions"];
+  showQuestionnaireAttribution: boolean;
 }) {
   const redact = useRedactDollars();
   const { l4, l3 } = item;
@@ -104,6 +116,11 @@ function RoadmapCard({
       {l4.aiRationale ? (
         <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-forge-body">
           {l4.aiRationale}
+        </p>
+      ) : null}
+      {showQuestionnaireAttribution ? (
+        <p className="mt-1.5 text-[10px] leading-snug text-forge-hint">
+          {TOWER_READINESS_ATTRIBUTION_LABEL}
         </p>
       ) : null}
 
@@ -170,6 +187,20 @@ function RoadmapCard({
 
 export function AiRoadmap({ tower }: { tower: Tower }) {
   const { result, reviews, actions } = useInitiativeReviews(tower);
+  const [programAssess, setProgramAssess] = React.useState(() => getAssessProgram());
+  React.useEffect(() => {
+    setProgramAssess(getAssessProgram());
+    return subscribe("assessProgram", () => setProgramAssess(getAssessProgram()));
+  }, []);
+
+  const intake = programAssess.towers[tower.id as TowerId]?.aiReadinessIntake;
+  const rowById = React.useMemo(() => {
+    const m = new Map<string, L4WorkforceRow>();
+    for (const r of programAssess.towers[tower.id as TowerId]?.l4Rows ?? []) {
+      m.set(r.id, r);
+    }
+    return m;
+  }, [programAssess, tower.id]);
 
   const grouped: Record<Feasibility, RoadmapItem[]> = { High: [], Low: [] };
   for (const l2 of result.l2s) {
@@ -309,16 +340,23 @@ export function AiRoadmap({ tower }: { tower: Tower }) {
                     No activities in this band yet.
                   </div>
                 ) : (
-                  col.items.map((item, i) => (
-                    <RoadmapCard
-                      key={item.l4.id}
-                      tower={tower}
-                      item={item}
-                      index={i}
-                      review={reviews[item.l4.id]}
-                      actions={actions}
-                    />
-                  ))
+                  col.items.map((item, i) => {
+                    const wfRow = rowById.get(item.l3.rowId);
+                    const showQuestionnaireAttribution =
+                      intakeHasMinimumSubstance(intake) &&
+                      rowCurationUsesCurrentIntake(wfRow, intake);
+                    return (
+                      <RoadmapCard
+                        key={item.l4.id}
+                        tower={tower}
+                        item={item}
+                        index={i}
+                        review={reviews[item.l4.id]}
+                        actions={actions}
+                        showQuestionnaireAttribution={showQuestionnaireAttribution}
+                      />
+                    );
+                  })
                 )}
               </div>
             </div>

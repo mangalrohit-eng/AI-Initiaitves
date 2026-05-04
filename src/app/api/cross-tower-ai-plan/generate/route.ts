@@ -56,6 +56,7 @@ import {
   clampAssumptions,
   type CrossTowerAssumptions,
 } from "@/lib/cross-tower/assumptions";
+import { TOWER_READINESS_MAX_DIGEST_CHARS } from "@/lib/assess/towerReadinessIntake";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,6 +75,7 @@ type Body = {
   modelId?: unknown;
   forceRegenerate?: unknown;
   retryCohortIds?: unknown;
+  synthesisIntakeDigest?: unknown;
 };
 
 export async function POST(req: Request) {
@@ -135,6 +137,13 @@ export async function POST(req: Request) {
     typeof body.modelId === "string" ? body.modelId : undefined;
   const forceRegenerate = body.forceRegenerate === true;
   const retryCohortIds = sanitizeRetryCohortIds(body.retryCohortIds);
+  const digestRaw =
+    typeof body.synthesisIntakeDigest === "string"
+      ? body.synthesisIntakeDigest.trim()
+      : "";
+  const synthesisIntakeDigest = digestRaw
+    ? digestRaw.slice(0, TOWER_READINESS_MAX_DIGEST_CHARS * 2)
+    : undefined;
   const modelId = resolveModelId(modelOverride);
 
   // ---- LLM not configured -> deterministic-only stubs --------------------
@@ -169,6 +178,7 @@ export async function POST(req: Request) {
       modelOverride,
       forceRegenerate,
       retryCohortIds,
+      synthesisIntakeDigest,
     });
     logMetadata("ok", {
       modelId: result.modelId,

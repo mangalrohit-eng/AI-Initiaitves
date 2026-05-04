@@ -6,6 +6,7 @@ import type { Tower } from "@/data/types";
 import { ProcessLandscape } from "./ProcessLandscape";
 import { AiRoadmap } from "./AiRoadmap";
 import { useInitiativeReviews } from "@/lib/initiatives/useInitiativeReviews";
+import { TowerReadinessIntakePanel } from "./TowerReadinessIntakePanel";
 
 export function OperatingModelSection({
   tower,
@@ -35,6 +36,7 @@ export function OperatingModelSection({
 
   return (
     <div className="space-y-10">
+      <TowerReadinessIntakePanel tower={tower} />
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>

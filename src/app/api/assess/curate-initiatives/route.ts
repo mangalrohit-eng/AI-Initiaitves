@@ -14,6 +14,7 @@
  * Body:
  *   {
  *     towerId: TowerId,
+ *     towerIntakeDigest?: string,   // optional; bounded digest from Tower AI Readiness Intake
  *     rows: [{
  *       rowId: string,
  *       l2: string,                  // V5: L2 Job Grouping
@@ -65,6 +66,7 @@ import {
 } from "@/lib/assess/curateInitiativesLLM";
 import { composeL4Verdict } from "@/lib/initiatives/composeVerdict";
 import type { TowerId } from "@/data/assess/types";
+import { TOWER_READINESS_MAX_DIGEST_CHARS } from "@/lib/assess/towerReadinessIntake";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,6 +77,7 @@ const MAX_FEEDBACK_CHARS = 600;
 type Body = {
   towerId?: unknown;
   rows?: unknown;
+  towerIntakeDigest?: unknown;
 };
 
 export async function POST(req: Request) {
@@ -153,6 +156,12 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  const digestRaw =
+    typeof body.towerIntakeDigest === "string" ? body.towerIntakeDigest.trim() : "";
+  const towerIntakeDigest = digestRaw
+    ? digestRaw.slice(0, TOWER_READINESS_MAX_DIGEST_CHARS)
+    : undefined;
+
   const totalL5s = rows.reduce((s, r) => s + r.l5Activities.length, 0);
   if (totalL5s > MAX_L4S_PER_CALL) {
     return NextResponse.json(
@@ -167,7 +176,9 @@ export async function POST(req: Request) {
   let warning: string | undefined;
   if (isLLMConfigured()) {
     try {
-      llmRows = await curateInitiativesWithLLM(towerId, rows);
+      llmRows = await curateInitiativesWithLLM(towerId, rows, {
+        towerIntakeDigest,
+      });
     } catch (e) {
       warning =
         "AI curation unavailable; used deterministic verdict composer. " +

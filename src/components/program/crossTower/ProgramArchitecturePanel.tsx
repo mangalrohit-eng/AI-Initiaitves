@@ -6,6 +6,11 @@ import type {
   AIProjectResolved,
   ProgramSynthesisLLM,
 } from "@/lib/cross-tower/aiProjects";
+import { getAssessProgram, subscribe } from "@/lib/localStore";
+import {
+  buildProgramWideTowerIntakeDigest,
+  TOWER_READINESS_ATTRIBUTION_LABEL,
+} from "@/lib/assess/towerReadinessIntake";
 
 /**
  * Cross-Tower AI Plan v3 — program architecture panel.
@@ -36,6 +41,15 @@ export function ProgramArchitecturePanel({
   bare?: boolean;
 }) {
   const rollups = React.useMemo(() => buildRollups(projects), [projects]);
+  const [hasProgramIntake, setHasProgramIntake] = React.useState(false);
+  React.useEffect(() => {
+    const sync = () =>
+      setHasProgramIntake(
+        Boolean(buildProgramWideTowerIntakeDigest(getAssessProgram())),
+      );
+    sync();
+    return subscribe("assessProgram", sync);
+  }, []);
 
   const Header = (
     <header className="flex flex-wrap items-end justify-between gap-3">
@@ -50,6 +64,12 @@ export function ProgramArchitecturePanel({
           come from the project briefs; the surrounding narrative is GPT-5.5
           authored.
         </p>
+        {synthesis && hasProgramIntake ? (
+          <p className="mt-2 max-w-3xl text-[10px] leading-snug text-forge-hint">
+            {TOWER_READINESS_ATTRIBUTION_LABEL}: program synthesis prompts include
+            submitted tower intake where available.
+          </p>
+        ) : null}
       </div>
       {synthesis ? (
         <span className="inline-flex items-center gap-1 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">

@@ -379,6 +379,7 @@ export type CurateInitiativesResult = {
 export async function clientCurateInitiatives(
   towerId: TowerId,
   rows: CurateInitiativesRowInput[],
+  opts?: { towerIntakeDigest?: string },
 ): Promise<
   | { ok: true; result: CurateInitiativesResult }
   | { ok: false; error: string; status: number }
@@ -387,7 +388,11 @@ export async function clientCurateInitiatives(
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ towerId, rows }),
+    body: JSON.stringify({
+      towerId,
+      rows,
+      ...(opts?.towerIntakeDigest ? { towerIntakeDigest: opts.towerIntakeDigest } : {}),
+    }),
   });
   const text = await res.text();
   let body: unknown;
@@ -445,6 +450,8 @@ export type CurateBriefInput = {
   aiRationale: string;
   agentOneLine?: string;
   primaryVendor?: string;
+  /** Optional tower AI readiness digest for Workbench / Digital Core grounding. */
+  towerIntakeDigest?: string;
 };
 
 export type CurateBriefSource = "llm" | "fallback";

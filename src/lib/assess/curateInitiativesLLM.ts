@@ -42,6 +42,7 @@ import type {
 } from "@/data/types";
 import type { AiCurationStatus } from "@/data/capabilityMap/types";
 import type { NotEligibleReason, TowerId } from "@/data/assess/types";
+import { TOWER_READINESS_MAX_DIGEST_CHARS } from "@/lib/assess/towerReadinessIntake";
 
 const DEFAULT_MODEL = "gpt-4o-mini";
 const DEFAULT_TIMEOUT_MS = 90_000;
@@ -131,6 +132,8 @@ export type CurateLLMOptions = {
   /** Override env (`OPENAI_CURATE_INITIATIVES_MODEL` then `OPENAI_MODEL`; default `gpt-4o-mini`). */
   model?: string;
   timeoutMs?: number;
+  /** Tower AI readiness questionnaire digest — same cap as `towerReadinessIntake`. */
+  towerIntakeDigest?: string;
 };
 
 /**
@@ -273,9 +276,22 @@ class LLMError extends Error {
   }
 }
 
-function buildSystemPrompt(towerId: TowerId): string {
+function buildSystemPrompt(towerId: TowerId, towerIntakeDigest?: string): string {
   const towerContext =
     TOWER_CONTEXT[towerId] ?? "Versant tower (context not authored).";
+  const digestBlock =
+    towerIntakeDigest && towerIntakeDigest.trim().length > 0
+      ? [
+          "",
+          "===========================================================================",
+          "TOWER LEAD QUESTIONNAIRE (Forge Tower AI Readiness Intake)",
+          "===========================================================================",
+          "When the following conflicts with the generic tower paragraph above, the questionnaire WINS for this tower's systems, tools, experiments, data, constraints, instincts, quick wins, and explicit no-go zones.",
+          "Authority order: questionnaire facts > per-row user feedback > generic tower paragraph. Per-row feedback still CANNOT override the vendor allow-list or the five canonical not-eligible reasons.",
+          "",
+          towerIntakeDigest.trim(),
+        ].join("\n")
+      : "";
   return [
     "You curate Versant Media Group L5 Activities (the leaf rung under each L4 Activity Group on the 5-layer capability map) for an AI initiatives agenda. Every output must be Versant-specific and declarative — never generic.",
     "",
@@ -324,7 +340,7 @@ function buildSystemPrompt(towerId: TowerId): string {
     "",
     "agentOneLine MUST describe what the agent does + the concrete saving. Example: 'Reconciliation Agent matches intercompany transactions across 7+ Versant entities, auto-resolves timing diffs, flags exceptions for human review.' Never write 'leverages AI' or 'transforms the workflow'.",
     "",
-    "When per-row user feedback is provided, you MAY use it to shift feasibility / rationale / vendor selections — but feedback CANNOT bypass the canonical not-eligible reasons (the five strings above), the vendor allow-list, or the rule that editorial / negotiation / strategic-judgment activities stay reviewed-not-eligible. If feedback contradicts those constraints, ignore the contradicting part of the feedback and stay grounded.",
+    "When per-row user feedback is provided, you MAY use it to shift feasibility / rationale / vendor selections — but feedback CANNOT bypass the canonical not-eligible reasons (the five strings above), the vendor allow-list, or the rule that editorial / negotiation / strategic-judgment activities stay reviewed-not-eligible. When a tower questionnaire block appears above, it ranks above per-row feedback for tower-specific facts; if feedback contradicts those constraints, ignore the contradicting part of the feedback and stay grounded.",
     "",
     "Return STRICT JSON ONLY in this exact shape, with one outer item per input row, in INPUT ORDER, and one inner item per L5 Activity in EACH ROW'S INPUT ORDER:",
     '{"rows": [{"rowId": "<echo input rowId>", "l5Items": [',
@@ -345,7 +361,7 @@ function buildSystemPrompt(towerId: TowerId): string {
     "Use null for any field that doesn't apply (e.g., feasibility on a not-eligible item). Eligible items MUST set feasibility + aiRationale + frequency + criticality + currentMaturity + primaryVendor + agentOneLine. Not-eligible items MUST set notEligibleReason and aiRationale, leave the rest null.",
     "",
     "Do NOT skip rows. Do NOT add extra rows or extra L5 items. Echo `name` and `rowId` verbatim. Do NOT add prose outside the JSON object.",
-  ].join("\n");
+  ].join("\n") + digestBlock;
 }
 
 function buildUserPrompt(rows: CurateLLMRowInput[]): string {
@@ -494,6 +510,9 @@ export async function curateInitiativesWithLLM(
     process.env.OPENAI_MODEL?.trim() ??
     DEFAULT_MODEL;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const towerIntakeDigest = options.towerIntakeDigest?.trim()
+    ? options.towerIntakeDigest.trim().slice(0, TOWER_READINESS_MAX_DIGEST_CHARS)
+    : undefined;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -511,7 +530,7 @@ export async function curateInitiativesWithLLM(
         temperature: 0.2,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: buildSystemPrompt(towerId) },
+          { role: "system", content: buildSystemPrompt(towerId, towerIntakeDigest) },
           { role: "user", content: buildUserPrompt(rows) },
         ],
       }),

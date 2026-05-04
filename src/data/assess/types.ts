@@ -399,6 +399,27 @@ export type InitiativeReview = {
   snapshot: InitiativeReviewSnapshot;
 };
 
+/**
+ * Tower lead AI Readiness Intake (Excel). One object per tower; keyed fields
+ * mirror the Forge questionnaire template. Persisted on `TowerAssessState`
+ * and synced with the rest of `AssessProgramV5`.
+ */
+export type TowerAiReadinessIntake = {
+  systemsPlatforms: string;
+  currentAiTools: string;
+  experimentsLearnings: string;
+  dataRelevant: string;
+  constraints: string;
+  biggestImpact: string;
+  readyNow: string;
+  noGoAreas: string;
+  /** When the intake was last saved (import or manual). */
+  importedAt: string;
+  sourceFileName?: string;
+  /** Value from the Excel "Tower Name" cell — audit only; binding is app `towerId`. */
+  respondentTowerLabel?: string;
+};
+
 export type TowerAssessState = {
   l4Rows: L4WorkforceRow[];
   baseline: TowerBaseline;
@@ -423,6 +444,11 @@ export type TowerAssessState = {
    * to Postgres via `AssessSyncProvider` → `/api/assess` → `assess_workshop`.
    */
   initiativeReviews?: Record<string, InitiativeReview>;
+  /**
+   * Optional tower-lead questionnaire (Excel import). Drives LLM digest on
+   * curation, briefs, and Cross-Tower synthesis; not part of the L4 name hash.
+   */
+  aiReadinessIntake?: TowerAiReadinessIntake;
 } & TowerAssessReview;
 
 export type ChecklistStepId =

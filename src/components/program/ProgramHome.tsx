@@ -97,7 +97,7 @@ const FLOW: ReadonlyArray<FlowStep> = [
   },
 ];
 
-/** lg+ grid placement: row 1 = steps 1,2,3,4,6; row 2 = step 5 under step 4. */
+/** lg+ grid placement: row 1 = steps 1–4; row 2 = step 5 under step 4. (case 6 supports full FLOW if step 6 is re-shown.) */
 function flowStepLgGridClass(
   step: number,
   flow: ReadonlyArray<FlowStep>,
@@ -134,12 +134,12 @@ function flowStepLgGridClass(
 
 export function ProgramHome() {
   const redact = useRedactDollars();
-  const flow = React.useMemo(
-    () => (redact ? FLOW.filter((s) => s.step !== 3) : FLOW),
-    [redact],
-  );
+  const flow = React.useMemo(() => {
+    const base = redact ? FLOW.filter((s) => s.step !== 3) : FLOW;
+    return base.filter((s) => s.step !== 6);
+  }, [redact]);
   const hasStep3 = flow.some((s) => s.step === 3);
-  const lgCols = hasStep3 ? 5 : 4;
+  const lgCols = hasStep3 ? 4 : 3;
 
   return (
     <PageShell>
@@ -165,7 +165,7 @@ export function ProgramHome() {
             <span className="font-semibold text-accent-purple-dark">
               Cross Tower AI Plan
             </span>{" "}
-            (core program output), then offshore.
+            (core program output). Offshoring plan is linked below.
           </p>
           <p className="mt-1">
             <Link
@@ -182,7 +182,7 @@ export function ProgramHome() {
           aria-label="Tower-lead workflow"
           className={
             "mt-2 min-h-0 flex-1 grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-2 lg:items-stretch lg:gap-2 " +
-            (lgCols === 5 ? "lg:grid-cols-5" : "lg:grid-cols-4")
+            (lgCols === 4 ? "lg:grid-cols-4" : "lg:grid-cols-3")
           }
         >
           {flow.map((step) => {
@@ -236,15 +236,23 @@ export function ProgramHome() {
           })}
         </ol>
 
-        <div className="mt-2 shrink-0 flex flex-wrap gap-x-3 gap-y-0.5 text-[9px] font-medium uppercase tracking-wider text-forge-hint">
-          <span className="inline-flex items-center gap-1">
-            <span className="h-1 w-1 rounded-full bg-accent-purple" aria-hidden />
-            Discover 1–3
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="h-1 w-1 rounded-full bg-accent-teal" aria-hidden />
-            Design 4–6
-          </span>
+        <div className="mt-2 shrink-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[9px] font-medium uppercase tracking-wider text-forge-hint">
+            <span className="inline-flex items-center gap-1">
+              <span className="h-1 w-1 rounded-full bg-accent-purple" aria-hidden />
+              Discover 1–3
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-1 w-1 rounded-full bg-accent-teal" aria-hidden />
+              Design 4–5
+            </span>
+          </div>
+          <Link
+            href="/offshore-plan"
+            className="text-[10px] font-medium text-forge-hint underline decoration-forge-border decoration-1 underline-offset-2 hover:text-accent-purple-dark hover:decoration-accent-purple/50 sm:text-[11px]"
+          >
+            Offshoring
+          </Link>
         </div>
       </div>
     </PageShell>

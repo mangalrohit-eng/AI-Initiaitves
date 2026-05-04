@@ -16,6 +16,7 @@ import {
 import { getTowerFunctionName } from "@/data/towerFunctionNames";
 import { towers } from "@/data/towers";
 import { coerceInitiativeReviews, groupL4RowsToL3RowsForImport } from "@/lib/localStore";
+import { parseAiReadinessIntakeFromUnknown } from "@/lib/assess/towerReadinessIntake";
 
 export const ASSESS_PROGRAM_FILE_FORMAT = "forge-assess-program-v5" as const;
 const SUPPORTED_PROGRAM_VERSIONS: ReadonlyArray<number> = [2, 3, 4, 5];
@@ -319,6 +320,7 @@ export function importAssessProgramFromJsonText(
       // "pending". Round-trip preserved here so the API GET/PUT pipeline
       // doesn't silently strip the field on the way to / from Postgres.
       const reviews = coerceInitiativeReviews(v.initiativeReviews);
+      const aiReadinessIntake = parseAiReadinessIntakeFromUnknown(v.aiReadinessIntake);
 
       // Per-tower rates: prefer the snapshot's own `rates` blob; otherwise
       // start from seeded defaults and overlay any one-shot legacy
@@ -368,6 +370,7 @@ export function importAssessProgramFromJsonText(
             ? v.aiInitiativesValidatedAt
             : undefined,
         ...(reviews ? { initiativeReviews: reviews } : {}),
+        ...(aiReadinessIntake ? { aiReadinessIntake } : {}),
       };
     }
   }

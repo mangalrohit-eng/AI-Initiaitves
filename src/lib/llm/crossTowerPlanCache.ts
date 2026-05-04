@@ -57,6 +57,8 @@ export type SynthesisCacheKey = {
   timingHash: string;
   /** LLM-affecting assumptions hash (lens emphases). */
   assumptionsHash: string;
+  /** Fingerprint of tower questionnaire digest passed into synthesis (empty if none). */
+  intakeDigestHash: string;
   modelId: string;
   promptVersion: string;
 };
@@ -170,7 +172,7 @@ function projectKey(k: ProjectCacheKey): string {
 }
 
 function synthesisKey(k: SynthesisCacheKey): string {
-  return `${k.projectsDigest}::${k.timingHash}::${k.assumptionsHash}::${k.modelId}::${k.promptVersion}`;
+  return `${k.projectsDigest}::${k.timingHash}::${k.assumptionsHash}::${k.intakeDigestHash}::${k.modelId}::${k.promptVersion}`;
 }
 
 // ---------------------------------------------------------------------------

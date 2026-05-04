@@ -248,15 +248,30 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
   }, [sync, toast, towerId, towerName]);
 
   const clearL1L5TreeValidation = React.useCallback(async () => {
+    // Cascade: reopening Step 1 invalidates Step 2 sign-off because the
+    // headcount baseline Step 2 was confirmed against may now change.
+    // Demoting status also stops migrateBackfillStep1Validated (in
+    // localStore) from re-stamping l1L5TreeValidatedAt on the next read —
+    // without the demotion, towers that previously reached `status:
+    // "complete"` (e.g. Finance, HR) get silently re-locked because the
+    // migration treats a missing Step-1 stamp on a complete tower as a
+    // legacy backfill case. Mirrors the cascade `importOp.run` already
+    // performs when a tower lead uploads a new map over the top.
+    const cur = getAssessProgram().towers[towerId];
+    const rowCount = cur?.l4Rows.length ?? 0;
     setTowerAssess(towerId, {
       l1L5TreeValidatedAt: undefined,
       l1L3TreeValidatedAt: undefined,
+      status: rowCount > 0 ? "data" : "empty",
+      headcountConfirmedAt: undefined,
+      offshoreConfirmedAt: undefined,
+      aiConfirmedAt: undefined,
     });
     if (sync?.canSync) await sync.flushSave();
     toast.info({
       title: "Capability map unlocked for editing",
       description:
-        "You can change headcount, upload a new map, or adjust L5 Activities. Confirm again when ready to proceed.",
+        "Step 2 (Impact Levers) is also back to pending sign-off — re-confirm once headcount and dial choices are workshop-ready.",
     });
   }, [sync, toast, towerId]);
 

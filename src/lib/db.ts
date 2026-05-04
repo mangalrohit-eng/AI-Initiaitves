@@ -33,3 +33,10 @@ export function isDatabaseUrlConfigured(): boolean {
 }
 
 export { DEFAULT_ID as ASSESS_WORKSHOP_ID };
+
+/**
+ * Single-row id for `cross_tower_ai_plan`. Same value as `ASSESS_WORKSHOP_ID`
+ * by design (single-tenant workshop), but kept as its own constant so a
+ * future split into per-workshop or per-cohort rows only changes one site.
+ */
+export const CROSS_TOWER_AI_PLAN_ID = DEFAULT_ID;

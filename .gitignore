@@ -25,6 +25,7 @@
 /screenshots/
 /.tmp-audit/
 /scripts/.curate-brief-smoke-out/
+/scripts/.out/
 *.pem
 
 # debug

@@ -2,93 +2,407 @@
 
 import * as React from "react";
 import type {
-  ProgramArchitecture,
-  ProgramInitiativeRow,
-  SelectProgramResult,
-  TowerInScope,
-} from "@/lib/initiatives/selectProgram";
-import type {
+  AIProjectLLM,
+  AIProjectResolved,
   CrossTowerAiPlanLLM,
-  PromptDeprioritizedInitiative,
-  PromptKeyInitiative,
-} from "@/lib/llm/prompts/crossTowerAiPlan.v1";
-import type { Tier } from "@/lib/priority";
+  ProgramSynthesisLLM,
+} from "@/lib/cross-tower/aiProjects";
+import { buildL4Cohorts } from "@/lib/cross-tower/aiProjects";
+import {
+  buildInitiativesByIdForHydrate,
+  PERSISTED_CROSS_TOWER_PLAN_VERSION,
+  type PersistedCrossTowerAiPlan,
+} from "@/lib/cross-tower/persistedPlan";
+import {
+  composeProjects,
+  buildProjectsBuildScale,
+  summarizeProjects,
+  type BuildupPoint,
+  type ProjectKpis,
+} from "@/lib/cross-tower/composeProjects";
+import {
+  hashAssumptions,
+  type CrossTowerAssumptions,
+} from "@/lib/cross-tower/assumptions";
+import type {
+  CohortStatus,
+  SynthesisStatus,
+} from "@/lib/llm/crossTowerPlanLLM";
+import { PROMPT_VERSION } from "@/lib/llm/prompts/crossTowerAiPlan.v3";
+import type { SelectProgramResult } from "@/lib/initiatives/selectProgram";
 
-export type PlanFetchSource = "llm" | "cache" | "deterministic";
+/** Sentinel when no LLM ran (zero in-plan cohorts after threshold). */
+const EMPTY_COHORT_PERSIST_MODEL_ID = "empty-cohort" as const;
 
-export type PlanFetchState = {
-  status: "idle" | "loading" | "ready" | "error";
-  /** When status is `ready`, the LLM-authored plan (or null on deterministic-only). */
-  plan: CrossTowerAiPlanLLM | null;
-  source: PlanFetchSource | null;
-  modelId: string | null;
-  promptVersion: string | null;
-  /** Local time of last successful generation. */
-  generatedAt: string | null;
-  inputHash: string | null;
-  /** Whether the response indicated narrative is unavailable. */
-  narrativeUnavailable: boolean;
-  /** Network/server error message when status is `error`. */
-  errorMessage: string | null;
-  /** Optional warning surfaced from the server (e.g. fallback reason). */
-  warning: string | null;
+/**
+ * Cross-Tower AI Plan v3 — page-level state hook.
+ *
+ * Responsibilities:
+ *
+ *   1) Snapshot the program + assumptions at the moment of Regenerate. The
+ *      executive's draft assumption edits do NOT mutate the rendered KPIs,
+ *      Gantt, or value curve until the next click — this is the "no live
+ *      updates" UX guarantee.
+ *   2) Build the L4 cohorts from the program substrate, hand them to the
+ *      server, and merge the LLM-authored projects + synthesis with the
+ *      deterministic compose layer to produce `AIProjectResolved[]` plus
+ *      KPIs and the value buildup curve.
+ *   3) Track cohortStatus + synthesisStatus + warnings so the UI can render
+ *      "stub" cards with a per-card retry CTA.
+ *   4) **Persist + rehydrate** — after each successful Regenerate, PUT the
+ *      LLM payload + cohort snapshot to Postgres (when configured). On
+ *      mount, GET restores the last saved plan and seeds compose without an
+ *      LLM round-trip when the hook is still idle (race-safe vs. early clicks).
+ */
+
+export type PlanPersistenceMode =
+  | "ok"
+  | "unconfigured"
+  | "unavailable"
+  | "unknown";
+
+export type RegenerateOptions = {
+  forceRegenerate?: boolean;
+  retryCohortIds?: string[];
 };
 
-const INITIAL_STATE: PlanFetchState = {
+export type CrossTowerPlanState = {
+  status: "idle" | "loading" | "ready" | "error";
+  /** True until GET /api/cross-tower-ai-plan/state settles (distinct from assumptions hydrate). */
+  hydratingFromDb: boolean;
+  /** Workshop DB disposition for persistence captions. */
+  persistenceMode: PlanPersistenceMode;
+  /** Resolved projects derived from `appliedProgram` + `appliedAssumptions` + LLM payload. */
+  projects: AIProjectResolved[];
+  /** 24-month value-buildup curve derived from `projects`. */
+  buildup: BuildupPoint[];
+  /** Aggregate KPIs derived from `projects`. */
+  kpis: ProjectKpis;
+  /** LLM-authored synthesis payload (or null on stubs / not-yet-generated). */
+  synthesis: ProgramSynthesisLLM | null;
+  /** Per-cohort status from the server response. */
+  cohortStatus: CohortStatus[];
+  /** Synthesis status from the server response. */
+  synthesisStatus: SynthesisStatus | null;
+  /** Hash of the program substrate the current `projects` were composed against. */
+  appliedInputHash: string | null;
+  /** Hash of the assumptions the current `projects` were composed against. */
+  appliedAssumptionsHash: string | null;
+  /** Snapshot of assumptions at last successful Regenerate. */
+  appliedAssumptions: CrossTowerAssumptions | null;
+  modelId: string | null;
+  promptVersion: string | null;
+  /** ISO timestamp of last successful generation. */
+  generatedAt: string | null;
+  /** Network/server error (status === "error"). */
+  errorMessage: string | null;
+  /** Aggregated server warnings to surface on the page banner. */
+  warnings: string[];
+};
+
+const INITIAL_STATE: CrossTowerPlanState = {
   status: "idle",
-  plan: null,
-  source: null,
+  hydratingFromDb: true,
+  persistenceMode: "unknown",
+  projects: [],
+  buildup: [],
+  kpis: {
+    totalProjects: 0,
+    liveProjects: 0,
+    stubProjects: 0,
+    deprioritizedProjects: 0,
+    quickWinCount: 0,
+    strategicBetCount: 0,
+    fillInCount: 0,
+    totalAttributedAiUsd: 0,
+    liveAttributedAiUsd: 0,
+    m24RunRateUsd: 0,
+    fullScaleRunRateUsd: 0,
+    agentsArchitected: 0,
+    towersInScope: 0,
+  },
+  synthesis: null,
+  cohortStatus: [],
+  synthesisStatus: null,
+  appliedInputHash: null,
+  appliedAssumptionsHash: null,
+  appliedAssumptions: null,
   modelId: null,
   promptVersion: null,
   generatedAt: null,
-  inputHash: null,
-  narrativeUnavailable: false,
   errorMessage: null,
-  warning: null,
+  warnings: [],
 };
 
-type GenerateOptions = {
-  forceRegenerate?: boolean;
-  modelId?: string;
+function isIdleSeedState(prev: CrossTowerPlanState): boolean {
+  return (
+    prev.status === "idle" &&
+    prev.generatedAt === null &&
+    prev.appliedInputHash === null &&
+    prev.projects.length === 0
+  );
+}
+
+export type UseCrossTowerPlanArgs = {
+  program: SelectProgramResult;
+  assumptions: CrossTowerAssumptions;
 };
 
-/**
- * Manages the lifecycle of the GPT-5.5 plan generation for the Cross-Tower
- * AI Plan page. Stateful — keeps the latest plan in React state so the page
- * can render LLM-authored regions immediately on subsequent renders.
- *
- * Manual-only: the hook does NOT auto-fire on mount or on `inputHash`
- * changes. The page is responsible for surfacing a "stale" or "first run"
- * nudge so the user knows when to click Regenerate. Reasoning: workshop
- * usage patterns (rapid threshold/dial nudging) made auto-fire spend tokens
- * on intermediate states the user never sees. Click is the single source of
- * generation intent.
- */
+export type UseCrossTowerPlanResult = {
+  state: CrossTowerPlanState;
+  /** Manual regenerate trigger — applies all knobs atomically. */
+  regenerate: (opts?: RegenerateOptions) => Promise<void>;
+  /** Retry just one cohort (e.g. on a stub card). */
+  retryCohort: (l4RowId: string) => Promise<void>;
+};
+
 export function useCrossTowerPlan(
-  program: SelectProgramResult,
-): {
-  state: PlanFetchState;
-  regenerate: (opts?: GenerateOptions) => Promise<void>;
-} {
-  const [state, setState] = React.useState<PlanFetchState>(INITIAL_STATE);
-  const inflightControllerRef = React.useRef<AbortController | null>(null);
+  args: UseCrossTowerPlanArgs,
+): UseCrossTowerPlanResult {
+  const { program, assumptions } = args;
+  const [state, setState] = React.useState<CrossTowerPlanState>(INITIAL_STATE);
+  const inflightRef = React.useRef<AbortController | null>(null);
+
+  const programRef = React.useRef(program);
+  const assumptionsRef = React.useRef(assumptions);
+  React.useEffect(() => {
+    programRef.current = program;
+  }, [program]);
+  React.useEffect(() => {
+    assumptionsRef.current = assumptions;
+  }, [assumptions]);
+
+  const persistSnapshot = React.useCallback((doc: PersistedCrossTowerAiPlan) => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/cross-tower-ai-plan/state", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(doc),
+        });
+        let bodyDb: PlanPersistenceMode | undefined;
+        try {
+          const j = (await res.json()) as { db?: PlanPersistenceMode };
+          bodyDb = j.db;
+        } catch {
+          bodyDb = undefined;
+        }
+        if (!res.ok) {
+          const mode: PlanPersistenceMode =
+            res.status === 503 && bodyDb === "unconfigured"
+              ? "unconfigured"
+              : res.status === 503 && bodyDb === "unavailable"
+                ? "unavailable"
+                : "unknown";
+          setState((prev) => ({
+            ...prev,
+            persistenceMode: mode,
+            warnings: [
+              ...prev.warnings,
+              "Plan generated but couldn't save — refresh will revert to the last saved plan.",
+            ],
+          }));
+          return;
+        }
+        setState((prev) => ({ ...prev, persistenceMode: "ok" }));
+      } catch {
+        setState((prev) => ({
+          ...prev,
+          persistenceMode: "unavailable",
+          warnings: [
+            ...prev.warnings,
+            "Plan generated but couldn't save — refresh will revert to the last saved plan.",
+          ],
+        }));
+      }
+    })();
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/cross-tower-ai-plan/state");
+        const json = (await res.json()) as {
+          ok?: boolean;
+          plan?: PersistedCrossTowerAiPlan | null;
+          db?: PlanPersistenceMode;
+          updatedAt?: string | null;
+          loadWarning?: string;
+        };
+        if (cancelled) return;
+
+        const db = json.db ?? "unknown";
+
+        if (!json.ok) {
+          setState((prev) => ({
+            ...prev,
+            hydratingFromDb: false,
+            persistenceMode: db === "unknown" ? "unknown" : db,
+          }));
+          return;
+        }
+
+        const loadExtras: string[] = [];
+        if (typeof json.loadWarning === "string" && json.loadWarning) {
+          loadExtras.push(json.loadWarning);
+        }
+
+        if (db === "unavailable") {
+          setState((prev) => ({
+            ...prev,
+            hydratingFromDb: false,
+            persistenceMode: "unavailable",
+            warnings: [
+              ...prev.warnings,
+              ...loadExtras,
+              "Saved plan unavailable — database unreachable. Click Regenerate to author a new plan.",
+            ],
+          }));
+          return;
+        }
+
+        if (db === "unconfigured") {
+          setState((prev) => ({
+            ...prev,
+            hydratingFromDb: false,
+            persistenceMode: "unconfigured",
+            warnings: loadExtras.length ? [...prev.warnings, ...loadExtras] : prev.warnings,
+          }));
+          return;
+        }
+
+        if (!json.plan) {
+          setState((prev) => ({
+            ...prev,
+            hydratingFromDb: false,
+            persistenceMode: "ok",
+            warnings: loadExtras.length ? [...prev.warnings, ...loadExtras] : prev.warnings,
+          }));
+          return;
+        }
+
+        const saved = json.plan;
+        const initiativesById = buildInitiativesByIdForHydrate(
+          saved.cohorts,
+          programRef.current,
+        );
+        const composed = composeProjects({
+          cohorts: saved.cohorts,
+          projects: saved.plan.projects,
+          cohortStatus: saved.cohortStatus,
+          initiativesById,
+          assumptions: saved.appliedAssumptions,
+        });
+        const buildup = buildProjectsBuildScale(composed);
+        const kpis = summarizeProjects(composed);
+
+        setState((prev) => {
+          const common = {
+            hydratingFromDb: false as const,
+            persistenceMode: "ok" as PlanPersistenceMode,
+            warnings: loadExtras.length ? [...prev.warnings, ...loadExtras] : prev.warnings,
+          };
+          if (!isIdleSeedState(prev)) {
+            return { ...prev, ...common };
+          }
+          return {
+            ...prev,
+            ...common,
+            status: "ready" as const,
+            projects: composed,
+            buildup,
+            kpis,
+            synthesis: saved.plan.synthesis,
+            cohortStatus: saved.cohortStatus,
+            synthesisStatus: saved.synthesisStatus,
+            appliedInputHash: saved.inputHash,
+            appliedAssumptionsHash: saved.assumptionsHash,
+            appliedAssumptions: saved.appliedAssumptions,
+            modelId: saved.modelId || null,
+            promptVersion: saved.promptVersion || null,
+            generatedAt: saved.generatedAt,
+            errorMessage: null,
+          };
+        });
+      } catch {
+        if (!cancelled) {
+          setState((prev) => ({
+            ...prev,
+            hydratingFromDb: false,
+            persistenceMode:
+              prev.persistenceMode === "unknown" ? "unknown" : prev.persistenceMode,
+          }));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fetchPlan = React.useCallback(
-    async (opts: GenerateOptions = {}) => {
-      // Cancel any in-flight request before starting a new one.
-      if (inflightControllerRef.current) {
-        inflightControllerRef.current.abort();
-      }
-      const controller = new AbortController();
-      inflightControllerRef.current = controller;
+    async (opts: RegenerateOptions = {}) => {
+      const programNow = programRef.current;
+      const assumptionsNow = assumptionsRef.current;
+      const cohorts = buildL4Cohorts(programNow);
+      const initiativesById = new Map(
+        programNow.initiatives.map((r) => [r.id, r] as const),
+      );
+      const assumptionsHash = hashAssumptions(assumptionsNow);
 
-      setState((prev) => ({ ...prev, status: "loading", errorMessage: null }));
+      if (cohorts.length === 0) {
+        const generatedAt = new Date().toISOString();
+        const emptyWarnings = [
+          "No initiatives in plan — adjust the threshold in Assumptions to include more L4 Activity Groups.",
+        ];
+        setState((prev) => ({
+          ...INITIAL_STATE,
+          hydratingFromDb: prev.hydratingFromDb,
+          persistenceMode: prev.persistenceMode,
+          status: "ready",
+          appliedInputHash: programNow.inputHash,
+          appliedAssumptionsHash: assumptionsHash,
+          appliedAssumptions: assumptionsNow,
+          generatedAt,
+          warnings: emptyWarnings,
+          errorMessage: null,
+        }));
+        persistSnapshot({
+          version: PERSISTED_CROSS_TOWER_PLAN_VERSION,
+          plan: { projects: [], synthesis: null },
+          cohortStatus: [],
+          synthesisStatus: "stub",
+          modelId: EMPTY_COHORT_PERSIST_MODEL_ID,
+          promptVersion: PROMPT_VERSION,
+          warnings: emptyWarnings,
+          cohorts: [],
+          appliedAssumptions: assumptionsNow,
+          inputHash: programNow.inputHash,
+          assumptionsHash,
+          generatedAt,
+        });
+        return;
+      }
+
+      if (inflightRef.current) inflightRef.current.abort();
+      const controller = new AbortController();
+      inflightRef.current = controller;
+
+      setState((prev) => ({
+        ...prev,
+        status: "loading",
+        errorMessage: null,
+      }));
+
       try {
         const body = {
-          inputHash: program.inputHash,
-          prompt: buildPromptPayload(program),
+          inputHash: programNow.inputHash,
+          assumptionsHash,
+          cohorts,
+          assumptions: assumptionsNow,
           forceRegenerate: opts.forceRegenerate === true,
-          modelId: opts.modelId,
+          retryCohortIds: opts.retryCohortIds,
         };
         const res = await fetch("/api/cross-tower-ai-plan/generate", {
           method: "POST",
@@ -98,36 +412,74 @@ export function useCrossTowerPlan(
         });
         if (!res.ok) {
           const text = await res.text().catch(() => "");
-          throw new Error(`HTTP ${res.status}: ${text.slice(0, 200) || res.statusText}`);
+          throw new Error(
+            `HTTP ${res.status}: ${text.slice(0, 200) || res.statusText}`,
+          );
         }
         const json = (await res.json()) as {
           ok?: boolean;
-          source?: PlanFetchSource;
           plan?: CrossTowerAiPlanLLM | null;
+          cohortStatus?: CohortStatus[];
+          synthesisStatus?: SynthesisStatus;
           modelId?: string;
           promptVersion?: string;
           generatedAt?: string;
-          inputHash?: string;
-          narrativeUnavailable?: boolean;
-          warning?: string;
+          warnings?: string[];
         };
-        if (!json.ok) {
-          throw new Error("Server returned ok=false");
-        }
-        setState({
+        if (!json.ok) throw new Error("Server returned ok=false");
+
+        const projectsLlm: AIProjectLLM[] = json.plan?.projects ?? [];
+        const synthesis = json.plan?.synthesis ?? null;
+        const cohortStatus = json.cohortStatus ?? [];
+        const synthesisStatus = json.synthesisStatus ?? "stub";
+
+        const composed = composeProjects({
+          cohorts,
+          projects: projectsLlm,
+          cohortStatus,
+          initiativesById,
+          assumptions: assumptionsNow,
+        });
+        const buildup = buildProjectsBuildScale(composed);
+        const kpis = summarizeProjects(composed);
+
+        const generatedAt = json.generatedAt ?? new Date().toISOString();
+        const apiWarnings = json.warnings ?? [];
+
+        setState((prev) => ({
+          ...prev,
           status: "ready",
-          plan: json.plan ?? null,
-          source: json.source ?? "deterministic",
+          projects: composed,
+          buildup,
+          kpis,
+          synthesis,
+          cohortStatus,
+          synthesisStatus,
+          appliedInputHash: programNow.inputHash,
+          appliedAssumptionsHash: assumptionsHash,
+          appliedAssumptions: assumptionsNow,
           modelId: json.modelId ?? null,
           promptVersion: json.promptVersion ?? null,
-          generatedAt: json.generatedAt ?? new Date().toISOString(),
-          inputHash: json.inputHash ?? program.inputHash,
-          narrativeUnavailable: json.narrativeUnavailable === true,
+          generatedAt,
           errorMessage: null,
-          warning: json.warning ?? null,
+          warnings: apiWarnings,
+        }));
+
+        persistSnapshot({
+          version: PERSISTED_CROSS_TOWER_PLAN_VERSION,
+          plan: { projects: projectsLlm, synthesis },
+          cohortStatus,
+          synthesisStatus,
+          modelId: json.modelId ?? "",
+          promptVersion: json.promptVersion ?? "",
+          warnings: apiWarnings,
+          cohorts,
+          appliedAssumptions: assumptionsNow,
+          inputHash: programNow.inputHash,
+          assumptionsHash,
+          generatedAt,
         });
       } catch (e) {
-        // Aborted requests are not surfaced as errors.
         if ((e as { name?: string })?.name === "AbortError") return;
         setState((prev) => ({
           ...prev,
@@ -135,77 +487,29 @@ export function useCrossTowerPlan(
           errorMessage: e instanceof Error ? e.message : "Unknown error",
         }));
       } finally {
-        if (inflightControllerRef.current === controller) {
-          inflightControllerRef.current = null;
+        if (inflightRef.current === controller) {
+          inflightRef.current = null;
         }
       }
     },
-    [program],
+    [persistSnapshot],
   );
 
-  // Cleanup any in-flight request on unmount.
+  const retryCohort = React.useCallback(
+    async (l4RowId: string) => {
+      await fetchPlan({ retryCohortIds: [l4RowId] });
+    },
+    [fetchPlan],
+  );
+
   React.useEffect(() => {
     return () => {
-      inflightControllerRef.current?.abort();
+      inflightRef.current?.abort();
     };
   }, []);
 
-  return { state, regenerate: fetchPlan };
+  return { state, regenerate: fetchPlan, retryCohort };
 }
 
-// ---------------------------------------------------------------------------
-//   Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Compress the deterministic program substrate into the prompt payload the
- * server route grounds the LLM with. We deliberately strip rich `Process`
- * objects — only the surface the LLM is allowed to author against goes
- * across the wire.
- */
-function buildPromptPayload(program: SelectProgramResult): {
-  initiatives: PromptKeyInitiative[];
-  phaseMembership: Record<string, Tier | null>;
-  deprioritized: PromptDeprioritizedInitiative[];
-  towersInScope: { id: string; name: string; initiativeCount: number }[];
-  vendorStack: { vendor: string; count: number }[];
-  orchestrationMix: { pattern: string; count: number }[];
-} {
-  const initiatives: PromptKeyInitiative[] = program.initiatives
-    .slice(0, 80) // hard cap — keeps prompts tight even with rich tower data
-    .map((row: ProgramInitiativeRow) => ({
-      id: row.id,
-      towerName: row.towerName,
-      name: row.name,
-      capabilityPath: `${row.l2Name} / ${row.l3Name}`,
-      tier: row.tier,
-      programTierReason: row.programTierReason,
-      aiPriority: row.aiPriority,
-      rationale: row.aiRationale,
-    }));
-  const phaseMembership: Record<string, Tier | null> = {};
-  for (const row of initiatives) phaseMembership[row.id] = row.tier;
-  const deprioritized: PromptDeprioritizedInitiative[] = program.deprioritized
-    .slice(0, 30)
-    .map((row) => ({
-      id: row.id,
-      towerName: row.towerName,
-      name: row.name,
-      capabilityPath: `${row.l2Name} / ${row.l3Name}`,
-      programTierReason: row.programTierReason,
-    }));
-  const towersInScope = (program.towersInScope as TowerInScope[]).map((t) => ({
-    id: t.id,
-    name: t.name,
-    initiativeCount: t.initiativeCount,
-  }));
-  const arch: ProgramArchitecture = program.architecture;
-  return {
-    initiatives,
-    phaseMembership,
-    deprioritized,
-    towersInScope,
-    vendorStack: arch.vendorStack.map((v) => ({ vendor: v.vendor, count: v.count })),
-    orchestrationMix: arch.orchestrationMix.map((o) => ({ pattern: o.pattern, count: o.count })),
-  };
-}
+/** Public-only re-exports so callers don't need to know the cross-tower lib path. */
+export type { ProjectKpis, BuildupPoint };

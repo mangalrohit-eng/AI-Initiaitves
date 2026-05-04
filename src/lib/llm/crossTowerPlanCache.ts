@@ -1,45 +1,156 @@
 /**
- * Tiny in-memory LRU cache for the Cross-Tower AI Plan server route.
+ * Cross-Tower AI Plan v3 — two-tier in-memory LRU cache.
  *
- * Keys combine `(inputHash, modelId, promptVersion)` so:
- *   - Two clients running an identical scenario hit the same cached plan.
- *   - Switching `CROSS_TOWER_PLAN_MODEL` invalidates without manual flush.
- *   - Bumping `PROMPT_VERSION` invalidates without manual flush.
+ * The plan generation fans out per L4 cohort, then runs a single
+ * program-synthesis call on top. Each layer caches independently:
  *
- * Lives in module scope on the Node runtime — survives across requests within
- * a single server instance, which is plenty for a workshop tool. On serverless
- * cold starts the cache resets, which is acceptable: the next request just
- * regenerates.
+ *   - **Project cache**  — keyed per cohort. A single failing/changed
+ *     cohort doesn't invalidate the rest of the program.
+ *   - **Synthesis cache** — keyed by the authored set of projects + the
+ *     timing assumptions that shape the narrative.
+ *
+ * Cache keys deliberately exclude timing-only knobs (program-start, build /
+ * ramp / value-start months, fill-in offset). Those are 0-token operations:
+ * the client recomposes the Gantt deterministically without an LLM call.
+ *
+ * Lives in module scope on the Node runtime — survives across requests
+ * within a single server instance. On serverless cold starts the cache
+ * resets, which is acceptable for a workshop tool.
  */
 
-import type { CrossTowerAiPlanLLM } from "@/lib/llm/prompts/crossTowerAiPlan.v1";
+import type {
+  AIProjectLLM,
+  ProgramSynthesisLLM,
+} from "@/lib/cross-tower/aiProjects";
 
-export type CachedPlanEntry = {
-  plan: CrossTowerAiPlanLLM;
+// ---------------------------------------------------------------------------
+//   Project cache (per L4 cohort)
+// ---------------------------------------------------------------------------
+
+export type ProjectCacheKey = {
+  /** Cohort key — `proj-{l4RowId}`. */
+  cohortInputHash: string;
+  /** LLM-affecting assumptions hash (threshold, brief depth, lens emphases). */
+  assumptionsHash: string;
   modelId: string;
   promptVersion: string;
-  inputHash: string;
-  /** ISO timestamp when this entry was minted. */
+};
+
+export type ProjectCacheEntry = {
+  project: AIProjectLLM;
+  modelId: string;
+  promptVersion: string;
   generatedAt: string;
-  /** Token usage when the upstream provider returned it. */
-  tokenUsage?: { prompt?: number; completion?: number; total?: number };
   latencyMs: number;
-  /** Epoch ms after which this entry is expired. */
+  tokenUsage?: { prompt?: number; completion?: number; total?: number };
   expiresAtMs: number;
 };
 
-type CacheNode = {
-  key: string;
-  value: CachedPlanEntry;
-  prev: CacheNode | null;
-  next: CacheNode | null;
+// ---------------------------------------------------------------------------
+//   Synthesis cache (one entry per authored set + timing context)
+// ---------------------------------------------------------------------------
+
+export type SynthesisCacheKey = {
+  /** Hash over all authored project ids + buckets — what synthesis sees. */
+  projectsDigest: string;
+  /** Timing-context hash (drives narrative phrasing, not Gantt math). */
+  timingHash: string;
+  /** LLM-affecting assumptions hash (lens emphases). */
+  assumptionsHash: string;
+  modelId: string;
+  promptVersion: string;
 };
 
-const MAX_ENTRIES = 32;
+export type SynthesisCacheEntry = {
+  synthesis: ProgramSynthesisLLM;
+  modelId: string;
+  promptVersion: string;
+  generatedAt: string;
+  latencyMs: number;
+  tokenUsage?: { prompt?: number; completion?: number; total?: number };
+  expiresAtMs: number;
+};
 
-const cacheMap = new Map<string, CacheNode>();
-let head: CacheNode | null = null; // most-recently-used
-let tail: CacheNode | null = null; // least-recently-used
+// ---------------------------------------------------------------------------
+//   Tiny LRU implementation (per cache)
+// ---------------------------------------------------------------------------
+
+const MAX_PROJECT_ENTRIES = 256;
+const MAX_SYNTHESIS_ENTRIES = 32;
+
+type LruNode<V> = {
+  key: string;
+  value: V;
+  prev: LruNode<V> | null;
+  next: LruNode<V> | null;
+};
+
+class Lru<V extends { expiresAtMs: number }> {
+  private map = new Map<string, LruNode<V>>();
+  private head: LruNode<V> | null = null;
+  private tail: LruNode<V> | null = null;
+  constructor(private readonly maxEntries: number) {}
+
+  get(key: string): V | undefined {
+    const node = this.map.get(key);
+    if (!node) return undefined;
+    if (Date.now() > node.value.expiresAtMs) {
+      this.map.delete(key);
+      this.detach(node);
+      return undefined;
+    }
+    this.moveToHead(node);
+    return node.value;
+  }
+
+  put(key: string, value: V): void {
+    const existing = this.map.get(key);
+    if (existing) {
+      existing.value = value;
+      this.moveToHead(existing);
+      return;
+    }
+    while (this.map.size >= this.maxEntries) {
+      if (!this.tail) break;
+      this.map.delete(this.tail.key);
+      this.detach(this.tail);
+    }
+    const node: LruNode<V> = { key, value, prev: null, next: null };
+    this.map.set(key, node);
+    this.moveToHead(node);
+  }
+
+  clear(): void {
+    this.map.clear();
+    this.head = null;
+    this.tail = null;
+  }
+
+  private detach(node: LruNode<V>): void {
+    if (node.prev) node.prev.next = node.next;
+    if (node.next) node.next.prev = node.prev;
+    if (this.head === node) this.head = node.next;
+    if (this.tail === node) this.tail = node.prev;
+    node.prev = null;
+    node.next = null;
+  }
+
+  private moveToHead(node: LruNode<V>): void {
+    if (this.head === node) return;
+    this.detach(node);
+    node.next = this.head;
+    if (this.head) this.head.prev = node;
+    this.head = node;
+    if (!this.tail) this.tail = node;
+  }
+}
+
+const projectCache = new Lru<ProjectCacheEntry>(MAX_PROJECT_ENTRIES);
+const synthesisCache = new Lru<SynthesisCacheEntry>(MAX_SYNTHESIS_ENTRIES);
+
+// ---------------------------------------------------------------------------
+//   TTL + key helpers
+// ---------------------------------------------------------------------------
 
 function defaultTtlMs(): number {
   const env = process.env.CROSS_TOWER_PLAN_CACHE_TTL_S?.trim();
@@ -50,88 +161,67 @@ function defaultTtlMs(): number {
   return 1800 * 1000; // 30 minutes
 }
 
-function makeKey(inputHash: string, modelId: string, promptVersion: string): string {
-  return `${inputHash}::${modelId}::${promptVersion}`;
+function isCacheDisabled(): boolean {
+  return defaultTtlMs() === 0;
 }
 
-function detach(node: CacheNode): void {
-  if (node.prev) node.prev.next = node.next;
-  if (node.next) node.next.prev = node.prev;
-  if (head === node) head = node.next;
-  if (tail === node) tail = node.prev;
-  node.prev = null;
-  node.next = null;
+function projectKey(k: ProjectCacheKey): string {
+  return `${k.cohortInputHash}::${k.assumptionsHash}::${k.modelId}::${k.promptVersion}`;
 }
 
-function moveToHead(node: CacheNode): void {
-  if (head === node) return;
-  detach(node);
-  node.next = head;
-  if (head) head.prev = node;
-  head = node;
-  if (!tail) tail = node;
+function synthesisKey(k: SynthesisCacheKey): string {
+  return `${k.projectsDigest}::${k.timingHash}::${k.assumptionsHash}::${k.modelId}::${k.promptVersion}`;
 }
 
-function evictIfFull(): void {
-  while (cacheMap.size >= MAX_ENTRIES) {
-    if (!tail) break;
-    cacheMap.delete(tail.key);
-    detach(tail);
-  }
+// ---------------------------------------------------------------------------
+//   Public API
+// ---------------------------------------------------------------------------
+
+export function getCachedProject(
+  k: ProjectCacheKey,
+): ProjectCacheEntry | undefined {
+  if (isCacheDisabled()) return undefined;
+  return projectCache.get(projectKey(k));
 }
 
-export function getCachedPlan(
-  inputHash: string,
-  modelId: string,
-  promptVersion: string,
-): CachedPlanEntry | undefined {
-  // TTL = 0 disables cache entirely.
-  if (defaultTtlMs() === 0) return undefined;
-  const key = makeKey(inputHash, modelId, promptVersion);
-  const node = cacheMap.get(key);
-  if (!node) return undefined;
-  if (Date.now() > node.value.expiresAtMs) {
-    cacheMap.delete(key);
-    detach(node);
-    return undefined;
-  }
-  moveToHead(node);
-  return node.value;
-}
-
-export function putCachedPlan(entry: CachedPlanEntry): void {
-  // TTL = 0 disables writes.
-  if (defaultTtlMs() === 0) return;
-  const key = makeKey(entry.inputHash, entry.modelId, entry.promptVersion);
-  const existing = cacheMap.get(key);
-  if (existing) {
-    existing.value = entry;
-    moveToHead(existing);
-    return;
-  }
-  evictIfFull();
-  const node: CacheNode = { key, value: entry, prev: null, next: null };
-  cacheMap.set(key, node);
-  moveToHead(node);
-}
-
-export function purgeCachedPlans(): void {
-  cacheMap.clear();
-  head = null;
-  tail = null;
-}
-
-export function buildCacheEntry(args: {
-  plan: CrossTowerAiPlanLLM;
-  modelId: string;
-  promptVersion: string;
-  inputHash: string;
-  latencyMs: number;
-  tokenUsage?: { prompt?: number; completion?: number; total?: number };
-}): CachedPlanEntry {
-  return {
-    ...args,
-    generatedAt: new Date().toISOString(),
+export function putCachedProject(
+  k: ProjectCacheKey,
+  entry: Omit<ProjectCacheEntry, "expiresAtMs" | "generatedAt"> & {
+    generatedAt?: string;
+  },
+): void {
+  if (isCacheDisabled()) return;
+  const full: ProjectCacheEntry = {
+    ...entry,
+    generatedAt: entry.generatedAt ?? new Date().toISOString(),
     expiresAtMs: Date.now() + defaultTtlMs(),
   };
+  projectCache.put(projectKey(k), full);
+}
+
+export function getCachedSynthesis(
+  k: SynthesisCacheKey,
+): SynthesisCacheEntry | undefined {
+  if (isCacheDisabled()) return undefined;
+  return synthesisCache.get(synthesisKey(k));
+}
+
+export function putCachedSynthesis(
+  k: SynthesisCacheKey,
+  entry: Omit<SynthesisCacheEntry, "expiresAtMs" | "generatedAt"> & {
+    generatedAt?: string;
+  },
+): void {
+  if (isCacheDisabled()) return;
+  const full: SynthesisCacheEntry = {
+    ...entry,
+    generatedAt: entry.generatedAt ?? new Date().toISOString(),
+    expiresAtMs: Date.now() + defaultTtlMs(),
+  };
+  synthesisCache.put(synthesisKey(k), full);
+}
+
+export function purgeCrossTowerCaches(): void {
+  projectCache.clear();
+  synthesisCache.clear();
 }

@@ -8,8 +8,9 @@ const nextConfig = {
   // Avoid occasional Windows build races where webpack chunks resolve from the wrong cwd.
   experimental: {
     webpackBuildWorker: false,
+    // Next 14: use experimental key. (`serverExternalPackages` is Next 15+.)
+    serverComponentsExternalPackages: ["postgres"],
   },
-  serverExternalPackages: ["postgres"],
   async redirects() {
     return [
       // The original /assess hub split into /capability-map (step 1) and

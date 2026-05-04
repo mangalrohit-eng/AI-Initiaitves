@@ -133,7 +133,7 @@ export function clampAssumptions(
   partial: Partial<CrossTowerAssumptions>,
 ): CrossTowerAssumptions {
   const merged = { ...DEFAULT_ASSUMPTIONS, ...partial };
-  let p1s = clampInt(merged.p1PhaseStartMonth, 1, MAX_MONTHS);
+  const p1s = clampInt(merged.p1PhaseStartMonth, 1, MAX_MONTHS);
   let p2s = clampInt(merged.p2PhaseStartMonth, 1, MAX_MONTHS);
   let p3s = clampInt(merged.p3PhaseStartMonth, 1, MAX_MONTHS);
   if (p2s < p1s) p2s = p1s;

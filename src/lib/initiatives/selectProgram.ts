@@ -594,7 +594,6 @@ function toBuildScaleInputRow(row: ProgramInitiativeRow): BuildScaleInputRow {
  * program charts, derived from a single constant source.
  */
 function activeTierForProgramMonth(month: number): "P1" | "P2" | "P3" {
-  const p1 = PHASE_START_MONTHS.P1;
   const p2 = PHASE_START_MONTHS.P2;
   const p3 = PHASE_START_MONTHS.P3;
   if (month >= p3) return "P3";

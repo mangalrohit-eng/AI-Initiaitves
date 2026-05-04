@@ -10,6 +10,8 @@ import {
   buildCapabilityMapExportCsv,
   buildDialsExportCsv,
 } from "../src/lib/assess/exportTowerCsv";
+import { buildExportCsv } from "../src/lib/assess/scenarioModel";
+import { selectInitiativesForTower } from "../src/lib/initiatives/select";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(msg);
@@ -102,27 +104,60 @@ function main(): void {
     assert(dialH.includes("ai_pct_effective"), `${id}: dials header missing effective AI`);
 
     const initH = headerCols(initLines[0]);
-    assert(initH.includes("resolution_status"), `${id}: initiatives header missing resolution_status`);
-    assert(initH.includes("description"), `${id}: initiatives header missing description`);
+    assert(initH.includes("review_status"), `${id}: initiatives header missing review_status`);
+    assert(initH.includes("linked_brief_description"), `${id}: initiatives header missing linked_brief_description`);
 
     const dataRows = initLines.length - 1;
+    let expectedInitRows = 0;
+    const sel = selectInitiativesForTower(id, program, tower);
+    for (const l2 of sel.l2s) {
+      for (const l3 of l2.l3s) {
+        for (const l5 of l3.l4s) {
+          if (!l5.isPlaceholder) expectedInitRows += 1;
+        }
+      }
+    }
     assert(
-      dataRows === tower.processes.length,
-      `${id}: initiatives row count ${dataRows} !== processes ${tower.processes.length}`,
+      dataRows === expectedInitRows,
+      `${id}: initiatives row count ${dataRows} !== selector ${expectedInitRows}`,
     );
 
     const tState = program.towers[id];
-    const rowCount = tState?.l3Rows?.length ?? 0;
+    const rowCount = tState?.l4Rows?.length ?? 0;
     const dialData = dialLines.length - 1;
     assert(
       dialData === rowCount,
-      `${id}: dials data rows ${dialData} !== l3 rows ${rowCount}`,
+      `${id}: dials data rows ${dialData} !== l4 rows ${rowCount}`,
     );
+
+    const capRedacted = buildCapabilityMapExportCsv({
+      towerId: id,
+      towerName: tower.name,
+      program,
+      redact: true,
+    });
+    const capRedLines = capRedacted.replace(/^\uFEFF/, "").split("\n").filter(Boolean);
+    const spendIdx = headerCols(capRedLines[0]).indexOf("annual_spend_usd");
+    assert(spendIdx >= 0, `${id}: annual_spend_usd column missing`);
+    for (let ri = 1; ri < capRedLines.length; ri++) {
+      const cells = headerCols(capRedLines[ri]);
+      const v = cells[spendIdx] ?? "";
+      if (v !== "") assert(v === "—", `${id}: redacted annual_spend_usd must be — or empty, got ${JSON.stringify(v)}`);
+    }
 
     console.log(
       `  OK ${id}: capability ${capLines.length - 1} data rows, dials ${dialData}, initiatives ${dataRows}`,
     );
   }
+
+  const impactRedacted = buildExportCsv(program, { redact: true });
+  assert(impactRedacted.includes("—"), "impact CSV (redact): expected em-dash cells");
+  const impactFull = buildExportCsv(program);
+  const impactDataLines = impactFull.split("\n").filter((l) => l.trim().length > 0);
+  assert(
+    impactDataLines.length >= 2 && /\d/.test(impactDataLines[1] ?? ""),
+    "impact CSV (full): expected numeric cells in first data row",
+  );
 
   console.log("All export checks passed.");
 }

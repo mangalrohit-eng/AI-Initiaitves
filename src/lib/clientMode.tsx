@@ -9,10 +9,11 @@ import * as React from "react";
  * "Normal" presentation in-session. When Protected is on, every modeled-
  * dollar surface in the assessment pipeline (pool $, modeled saving,
  * blended rates, AI $ chips, capability-map spend overrides, lever
- * scoreboards, the Recharts modeled-by-tower bar chart, CSV export entry
- * points, etc.) is either replaced with a neutral placeholder or hidden
- * outright — so the lead can hand the laptop to the client at any moment
- * without exposing in-progress financial figures.
+ * scoreboards, the Recharts modeled-by-tower bar chart, etc.) is either
+ * replaced with a neutral placeholder or hidden outright. Workshop CSV
+ * exports stay available; modeled-$ cells in those CSVs are written as an
+ * em dash instead of numerics so the lead can export without toggling off
+ * Protected first.
  *
  * The static Versant-published narrative figures (revenue, EBITDA, debt,
  * dividend, etc.) baked into `src/data/*.ts` copy are intentionally NOT

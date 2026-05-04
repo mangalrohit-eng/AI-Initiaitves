@@ -87,8 +87,6 @@ export function TowerDataExports({
   // surface — the export landing empty in that case is acceptable.
   const canInitiatives = rowCount > 0;
 
-  if (redact) return null;
-
   const disabledReason = (id: TowerExportArtifact): string | undefined => {
     if (id === "capability-map" && !canMap) {
       return "Upload a capability map or headcount on Step 1 first.";
@@ -116,6 +114,7 @@ export function TowerDataExports({
         towerId: tower.id,
         towerName: tower.name,
         program: p,
+        redact,
       });
     } else if (id === "dials") {
       body = buildDialsExportCsv({

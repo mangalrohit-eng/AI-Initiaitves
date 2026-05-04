@@ -96,7 +96,7 @@ export function AssessmentSummaryClient() {
   );
 
   const onExportCsv = () => {
-    const blob = new Blob([buildExportCsv(program)], { type: "text/csv" });
+    const blob = new Blob([buildExportCsv(program, { redact })], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "forge-impact-estimate.csv";
@@ -197,7 +197,7 @@ export function AssessmentSummaryClient() {
                 </>
               )}
             </button>
-            {showExport && !presentMode && !redact ? (
+            {showExport && !presentMode ? (
               <button
                 type="button"
                 onClick={onExportCsv}

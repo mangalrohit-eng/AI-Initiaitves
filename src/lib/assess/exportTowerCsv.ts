@@ -44,12 +44,24 @@ export function forgeTowerCsvFilename(
   return `forge-tower-${towerId}-${artifact}-${date}.csv`;
 }
 
+/** Protected-mode CSV: mask workshop USD pool column (matches Lineage CSV literal). */
+function redactAnnualSpendCell(
+  redact: boolean,
+  value: number | "" | undefined | null,
+): string | number | "" {
+  if (!redact) return value ?? "";
+  if (value === "" || value == null) return "";
+  return "—";
+}
+
 export function buildCapabilityMapExportCsv(params: {
   towerId: TowerId;
   towerName: string;
   program: AssessProgramV2;
+  /** When true, `annual_spend_usd` is emitted as em dash instead of numeric values. */
+  redact?: boolean;
 }): string {
-  const { towerId, towerName, program } = params;
+  const { towerId, towerName, program, redact = false } = params;
   const exportedAt = new Date().toISOString();
   const tState = program.towers[towerId] ?? defaultTowerState(towerId);
   const assessRows = tState.l4Rows ?? [];
@@ -115,7 +127,7 @@ export function buildCapabilityMapExportCsv(params: {
                 assessRow?.fteOffshore ?? "",
                 assessRow?.contractorOnshore ?? "",
                 assessRow?.contractorOffshore ?? "",
-                assessRow?.annualSpendUsd ?? "",
+                redactAnnualSpendCell(redact, assessRow?.annualSpendUsd),
                 assessRow?.id ?? "",
                 assessRow ? "matched" : "map_only",
               ]),
@@ -142,7 +154,7 @@ export function buildCapabilityMapExportCsv(params: {
                 assessRow?.fteOffshore ?? "",
                 assessRow?.contractorOnshore ?? "",
                 assessRow?.contractorOffshore ?? "",
-                assessRow?.annualSpendUsd ?? "",
+                redactAnnualSpendCell(redact, assessRow?.annualSpendUsd),
                 assessRow?.id ?? "",
                 assessRow ? "matched" : "map_only",
               ]),
@@ -176,7 +188,7 @@ export function buildCapabilityMapExportCsv(params: {
         r.fteOffshore,
         r.contractorOnshore,
         r.contractorOffshore,
-        r.annualSpendUsd ?? "",
+        redactAnnualSpendCell(redact, r.annualSpendUsd),
         r.id,
         "assess_only",
       ]),

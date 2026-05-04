@@ -354,7 +354,13 @@ export function programSensitivityDeltas(state: AssessProgramV2): {
   return { dOff10, dAi10 };
 }
 
-export function buildExportCsv(program: AssessProgramV2): string {
+const CSV_REDACT = "—";
+
+export function buildExportCsv(
+  program: AssessProgramV2,
+  options?: { redact?: boolean },
+): string {
+  const redact = options?.redact === true;
   const lines: string[] = [
     "towerId,towerName,fteOnshoreRateUsd,fteOffshoreRateUsd,contractorOnshoreRateUsd,contractorOffshoreRateUsd,poolUsd,weightedOffPct,weightedAiPct,modeledOffshoreUsd,modeledAiUsd,modeledCombinedUsd",
   ];
@@ -368,16 +374,16 @@ export function buildExportCsv(program: AssessProgramV2): string {
       [
         t.id,
         `"${t.name.replace(/"/g, '""')}"`,
-        rates.blendedFteOnshore.toFixed(0),
-        rates.blendedFteOffshore.toFixed(0),
-        rates.blendedContractorOnshore.toFixed(0),
-        rates.blendedContractorOffshore.toFixed(0),
-        o.pool.toFixed(0),
+        redact ? CSV_REDACT : rates.blendedFteOnshore.toFixed(0),
+        redact ? CSV_REDACT : rates.blendedFteOffshore.toFixed(0),
+        redact ? CSV_REDACT : rates.blendedContractorOnshore.toFixed(0),
+        redact ? CSV_REDACT : rates.blendedContractorOffshore.toFixed(0),
+        redact ? CSV_REDACT : o.pool.toFixed(0),
         o.offshorePct.toFixed(1),
         o.aiPct.toFixed(1),
-        o.offshore.toFixed(0),
-        o.ai.toFixed(0),
-        o.combined.toFixed(0),
+        redact ? CSV_REDACT : o.offshore.toFixed(0),
+        redact ? CSV_REDACT : o.ai.toFixed(0),
+        redact ? CSV_REDACT : o.combined.toFixed(0),
       ].join(","),
     );
   }

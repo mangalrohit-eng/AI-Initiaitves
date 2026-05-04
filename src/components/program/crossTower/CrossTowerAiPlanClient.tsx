@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ChevronDown,
   FileDown,
+  FileSpreadsheet,
+  FileText,
   RefreshCw,
   Sparkles,
   ArrowLeft,
@@ -50,6 +53,7 @@ import {
   buildDeckPayload,
   writeDeckPayloadToLocalStorage,
 } from "@/lib/cross-tower/deckPayload";
+import { exportProjectsToExcel } from "@/lib/cross-tower/exportProjectsExcel";
 import { useRedactDollars } from "@/lib/clientMode";
 
 /**
@@ -94,9 +98,10 @@ export function CrossTowerAiPlanClient() {
     program,
     assumptions,
   });
-  const [deckExportError, setDeckExportError] = React.useState<string | null>(
-    null,
-  );
+  const [exportError, setExportError] = React.useState<string | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
+  const exportMenuRef = React.useRef<HTMLDivElement>(null);
+  const exportMenuTriggerRef = React.useRef<HTMLButtonElement>(null);
 
   const isLoading = state.status === "loading";
   const isError = state.status === "error";
@@ -185,6 +190,16 @@ export function CrossTowerAiPlanClient() {
     [filteredProjects],
   );
 
+  const excelFilterSummary = React.useMemo(
+    () => ({
+      towerNames: selectedTowerIds.map(
+        (id) => allTowers.find((t) => t.id === id)?.name ?? id,
+      ),
+      phaseLabels: selectedPhases.map((pt) => programTierLabel(pt).axisLabel),
+    }),
+    [selectedTowerIds, selectedPhases],
+  );
+
   const filteredBuildup = React.useMemo(
     () => buildProjectsBuildScale(filteredProjects),
     [filteredProjects],
@@ -225,7 +240,7 @@ export function CrossTowerAiPlanClient() {
 
   const handleExportDeck = React.useCallback(() => {
     if (!isReady || state.projects.length === 0 || isLoading || debouncing) return;
-    setDeckExportError(null);
+    setExportError(null);
     const payload = buildDeckPayload({
       projects: state.projects,
       buildup: state.buildup,
@@ -239,7 +254,7 @@ export function CrossTowerAiPlanClient() {
     });
     const w = writeDeckPayloadToLocalStorage(payload);
     if (!w.ok) {
-      setDeckExportError(
+      setExportError(
         w.error === "quota"
           ? "Deck data exceeded browser storage. Close other tabs or try again."
           : "Could not save deck data for export.",
@@ -270,6 +285,69 @@ export function CrossTowerAiPlanClient() {
     state.projects,
     state.synthesis,
   ]);
+
+  const handleExportExcel = React.useCallback(async () => {
+    if (
+      !isReady ||
+      filteredProjects.length === 0 ||
+      isLoading ||
+      debouncing
+    ) {
+      return;
+    }
+    setExportError(null);
+    try {
+      await exportProjectsToExcel({
+        projects: filteredProjects,
+        assumptions,
+        kpis: filteredKpis,
+        generatedAt: state.generatedAt,
+        redactDollars,
+        filterSummary: excelFilterSummary,
+        executiveSummary: state.synthesis?.executiveSummary ?? null,
+      });
+    } catch (e) {
+      setExportError(
+        e instanceof Error ? e.message : "Excel export failed. Try again.",
+      );
+    }
+  }, [
+    assumptions,
+    debouncing,
+    excelFilterSummary,
+    filteredKpis,
+    filteredProjects,
+    isLoading,
+    isReady,
+    redactDollars,
+    state.generatedAt,
+    state.synthesis?.executiveSummary,
+  ]);
+
+  React.useEffect(() => {
+    if (!exportMenuOpen) return;
+    const onDocMouseDown = (ev: MouseEvent) => {
+      const root = exportMenuRef.current;
+      if (root && !root.contains(ev.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        setExportMenuOpen(false);
+        exportMenuTriggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [exportMenuOpen]);
+
+  const exportTriggerDisabled =
+    !isReady || state.projects.length === 0 || isLoading || debouncing;
 
   // TabGroup runs in controlled mode so the Approach tab's CTAs can deep-link
   // into Lineage, Projects, Matrix, Roadmap, and Assumptions. Default to
@@ -455,21 +533,81 @@ export function CrossTowerAiPlanClient() {
 
           <div className="flex flex-col items-stretch gap-3 lg:items-end">
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-              <button
-                type="button"
-                onClick={handleExportDeck}
-                disabled={
-                  !isReady ||
-                  state.projects.length === 0 ||
-                  isLoading ||
-                  debouncing
-                }
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-forge-border bg-forge-surface px-3 py-2 text-sm font-medium text-forge-body shadow-sm transition hover:border-accent-purple/40 hover:text-accent-purple-dark disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label="Export 4:3 executive deck for print or save as PDF"
-              >
-                <FileDown className="h-4 w-4 shrink-0" aria-hidden />
-                Export PDF deck
-              </button>
+              <div className="relative" ref={exportMenuRef}>
+                <button
+                  ref={exportMenuTriggerRef}
+                  type="button"
+                  disabled={exportTriggerDisabled}
+                  aria-haspopup="menu"
+                  aria-expanded={exportMenuOpen}
+                  aria-label="Export cross-tower plan"
+                  onClick={() => setExportMenuOpen((o) => !o)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-forge-border bg-forge-surface px-3 py-2 text-sm font-medium text-forge-body shadow-sm transition hover:border-accent-purple/40 hover:text-accent-purple-dark focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-purple/50 focus-visible:ring-offset-1 focus-visible:ring-offset-forge-bg disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FileDown className="h-4 w-4 shrink-0" aria-hidden />
+                  Export
+                  <ChevronDown
+                    className={[
+                      "h-4 w-4 shrink-0 transition",
+                      exportMenuOpen ? "rotate-180" : "",
+                    ].join(" ")}
+                    aria-hidden
+                  />
+                </button>
+                {exportMenuOpen ? (
+                  <div
+                    role="menu"
+                    className="absolute right-0 z-20 mt-1 min-w-[15.5rem] rounded-lg border border-forge-border bg-forge-surface py-1 shadow-card"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="flex w-full flex-col items-stretch gap-0.5 px-3 py-2.5 text-left text-sm text-forge-body transition hover:bg-forge-well/40"
+                      onClick={() => {
+                        setExportMenuOpen(false);
+                        handleExportDeck();
+                      }}
+                    >
+                      <span className="inline-flex items-center gap-2 font-medium">
+                        <FileText
+                          className="h-4 w-4 shrink-0 text-accent-purple-dark"
+                          aria-hidden
+                        />
+                        PDF deck
+                      </span>
+                      <span className="pl-6 text-[11px] leading-snug text-forge-subtle">
+                        4:3 executive deck for print or save as PDF
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={filteredProjects.length === 0}
+                      title={
+                        filteredProjects.length === 0
+                          ? "No projects match the current filters"
+                          : undefined
+                      }
+                      className="flex w-full flex-col items-stretch gap-0.5 px-3 py-2.5 text-left text-sm text-forge-body transition hover:bg-forge-well/40 disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={() => {
+                        setExportMenuOpen(false);
+                        void handleExportExcel();
+                      }}
+                    >
+                      <span className="inline-flex items-center gap-2 font-medium">
+                        <FileSpreadsheet
+                          className="h-4 w-4 shrink-0 text-accent-purple-dark"
+                          aria-hidden
+                        />
+                        Excel workbook
+                      </span>
+                      <span className="pl-6 text-[11px] leading-snug text-forge-subtle">
+                        Project plan, briefs, and L5 activities (filtered view)
+                      </span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
               <RegenerateAction
                 state={state}
                 isLoading={isLoading || debouncing}
@@ -480,9 +618,9 @@ export function CrossTowerAiPlanClient() {
                 onClick={handleRegenerate}
               />
             </div>
-            {deckExportError ? (
+            {exportError ? (
               <p className="max-w-sm text-right text-[11px] text-accent-red">
-                {deckExportError}
+                {exportError}
               </p>
             ) : null}
           </div>

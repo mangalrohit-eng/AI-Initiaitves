@@ -37,6 +37,7 @@ import {
 import { serializeAssessProgramForDownload } from "@/lib/assess/assessProgramIO";
 import { clientGenerateL4Activities } from "@/lib/assess/assessClientApi";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
+import { llmLoadingCopy } from "@/lib/llm/loadingCopy";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import { getAssessProgram, setTowerAssess } from "@/lib/localStore";
 import { getTowerHref } from "@/lib/towerHref";
@@ -156,12 +157,13 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   const sourceLabel = (s: "llm" | "fallback") =>
     s === "llm" ? "AI generation" : "canonical-map fallback";
 
+  const l5Copy = llmLoadingCopy("generate-l5");
+
   const generateBlanksOp = useAsyncOp<GenerateL4Outcome, []>({
     run: () => runGenerateL4("fillBlanks"),
     messages: {
-      loadingTitle: "Generating L5 Activities...",
-      loadingDescription:
-        "Trying AI generation, falling back to canonical map / heuristic if unavailable.",
+      loadingTitle: l5Copy.toastTitle,
+      loadingDescription: l5Copy.description,
       successTitle: ({ changedRows }) =>
         `Generated L5 Activities for ${changedRows} Activity Group${changedRows === 1 ? "" : "s"}`,
       successDescription: ({ source, warning }) =>
@@ -175,7 +177,8 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
   const regenerateAllOp = useAsyncOp<GenerateL4Outcome, []>({
     run: () => runGenerateL4("regenerateAll"),
     messages: {
-      loadingTitle: "Regenerating every Activity Group's L5 Activities...",
+      loadingTitle: `${l5Copy.toastTitle} (regenerating all)`,
+      loadingDescription: l5Copy.description,
       successTitle: ({ changedRows }) =>
         `Regenerated L5 Activities for ${changedRows} Activity Group${changedRows === 1 ? "" : "s"}`,
       successDescription: ({ source, warning }) =>

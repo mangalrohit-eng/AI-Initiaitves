@@ -564,6 +564,12 @@ function RefineActivityGroupPanel({
 
   const onConfirm = React.useCallback(async () => {
     if (running) return;
+    // Close the modal BEFORE the long-running LLM call so the user can
+    // see the "Regenerate ideas" button spinner and the row hydrate
+    // behind it. Native <dialog> blurs everything behind the backdrop,
+    // so leaving it open during the 20-60s call hides every progress
+    // signal.
+    setConfirmOpen(false);
     setRunning(true);
     let summary: RegenerateRowSummary;
     try {
@@ -579,11 +585,9 @@ function RefineActivityGroupPanel({
         description: error,
       });
       setRunning(false);
-      setConfirmOpen(false);
       return;
     }
     setRunning(false);
-    setConfirmOpen(false);
     if (!summary.ok) {
       toast.error({
         title: "Regenerate failed",
@@ -718,22 +722,35 @@ function RefineActivityGroupPanel({
                 ) : (
                   <Icons.Sparkles className="h-3 w-3" aria-hidden />
                 )}
-                Regenerate ideas
+                {running ? "Regenerating..." : "Regenerate ideas"}
               </button>
             </div>
           </div>
+          {running ? (
+            <div
+              className="flex items-start gap-2 rounded-md border border-accent-purple/30 bg-accent-purple/[0.04] px-2.5 py-2 text-[11px] leading-relaxed text-forge-body"
+              role="status"
+              aria-live="polite"
+            >
+              <Icons.Loader2
+                className="mt-0.5 h-3 w-3 shrink-0 animate-spin text-accent-purple"
+                aria-hidden
+              />
+              <span className="min-w-0">
+                Regenerating L5 Activities and AI scoring for this Activity
+                Group. Typically 20-60 seconds — don&apos;t navigate away.
+              </span>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
       <ConfirmDialog
         open={confirmOpen}
-        onClose={() => {
-          if (!running) setConfirmOpen(false);
-        }}
+        onClose={() => setConfirmOpen(false)}
         onConfirm={onConfirm}
         title={`Regenerate AI ideas for "${activityGroupName}"?`}
-        busy={running}
-        confirmLabel={running ? "Regenerating…" : "Regenerate"}
+        confirmLabel="Regenerate"
         cancelLabel="Cancel"
         description={
           <div className="space-y-2 text-sm leading-relaxed text-forge-body">

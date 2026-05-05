@@ -151,7 +151,7 @@ function friendlyMessage(code: AskErrorCode, raw: string): { title: string; body
     case "api_key_missing":
       return {
         title: "Ask Forge isn't configured on this deployment",
-        body: "Set OPENAI_API_KEY (and optionally OPENAI_ASK_MODEL) and redeploy. The rest of the app is unaffected.",
+        body: "Set OPENAI_API_KEY (and optionally OPENAI_MODEL) and redeploy. The rest of the app is unaffected.",
       };
     case "rate_limit":
       return {

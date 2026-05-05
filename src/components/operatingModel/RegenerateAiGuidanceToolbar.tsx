@@ -23,6 +23,7 @@ import {
 import type { AssessProgramV2, TowerId } from "@/data/assess/types";
 import { getTowerHref } from "@/lib/towerHref";
 import { cn } from "@/lib/utils";
+import { curationProgressLine, llmLoadingCopy } from "@/lib/llm/loadingCopy";
 
 function applyRegenerateToast(toast: ReturnType<typeof useToast>, summary: RunSummary) {
   const sourceLabel =
@@ -78,6 +79,12 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
 
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [running, setRunning] = React.useState(false);
+  // Streaming progress tracker: increments once per row as the curation
+  // route emits its `done` / `failed` events. Drives the inline "Scoring
+  // X of Y" status line below the button.
+  const [progress, setProgress] = React.useState<{ scored: number; total: number }>(
+    { scored: 0, total: 0 },
+  );
 
   const impactLeversHref = getTowerHref(towerId, "impact-levers");
 
@@ -105,11 +112,26 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
       setConfirmOpen(false);
       return;
     }
+    const totalRows = plan.batches.reduce((sum, b) => sum + b.length, 0);
+    // Close the modal BEFORE the long-running LLM call so the user can
+    // see the toolbar's "Scoring X/Y" progress chip + the AI Initiative
+    // cards hydrating row-by-row behind it. Native <dialog> blurs
+    // everything behind the backdrop, so leaving it open during the
+    // 30-90s call hides every streaming signal we wired up.
+    setConfirmOpen(false);
     setRunning(true);
+    setProgress({ scored: 0, total: totalRows });
     const summaries: RunSummary[] = [];
     try {
       for (const batchIds of plan.batches) {
-        const s = await runForRows({ towerId, rowIds: batchIds });
+        const s = await runForRows({ towerId, rowIds: batchIds }, (p) => {
+          if (p.stage === "done" || p.stage === "failed") {
+            setProgress((prev) => ({
+              scored: Math.min(prev.scored + 1, prev.total),
+              total: prev.total,
+            }));
+          }
+        });
         summaries.push(s);
       }
     } catch (e) {
@@ -119,11 +141,11 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
         description: error,
       });
       setRunning(false);
-      setConfirmOpen(false);
+      setProgress({ scored: 0, total: 0 });
       return;
     }
     setRunning(false);
-    setConfirmOpen(false);
+    setProgress({ scored: 0, total: 0 });
     const summary = aggregateRunSummaries(summaries);
     applyRegenerateToast(toast, summary);
   }, [running, inFlight, toast, towerId]);
@@ -132,43 +154,58 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
 
   const disabled = running || inFlight;
 
+  const curateCopy = llmLoadingCopy("curate-initiatives");
+
   return (
     <>
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => setConfirmOpen(true)}
-          disabled={disabled}
-          title={
-            inFlight
-              ? "Curation in progress"
-              : "Re-run AI eligibility and priority scoring for Activity Groups with AI dial above zero"
-          }
-          className={cn(
-            "inline-flex items-center gap-2 rounded-lg border border-accent-purple/50 bg-transparent px-4 py-2 text-sm font-semibold text-forge-body transition",
-            "hover:border-accent-purple hover:bg-accent-purple/5 hover:text-forge-ink",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/40",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-          )}
-        >
-          {running ? (
-            <Loader2 className="h-4 w-4 animate-spin text-accent-purple" aria-hidden />
-          ) : (
-            <RefreshCw className="h-4 w-4 text-accent-purple" aria-hidden />
-          )}
-          Regenerate AI guidance
-        </button>
+      <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setConfirmOpen(true)}
+            disabled={disabled}
+            title={
+              inFlight
+                ? "Curation in progress"
+                : `Re-run Versant-grounded AI scoring for the eligible Activity Groups (typically ${curateCopy.timeWindow} for a tower)`
+            }
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg border border-accent-purple/50 bg-transparent px-4 py-2 text-sm font-semibold text-forge-body transition",
+              "hover:border-accent-purple hover:bg-accent-purple/5 hover:text-forge-ink",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/40",
+              "disabled:cursor-not-allowed disabled:opacity-50",
+            )}
+          >
+            {running ? (
+              <Loader2 className="h-4 w-4 animate-spin text-accent-purple" aria-hidden />
+            ) : (
+              <RefreshCw className="h-4 w-4 text-accent-purple" aria-hidden />
+            )}
+            {running && progress.total > 0 && progress.scored > 0
+              ? `Scoring ${progress.scored}/${progress.total}...`
+              : "Regenerate AI guidance"}
+          </button>
+        </div>
+        {running ? (
+          <div
+            className="flex max-w-md items-start gap-2 rounded-lg border border-accent-purple/30 bg-near-black/40 px-3 py-2 text-[11px] leading-relaxed text-forge-body"
+            role="status"
+            aria-live="polite"
+          >
+            <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-accent-purple" aria-hidden />
+            <span className="min-w-0">
+              {curationProgressLine(progress.scored, progress.total)}
+            </span>
+          </div>
+        ) : null}
       </div>
 
       <ConfirmDialog
         open={confirmOpen}
-        onClose={() => {
-          if (!running) setConfirmOpen(false);
-        }}
+        onClose={() => setConfirmOpen(false)}
         onConfirm={onRegenerate}
         title="Regenerate AI guidance for this tower?"
-        busy={running}
-        confirmLabel={running ? "Regenerating…" : "Regenerate"}
+        confirmLabel="Regenerate"
         cancelLabel="Cancel"
         description={
           <div className="space-y-2 text-sm leading-relaxed text-forge-body">

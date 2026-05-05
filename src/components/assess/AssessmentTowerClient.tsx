@@ -33,6 +33,7 @@ import { getTowerHref } from "@/lib/towerHref";
 import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
+import { llmLoadingCopy } from "@/lib/llm/loadingCopy";
 import { TowerDataExports } from "@/components/assess/TowerDataExports";
 import { towers } from "@/data/towers";
 import { useRedactDollars } from "@/lib/clientMode";
@@ -215,11 +216,13 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
   const sourceLabel = (source: InferDefaultsSource) =>
     source === "llm" ? "AI inference" : "deterministic heuristic";
 
+  const dialsCopy = llmLoadingCopy("infer-defaults");
+
   const fillBlanksOp = useAsyncOp<ApplyDefaultsOutcome, []>({
     run: () => applyDefaults("fillBlanks"),
     messages: {
-      loadingTitle: "Scoring blank L3 groups...",
-      loadingDescription: "Trying AI inference, falling back to heuristic if unavailable.",
+      loadingTitle: `${dialsCopy.toastTitle} — filling blanks`,
+      loadingDescription: dialsCopy.description,
       successTitle: ({ changedCells, changedRows }) =>
         `Filled ${changedCells} cell${changedCells === 1 ? "" : "s"} across ${changedRows} row${changedRows === 1 ? "" : "s"}`,
       successDescription: ({ source, warning }) =>
@@ -233,8 +236,8 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
   const overwriteAllOp = useAsyncOp<ApplyDefaultsOutcome, []>({
     run: () => applyDefaults("overwriteAll"),
     messages: {
-      loadingTitle: "Re-scoring every L4 Activity Group...",
-      loadingDescription: "Trying AI inference, falling back to heuristic if unavailable.",
+      loadingTitle: `${dialsCopy.toastTitle} — re-scoring every Activity Group`,
+      loadingDescription: dialsCopy.description,
       successTitle: ({ changedRows, changedCells }) =>
         `Re-seeded ${changedRows} row${changedRows === 1 ? "" : "s"} (${changedCells} cell${changedCells === 1 ? "" : "s"})`,
       successDescription: ({ source, warning }) =>
@@ -387,10 +390,15 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
                     onClick={() => void fillBlanksOp.fire()}
                     disabled={fillBlanksOp.state === "loading"}
                     className="inline-flex items-center gap-1 rounded-md bg-accent-purple px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-purple-dark disabled:opacity-60"
+                    title={
+                      fillBlanksOp.state === "loading"
+                        ? `Calling the Versant model — typically ${dialsCopy.timeWindow}`
+                        : "Score every blank dial via the Versant-grounded model."
+                    }
                   >
                     <Sparkles className="h-3 w-3" />
                     {fillBlanksOp.state === "loading"
-                      ? "Scoring..."
+                      ? dialsCopy.buttonShort
                       : `Fill ${blanks.totalBlanks} blank${blanks.totalBlanks === 1 ? "" : "s"}`}
                   </button>
                 ) : (
@@ -401,9 +409,13 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
                   onClick={() => setReseedDialogOpen(true)}
                   disabled={overwriteAllOp.state === "loading"}
                   className="rounded-md border border-forge-border px-2.5 py-1 text-xs text-forge-body hover:border-accent-purple/30 disabled:opacity-60"
-                  title="Re-score every Activity Group from scratch (replaces explicit overrides)"
+                  title={
+                    overwriteAllOp.state === "loading"
+                      ? `Calling the Versant model — typically ${dialsCopy.timeWindow}`
+                      : "Re-score every Activity Group from scratch (replaces explicit overrides)"
+                  }
                 >
-                  {overwriteAllOp.state === "loading" ? "Re-scoring..." : "Re-score every Activity Group"}
+                  {overwriteAllOp.state === "loading" ? dialsCopy.buttonShort : "Re-score every Activity Group"}
                 </button>
               </div>
             </div>

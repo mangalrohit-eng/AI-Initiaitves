@@ -3,6 +3,7 @@
 import * as React from "react";
 import * as Icons from "lucide-react";
 import { cn } from "@/lib/utils";
+import { llmLoadingCopy } from "@/lib/llm/loadingCopy";
 
 /**
  * Step 1 (Capability Map) staleness banner.
@@ -20,6 +21,8 @@ import { cn } from "@/lib/utils";
  *   - Mirrors the visual language of `StaleCurationBanner` (amber gradient,
  *     RefreshCw + Sparkles iconography) so the three banners read as one
  *     consistent staleness pattern across the journey.
+ *   - While generating, surfaces an inline "20-60 seconds, don't refresh"
+ *     status line so the user knows the call is in flight — not frozen.
  */
 export function StaleL4Banner({
   blankL4Count,
@@ -38,6 +41,7 @@ export function StaleL4Banner({
   mapLocked?: boolean;
 }) {
   if (blankL4Count === 0) return null;
+  const copy = llmLoadingCopy("generate-l5");
 
   return (
     <section
@@ -93,7 +97,7 @@ export function StaleL4Banner({
           {generating ? (
             <>
               <Icons.Loader2 className="h-4 w-4 animate-spin" />
-              Generating...
+              {copy.buttonShort}
             </>
           ) : (
             <>
@@ -104,6 +108,16 @@ export function StaleL4Banner({
           )}
         </button>
       </div>
+      {generating ? (
+        <div
+          className="mt-3 flex items-start gap-2 rounded-lg border border-accent-amber/30 bg-near-black/40 px-3 py-2 text-[11px] leading-relaxed text-forge-body"
+          role="status"
+          aria-live="polite"
+        >
+          <Icons.Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-accent-amber" aria-hidden />
+          <span className="min-w-0">{copy.description}</span>
+        </div>
+      ) : null}
     </section>
   );
 }

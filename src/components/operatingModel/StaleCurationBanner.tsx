@@ -22,6 +22,7 @@ import type {
   TowerId,
 } from "@/data/assess/types";
 import { cn } from "@/lib/utils";
+import { curationProgressLine, llmLoadingCopy } from "@/lib/llm/loadingCopy";
 
 /**
  * Banner that surfaces above the AI Initiatives view (Step 4) whenever an
@@ -77,15 +78,32 @@ export function StaleCurationBanner({
 
   const [showDiff, setShowDiff] = React.useState(false);
   const [running, setRunning] = React.useState(false);
+  // Per-row progress while the streaming curation is in flight. `total` is
+  // captured at fire-time from `queuedRowIdsForTower` so the banner can
+  // render "Scored X of Y" the instant the first `done` event lands.
+  const [progress, setProgress] = React.useState<{ scored: number; total: number }>(
+    { scored: 0, total: 0 },
+  );
 
   const onRefresh = React.useCallback(async () => {
     if (running) return;
     const { rowIds } = queuedRowIdsForTower(towerId);
     if (rowIds.length === 0) return;
     setRunning(true);
+    setProgress({ scored: 0, total: rowIds.length });
     let summary: RunSummary | undefined;
     try {
-      summary = await runForRows({ towerId, rowIds });
+      summary = await runForRows({ towerId, rowIds }, (p) => {
+        // The pipeline emits one `done` (or `failed`) event per row as the
+        // streaming response lands. Both count toward "scored" — the user
+        // only cares that this row is no longer pending.
+        if (p.stage === "done" || p.stage === "failed") {
+          setProgress((prev) => ({
+            scored: Math.min(prev.scored + 1, prev.total),
+            total: prev.total,
+          }));
+        }
+      });
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       toast.error({
@@ -93,9 +111,11 @@ export function StaleCurationBanner({
         description: error,
       });
       setRunning(false);
+      setProgress({ scored: 0, total: 0 });
       return;
     }
     setRunning(false);
+    setProgress({ scored: 0, total: 0 });
     if (!summary) return;
     const sourceLabel =
       summary.source === "llm"
@@ -212,7 +232,9 @@ export function StaleCurationBanner({
             {running || inFlight ? (
               <>
                 <Icons.Loader2 className="h-4 w-4 animate-spin" />
-                Refreshing...
+                {progress.total > 0 && progress.scored > 0
+                  ? `Scoring ${progress.scored}/${progress.total}...`
+                  : llmLoadingCopy("curate-initiatives").buttonShort}
               </>
             ) : (
               <>
@@ -224,6 +246,19 @@ export function StaleCurationBanner({
           </button>
         )}
       </div>
+
+      {running ? (
+        <div
+          className="mt-3 flex items-start gap-2 rounded-lg border border-accent-amber/30 bg-near-black/40 px-3 py-2 text-[11px] leading-relaxed text-forge-body"
+          role="status"
+          aria-live="polite"
+        >
+          <Icons.Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-accent-amber" aria-hidden />
+          <span className="min-w-0">
+            {curationProgressLine(progress.scored, progress.total)}
+          </span>
+        </div>
+      ) : null}
 
       {queuedCount > 0 ? (
         <details

@@ -90,7 +90,11 @@ export type CurateBriefLLMOptions = {
   model?: string;
   timeoutMs?: number;
   maxOutputTokens?: number;
-  /** Only used with GPT-5 family on the Responses API. Default: env `OPENAI_CURATE_BRIEF_REASONING_EFFORT` or `medium`. */
+  /**
+   * Only used with GPT-5 family on the Responses API. Defaults to `"medium"`.
+   * The legacy env var `OPENAI_CURATE_BRIEF_REASONING_EFFORT` is no longer
+   * read — pass it as an option if you need to override.
+   */
   reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
 };
 

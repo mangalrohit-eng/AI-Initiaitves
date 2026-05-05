@@ -3,6 +3,7 @@
 import * as React from "react";
 import * as Icons from "lucide-react";
 import { cn } from "@/lib/utils";
+import { llmLoadingCopy } from "@/lib/llm/loadingCopy";
 
 /**
  * Step 2 (Configure Impact Levers) staleness banner.
@@ -32,6 +33,7 @@ export function StaleDialsBanner({
   hideTitle?: boolean;
 }) {
   if (totalRows === 0) return null;
+  const copy = llmLoadingCopy("infer-defaults");
 
   return (
     <section
@@ -86,7 +88,7 @@ export function StaleDialsBanner({
           {rescoring ? (
             <>
               <Icons.Loader2 className="h-4 w-4 animate-spin" />
-              Re-scoring...
+              {copy.buttonShort}
             </>
           ) : (
             <>
@@ -97,6 +99,16 @@ export function StaleDialsBanner({
           )}
         </button>
       </div>
+      {rescoring ? (
+        <div
+          className="mt-3 flex items-start gap-2 rounded-lg border border-accent-amber/30 bg-near-black/40 px-3 py-2 text-[11px] leading-relaxed text-forge-body"
+          role="status"
+          aria-live="polite"
+        >
+          <Icons.Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-accent-amber" aria-hidden />
+          <span className="min-w-0">{copy.description}</span>
+        </div>
+      ) : null}
     </section>
   );
 }

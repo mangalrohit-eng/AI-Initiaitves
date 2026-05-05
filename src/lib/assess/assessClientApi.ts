@@ -341,6 +341,10 @@ export type CurateInitiativesRowInput = {
 export type CuratedL4 = Pick<
   L4Item,
   | "name"
+  // AI-initiative-style headline (e.g. "Bank reconciliation automation").
+  // Server emits it for `aiEligible` rows only; client falls back to `name`
+  // when undefined.
+  | "initiativeName"
   | "aiCurationStatus"
   | "aiEligible"
   | "feasibility"
@@ -359,7 +363,17 @@ export type CuratedRow = {
   l5Items: CuratedL4[];
 };
 
-export type CurateInitiativesSource = "llm" | "fallback";
+/**
+ * Tower-level provenance flag returned by the curation API.
+ *  - `"llm"` — every row scored via the OpenAI call.
+ *  - `"fallback"` — every row came from the deterministic composer
+ *    (no API key, or every per-row LLM call failed).
+ *  - `"mixed"` — some rows from LLM, some from deterministic fallback.
+ *    PR2 added per-row fallback so a single row's LLM failure no longer
+ *    collapses the whole tower; `"mixed"` surfaces that partial state to
+ *    the toolbar.
+ */
+export type CurateInitiativesSource = "llm" | "fallback" | "mixed";
 
 export type CurateInitiativesResult = {
   source: CurateInitiativesSource;
@@ -420,6 +434,176 @@ export async function clientCurateInitiatives(
       source: data.source,
       rows: data.rows,
       warning: data.warning,
+    },
+  };
+}
+
+// ===========================================================================
+//   Streaming variant — Phase 3.5 progressive UX
+// ===========================================================================
+
+/**
+ * Per-row event surfaced through `streamCurateInitiatives`. Mirrors the
+ * server-side `CurateInitiativesStreamEvent` `row` event but with the
+ * curated `CuratedL4[]` already typed.
+ */
+export type StreamCurateRowEvent = {
+  rowId: string;
+  l5Items: CuratedL4[];
+  source: "llm" | "fallback";
+  /** Per-row warning emitted when this specific row fell back deterministically
+   *  (e.g. LLM call timed out for this row). */
+  warning?: string;
+};
+
+export type StreamCurateOpts = {
+  /** Optional `AbortController.signal` so callers can cancel the stream. */
+  signal?: AbortSignal;
+  /** Fired exactly once when the server has parsed the request and is
+   *  about to start emitting rows. Surfaces total counts so the UI can
+   *  set up a progress bar. */
+  onStarted?: (info: { totalRows: number; totalL5s: number }) => void;
+  /** Fired once per row, in completion order (NOT input order). The UI
+   *  should key by `rowId` and merge into its row store. */
+  onRow?: (ev: StreamCurateRowEvent) => void;
+};
+
+/**
+ * Streams the per-L4 curation as it lands. Sends `Accept:
+ * application/x-ndjson` so the route emits the NDJSON event protocol
+ * (`@/lib/assess/curateInitiativesStreamProtocol`). Internally drives the
+ * `onStarted` / `onRow` callbacks and resolves with the final aggregate
+ * result once the server emits `done`.
+ *
+ * Failure modes:
+ *  - HTTP 4xx (auth / validation) → `{ ok: false, error, status }`. The
+ *    server emits the validation error as a single `error` NDJSON line,
+ *    which we surface via the message field.
+ *  - Network failure mid-stream → returns `{ ok: false }` with the
+ *    aggregated rows-so-far discarded; pipeline retries via the
+ *    deterministic composer the same way the JSON path does.
+ *  - Per-row LLM failure → server already emits `source: "fallback"` for
+ *    that row; the caller's `onRow` sees the deterministic fallback row
+ *    and the final `result.source` is `"mixed"`.
+ *
+ * Caller-side back-compat: callers that don't care about streaming
+ * progress can ignore `onStarted` / `onRow` and just await the final
+ * result; behaviour matches `clientCurateInitiatives` exactly.
+ */
+export async function streamCurateInitiatives(
+  towerId: TowerId,
+  rows: CurateInitiativesRowInput[],
+  opts: StreamCurateOpts & { towerIntakeDigest?: string } = {},
+): Promise<
+  | { ok: true; result: CurateInitiativesResult }
+  | { ok: false; error: string; status: number }
+> {
+  const { decodeStreamEvents, CURATE_STREAM_CONTENT_TYPE } = await import(
+    "./curateInitiativesStreamProtocol"
+  );
+
+  let res: Response;
+  try {
+    res = await fetch("/api/assess/curate-initiatives", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: CURATE_STREAM_CONTENT_TYPE,
+      },
+      body: JSON.stringify({
+        towerId,
+        rows,
+        ...(opts.towerIntakeDigest
+          ? { towerIntakeDigest: opts.towerIntakeDigest }
+          : {}),
+      }),
+      signal: opts.signal,
+    });
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Network error",
+      status: 0,
+    };
+  }
+
+  if (!res.body) {
+    return {
+      ok: false,
+      error: "Curation stream returned no body",
+      status: res.status,
+    };
+  }
+
+  // Aggregate per-row events into a result keyed by `rowId`. We preserve
+  // server completion order (NOT input order) since the caller's `onRow`
+  // already saw rows as they arrived; the final result is sorted by
+  // input order before returning so the JSON-equivalent contract holds.
+  const collected = new Map<string, CuratedRow>();
+  let finalSource: CurateInitiativesSource | undefined;
+  let warning: string | undefined;
+  let serverError: { code: string; message: string } | undefined;
+
+  try {
+    for await (const ev of decodeStreamEvents(res.body)) {
+      if (ev.kind === "started") {
+        opts.onStarted?.({ totalRows: ev.totalRows, totalL5s: ev.totalL5s });
+      } else if (ev.kind === "row") {
+        const row: CuratedRow = { rowId: ev.rowId, l5Items: ev.l5Items };
+        collected.set(ev.rowId, row);
+        opts.onRow?.({
+          rowId: ev.rowId,
+          l5Items: ev.l5Items,
+          source: ev.source,
+          warning: ev.warning,
+        });
+      } else if (ev.kind === "done") {
+        finalSource = ev.source;
+        if (ev.warning) warning = ev.warning;
+      } else if (ev.kind === "error") {
+        serverError = { code: ev.code, message: ev.message };
+        break;
+      }
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Curation stream interrupted",
+      status: res.status,
+    };
+  }
+
+  if (serverError) {
+    const status =
+      serverError.code === "unauthorized"
+        ? 401
+        : serverError.code === "bad_request"
+          ? 400
+          : serverError.code === "payload_too_large"
+            ? 413
+            : 500;
+    return { ok: false, error: serverError.message, status };
+  }
+
+  if (!finalSource) {
+    return {
+      ok: false,
+      error: "Curation stream ended without 'done' event",
+      status: res.status,
+    };
+  }
+
+  const orderedRows: CuratedRow[] = rows.map(
+    (input) => collected.get(input.rowId) ?? { rowId: input.rowId, l5Items: [] },
+  );
+
+  return {
+    ok: true,
+    result: {
+      source: finalSource,
+      rows: orderedRows,
+      warning,
     },
   };
 }

@@ -1,32 +1,35 @@
 /**
  * Curation pipeline orchestrator.
  *
- * LLM mode (current):
+ * LLM mode (post-PR2 streaming):
  *   - Stage 1 — L5 Activity name generation: SKIPPED. The pipeline assumes
  *     `row.l5Activities` is already populated; if it isn't, the row is
  *     marked `failed` with a hint pointing the user back to Step 1's
  *     "Generate L5 Activities" button.
- *   - Stages 2 + 3 — Verdict + curation: ONE batched LLM call per tower
- *     via `/api/assess/curate-initiatives`. The route falls back to the
- *     deterministic `composeL4Verdict` rubric on any LLM failure so the
- *     program never loses Step 4. Click-through fields (`initiativeId`
- *     / `briefSlug`) are stamped here from `aiCurationOverlay` after the
- *     call returns — they remain overlay-only so the LLM can't claim a
- *     hand-curated brief that doesn't exist.
+ *   - Stages 2 + 3 — Verdict + curation: PER-L4 fan-out via the streaming
+ *     variant of `/api/assess/curate-initiatives`. The route makes one
+ *     LLM call per L4 Activity Group (bounded concurrency 6) and emits
+ *     each row's verdict + curation summary as a streaming NDJSON event
+ *     the moment it lands. The route falls back to the deterministic
+ *     `composeL4Verdict` rubric per-row on LLM failure — a single row's
+ *     LLM error no longer collapses the whole tower. Click-through
+ *     fields (`initiativeId` / `briefSlug`) are stamped here from
+ *     `aiCurationOverlay` after each event is parsed — they remain
+ *     overlay-only so the LLM can't claim a hand-curated brief that
+ *     doesn't exist.
  *
- * Lockstep progress UX:
- *   Because the LLM call is a single tower-wide request, we can't surface
- *   per-row stage transitions. Instead, every row in `opts.rowIds` flips
- *   to `running-curate` together, and they all flip to `done` together
- *   when the response lands. That's a more honest signal than fake
- *   per-row pacing.
+ * Progressive UX:
+ *   Each row flips to `running-curate` before the stream starts, then
+ *   transitions to `done` independently as its `row` event lands. The
+ *   user sees rows fill in across the tower view rather than waiting
+ *   for the full batch.
  *
- * Atomic write:
- *   On success each row is updated with `{l4Items, l4Activities (mirrored
- *   from l4Items.name), curationContentHash, curationStage: "done",
- *   curationGeneratedAt}` in one `setTowerAssess` call so the cache key
- *   and the cache contents cannot drift. Cache invalidation (selector
- *   Path 0) relies on this.
+ * Per-row atomic write:
+ *   When a `row` event arrives we re-read the latest program, patch the
+ *   single row with `{l5Items, l5Activities (mirrored from l5Items.name),
+ *   curationContentHash, curationStage: "done", curationGeneratedAt}` in
+ *   one `setTowerAssess` call so the cache key and the cache contents
+ *   cannot drift. Cache invalidation (selector Path 0) relies on this.
  */
 
 import type {
@@ -43,10 +46,14 @@ import {
   rowCurrentHash,
 } from "@/lib/initiatives/curationHash";
 import { aiCurationOverlay } from "@/data/capabilityMap/aiCurationOverlay";
+import { resolveRowDescriptions } from "@/data/capabilityMap/descriptions";
 import {
   clientCurateInitiatives,
   clientGenerateL4Activities,
+  streamCurateInitiatives,
   type CuratedRow,
+  type CurateInitiativesSource,
+  type CuratedL4,
 } from "@/lib/assess/assessClientApi";
 
 export type RunOptions = {
@@ -70,8 +77,12 @@ export type RunSummary = {
   eligibleRows: number;
   /** Rows that finished but have zero aiEligible L4s (still need manual review). */
   needReviewRows: number;
-  /** Provenance of the verdict path that won — surfaced in the toast. */
-  source?: "llm" | "fallback";
+  /**
+   * Provenance of the verdict path that won — surfaced in the toast.
+   * Post-PR2 this can be `"mixed"` when SOME rows used the LLM and
+   * others fell back to the deterministic composer (per-row failure).
+   */
+  source?: CurateInitiativesSource;
   /** Server-side warning text when LLM was unavailable / fell back. */
   warning?: string;
 };
@@ -150,18 +161,105 @@ export async function runForRows(
 
   if (opts.signal?.aborted) return summary;
 
-  // Lockstep: every queued row flips to `running-curate` before the call.
+  // Every queued row flips to `running-curate` before the stream opens.
+  // The user sees a "scoring…" state on each row until that row's NDJSON
+  // event lands; rows then transition to `done` independently.
   for (const r of eligibleInputs) {
     onProgress?.({ rowId: r.rowId, stage: "running-curate" });
   }
 
-  // Single batched call. The server route owns the LLM-vs-fallback decision
-  // and validates vendor names + canonical not-eligible reasons before
-  // returning.
+  // Per-L4 streaming fan-out. The route makes one LLM call per row
+  // (bounded concurrency 6) and falls back to the deterministic
+  // composer per-row on LLM failure. We patch each row into the local
+  // store as its event arrives so the UI hydrates progressively.
   const towerIntakeDigest = buildTowerReadinessDigest(
     getAssessProgram().towers[opts.towerId]?.aiReadinessIntake,
   );
-  const apiRes = await clientCurateInitiatives(
+
+  const succeededRowIds = new Set<string>();
+
+  /**
+   * Stamp a single row into the local store. Re-reads the latest
+   * program inside `setTowerAssess` (a parallel patch on a different
+   * L3 may have landed mid-stream) and rewrites only the matching row.
+   */
+  const stampRow = (
+    rowId: string,
+    items: CuratedL4[],
+    rowSource: "llm" | "fallback",
+  ): void => {
+    const fresh = getAssessProgram().towers[opts.towerId];
+    if (!fresh) return;
+    const generatedAt = new Date().toISOString();
+    const itemSource: L4Item["source"] = rowSource === "llm" ? "llm" : "fallback";
+    setTowerAssess(opts.towerId, {
+      l4Rows: fresh.l4Rows.map((r) => {
+        if (r.id !== rowId) return r;
+        const l5Items: L4Item[] = items.map((item) => {
+          const id = synthId(r.id, item.name);
+          const overlay = aiCurationOverlay[id];
+          // Click-through fields stay overlay-only — the LLM is not
+          // allowed to invent brief slugs or initiative ids.
+          const briefSlug = overlay?.briefSlug;
+          const initiativeId = overlay?.initiativeId;
+          // initiativeName precedence: hand-authored overlay wins, then
+          // the LLM- or fallback-emitted title from the route. Stays
+          // undefined when the L5 isn't AI-eligible so the UI knows to
+          // render the not-eligible state without a misleading headline.
+          const initiativeName = item.aiEligible
+            ? overlay?.initiativeName ?? item.initiativeName
+            : undefined;
+          return {
+            id,
+            name: item.name,
+            initiativeName,
+            source: itemSource,
+            generatedAt,
+            aiCurationStatus: item.aiCurationStatus,
+            aiEligible: item.aiEligible,
+            // The LLM now scores binary feasibility directly; aiPriority is
+            // intentionally omitted on new writes so the program-tier 2x2
+            // owns priority. Old cached items that still carry aiPriority
+            // are honored by the back-compat map in `composeVerdict`.
+            feasibility: item.feasibility,
+            aiRationale: item.aiRationale,
+            notEligibleReason: item.notEligibleReason,
+            frequency: item.frequency,
+            criticality: item.criticality,
+            currentMaturity: item.currentMaturity,
+            primaryVendor: item.primaryVendor,
+            agentOneLine: item.agentOneLine,
+            initiativeId,
+            briefSlug,
+          };
+        });
+        // PR3: include narrative context so the hash matches the
+        // staleness check on the read path. Same towerId for the whole
+        // streaming batch — captured from the surrounding `runForRows`
+        // closure.
+        const nextHash = computeCurationContentHash(
+          r.l2,
+          r.l3,
+          l5Items.map((x) => x.name),
+          resolveRowDescriptions(opts.towerId, r.l2, r.l3, r.l4),
+        );
+        return {
+          ...r,
+          l5Items,
+          l5Activities: l5Items.map((x) => x.name),
+          curationContentHash: nextHash,
+          curationStage: "done" as CurationStage,
+          curationGeneratedAt: generatedAt,
+          curationError: undefined,
+        };
+      }),
+    });
+    succeededRowIds.add(rowId);
+    if (items.some((i) => i.aiEligible)) summary.eligibleRows += 1;
+    else summary.needReviewRows += 1;
+  };
+
+  const apiRes = await streamCurateInitiatives(
     opts.towerId,
     eligibleInputs.map((e) => ({
       rowId: e.rowId,
@@ -174,12 +272,26 @@ export async function runForRows(
       l4: e.row.l4,
       l5Activities: e.l5Activities,
     })),
-    towerIntakeDigest ? { towerIntakeDigest } : undefined,
+    {
+      ...(towerIntakeDigest ? { towerIntakeDigest } : {}),
+      signal: opts.signal,
+      // Per-row event handler — the heart of the progressive UX. Stamps
+      // the row into the local store and emits a `done` progress event
+      // the moment the server has scored it.
+      onRow: (ev) => {
+        if (opts.signal?.aborted) return;
+        stampRow(ev.rowId, ev.l5Items, ev.source);
+        onProgress?.({ rowId: ev.rowId, stage: "done" });
+      },
+    },
   );
 
   if (!apiRes.ok) {
     const error = `Curation API failed (${apiRes.status}): ${apiRes.error}`;
     for (const e of eligibleInputs) {
+      // Skip rows we already stamped (`onRow` may have run before the
+      // failure landed) — they're already `done`, no need to overwrite.
+      if (succeededRowIds.has(e.rowId)) continue;
       writeFailure(opts.towerId, e.rowId, error);
       onProgress?.({ rowId: e.rowId, stage: "failed", error });
       summary.failed += 1;
@@ -187,119 +299,22 @@ export async function runForRows(
     return summary;
   }
 
-  if (opts.signal?.aborted) return summary;
-
   summary.source = apiRes.result.source;
   summary.warning = apiRes.result.warning;
 
-  // Build a fast lookup so we apply server results back to rows in O(1).
-  const resultByRow = new Map<string, CuratedRow>();
-  for (const r of apiRes.result.rows) resultByRow.set(r.rowId, r);
-
-  // Atomic write per tower: re-read the latest program (a parallel patch on
-  // a different L3 may have landed during the LLM call) and rewrite every
-  // touched row in one `setTowerAssess`.
-  const fresh = getAssessProgram().towers[opts.towerId];
-  if (!fresh) {
-    for (const e of eligibleInputs) {
-      writeFailure(
-        opts.towerId,
-        e.rowId,
-        "Tower state lost while curation was running.",
-      );
-      onProgress?.({
-        rowId: e.rowId,
-        stage: "failed",
-        error: "Tower state lost while curation was running.",
-      });
-      summary.failed += 1;
-    }
-    return summary;
-  }
-
-  const generatedAt = new Date().toISOString();
-  const itemSource: L4Item["source"] =
-    apiRes.result.source === "llm" ? "llm" : "fallback";
-
-  const succeededRowIds = new Set<string>();
-  const writeBackRows = fresh.l4Rows.map((r) => {
-    const e = eligibleInputs.find((x) => x.rowId === r.id);
-    if (!e) return r;
-    const curated = resultByRow.get(r.id);
-    if (!curated) {
-      // Server omitted this row — should not happen given the length checks
-      // server-side, but treat it as a failure to preserve invariants.
-      return {
-        ...r,
-        curationStage: "failed" as CurationStage,
-        curationError: "Server returned no results for this row.",
-      };
-    }
-
-    const l5Items: L4Item[] = curated.l5Items.map((item) => {
-      const id = synthId(r.id, item.name);
-      const overlay = aiCurationOverlay[id];
-      // Click-through fields stay overlay-only — the LLM is not allowed
-      // to invent brief slugs or initiative ids.
-      const briefSlug = overlay?.briefSlug;
-      const initiativeId = overlay?.initiativeId;
-      return {
-        id,
-        name: item.name,
-        source: itemSource,
-        generatedAt,
-        aiCurationStatus: item.aiCurationStatus,
-        aiEligible: item.aiEligible,
-        // The LLM now scores binary feasibility directly; aiPriority is
-        // intentionally omitted on new writes so the program-tier 2x2 owns
-        // priority. Old cached items that still carry aiPriority are
-        // honored by the back-compat map in `composeVerdict`.
-        feasibility: item.feasibility,
-        aiRationale: item.aiRationale,
-        notEligibleReason: item.notEligibleReason,
-        frequency: item.frequency,
-        criticality: item.criticality,
-        currentMaturity: item.currentMaturity,
-        primaryVendor: item.primaryVendor,
-        agentOneLine: item.agentOneLine,
-        initiativeId,
-        briefSlug,
-      };
-    });
-
-    const nextHash = computeCurationContentHash(
-      r.l2,
-      r.l3,
-      l5Items.map((x) => x.name),
-    );
-    succeededRowIds.add(r.id);
-    if (l5Items.some((i) => i.aiEligible)) summary.eligibleRows += 1;
-    else summary.needReviewRows += 1;
-    return {
-      ...r,
-      l5Items,
-      l5Activities: l5Items.map((x) => x.name),
-      curationContentHash: nextHash,
-      curationStage: "done" as CurationStage,
-      curationGeneratedAt: generatedAt,
-      curationError: undefined,
-    };
-  });
-
-  setTowerAssess(opts.towerId, { l4Rows: writeBackRows });
-
+  // Belt-and-suspenders: the stream's `done` event arrives after every
+  // `row`. Walk eligible inputs and surface any row the stream omitted
+  // (should not happen given the length checks server-side) as a
+  // failure to preserve the contract that every row gets a final state.
   for (const e of eligibleInputs) {
     if (succeededRowIds.has(e.rowId)) {
-      onProgress?.({ rowId: e.rowId, stage: "done" });
       summary.succeeded += 1;
-    } else {
-      onProgress?.({
-        rowId: e.rowId,
-        stage: "failed",
-        error: "Server returned no results for this row.",
-      });
-      summary.failed += 1;
+      continue;
     }
+    const error = "Curation stream omitted this row.";
+    writeFailure(opts.towerId, e.rowId, error);
+    onProgress?.({ rowId: e.rowId, stage: "failed", error });
+    summary.failed += 1;
   }
 
   return summary;
@@ -360,8 +375,13 @@ export type RegenerateRowSummary = {
   rowId: string;
   /** True iff Stage 1 (L4 generation) AND Stage 2 (curation) both succeeded. */
   ok: boolean;
-  /** Provenance of the verdict path that won — "llm" or "fallback". */
-  source?: "llm" | "fallback";
+  /**
+   * Provenance of the verdict path that won. `"mixed"` is technically
+   * possible per the wire shape but cannot occur on the per-row regenerate
+   * path (single-row request → single-row outcome). It's still typed
+   * here to keep the field aligned with `RunSummary.source`.
+   */
+  source?: CurateInitiativesSource;
   /** Number of curated L4Items written back to this row. */
   l4Count: number;
   /** Of those, how many came back aiEligible. */
@@ -500,10 +520,19 @@ export async function regenerateRowWithFeedback(
 
   // ----- Post-Stage-1 atomic write. Stamp a matching hash so
   // markRowsStaleByHash is a no-op and the row does NOT get auto-queued.
+  // PR3: include the per-row narrative context so the hash matches what
+  // `bootstrapHashOnRead` and `markRowsStaleByHash` would compute.
+  const stage1Descs = resolveRowDescriptions(
+    towerId,
+    targetRow.l2,
+    targetRow.l3,
+    targetRow.l4,
+  );
   const stage1Hash = computeCurationContentHash(
     targetRow.l2,
     targetRow.l3,
     newL4Activities,
+    stage1Descs,
   );
   patchRow(towerId, rowId, {
     l5Activities: newL4Activities,
@@ -563,9 +592,13 @@ export async function regenerateRowWithFeedback(
   const l5Items: L4Item[] = curated.l5Items.map((item) => {
     const id = synthId(rowId, item.name);
     const overlay = aiCurationOverlay[id];
+    const initiativeName = item.aiEligible
+      ? overlay?.initiativeName ?? item.initiativeName
+      : undefined;
     return {
       id,
       name: item.name,
+      initiativeName,
       source: itemSource,
       generatedAt,
       aiCurationStatus: item.aiCurationStatus,
@@ -585,10 +618,13 @@ export async function regenerateRowWithFeedback(
     };
   });
   const finalL5Names = l5Items.map((x) => x.name);
+  // PR3: include narrative context in the hash so it matches the client's
+  // staleness check (which now also folds descriptions into the hash).
   const finalHash = computeCurationContentHash(
     targetRow.l2,
     targetRow.l3,
     finalL5Names,
+    resolveRowDescriptions(towerId, targetRow.l2, targetRow.l3, targetRow.l4),
   );
 
   patchRow(towerId, rowId, {

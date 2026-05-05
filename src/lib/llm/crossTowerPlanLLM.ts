@@ -53,7 +53,13 @@ import type {
 } from "@/lib/cross-tower/aiProjects";
 import type { CrossTowerAssumptions } from "@/lib/cross-tower/assumptions";
 import { hashAssumptions } from "@/lib/cross-tower/assumptions";
-import { resolveOpenAiBaseUrl } from "@/lib/llm/openaiBase";
+import {
+  VersantLLMError,
+  buildLLMRequest,
+  isLLMConfigured as kitIsLLMConfigured,
+  resolveModelId as kitResolveModelId,
+  type ReasoningEffort,
+} from "@/lib/llm/prompts/versantPromptKit";
 import {
   getCachedProject,
   getCachedSynthesis,
@@ -61,13 +67,9 @@ import {
   putCachedSynthesis,
 } from "@/lib/llm/crossTowerPlanCache";
 
-const DEFAULT_MODEL = "gpt-5.5";
 const DEFAULT_TIMEOUT_MS = 90_000;
-const DEFAULT_TEMPERATURE = 0.2;
 const DEFAULT_MAX_TOKENS = 6_000;
 const DEFAULT_REASONING_EFFORT: ReasoningEffort = "low";
-
-type ReasoningEffort = "minimal" | "low" | "medium" | "high";
 
 export class CrossTowerPlanLLMError extends Error {
   constructor(
@@ -121,7 +123,7 @@ export type GenerateCrossTowerPlanResult = {
 };
 
 export function isLLMConfigured(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+  return kitIsLLMConfigured();
 }
 
 function intakeDigestFingerprint(digest: string | undefined): string {
@@ -135,58 +137,7 @@ function intakeDigestFingerprint(digest: string | undefined): string {
 }
 
 export function resolveModelId(override?: string): string {
-  return (
-    override?.trim() ||
-    process.env.CROSS_TOWER_PLAN_MODEL?.trim() ||
-    process.env.OPENAI_MODEL?.trim() ||
-    DEFAULT_MODEL
-  );
-}
-
-function resolveTemperature(): number {
-  const env = process.env.CROSS_TOWER_PLAN_TEMPERATURE?.trim();
-  if (env) {
-    const n = Number(env);
-    if (Number.isFinite(n)) return n;
-  }
-  return DEFAULT_TEMPERATURE;
-}
-
-function resolveTimeoutMs(): number {
-  const env = process.env.CROSS_TOWER_PLAN_TIMEOUT_MS?.trim();
-  if (env) {
-    const n = Number(env);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return DEFAULT_TIMEOUT_MS;
-}
-
-function resolveMaxTokens(): number {
-  const env = process.env.CROSS_TOWER_PLAN_MAX_TOKENS?.trim();
-  if (env) {
-    const n = Number(env);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return DEFAULT_MAX_TOKENS;
-}
-
-function resolveReasoningEffort(): ReasoningEffort {
-  const raw = process.env.CROSS_TOWER_PLAN_REASONING_EFFORT?.trim().toLowerCase();
-  if (raw === "minimal" || raw === "low" || raw === "medium" || raw === "high") {
-    return raw;
-  }
-  return DEFAULT_REASONING_EFFORT;
-}
-
-function shouldUseResponsesApi(model: string): boolean {
-  if (process.env.CROSS_TOWER_PLAN_USE_CHAT_COMPLETIONS === "1") return false;
-  const m = model.toLowerCase();
-  return (
-    m.startsWith("gpt-5") ||
-    m.startsWith("o1") ||
-    m.startsWith("o3") ||
-    m.startsWith("o4")
-  );
+  return kitResolveModelId(override);
 }
 
 // ===========================================================================
@@ -430,9 +381,6 @@ async function callOpenAi(args: {
   userPrompt: string;
   repair?: { reasons: string[]; previousOutput: string };
 }): Promise<unknown> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new CrossTowerPlanLLMError("OPENAI_API_KEY not set");
-
   let userPrompt = args.userPrompt;
   if (args.repair) {
     userPrompt = [
@@ -448,132 +396,27 @@ async function callOpenAi(args: {
     ].join("\n");
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), resolveTimeoutMs());
-  const useResponses = shouldUseResponsesApi(args.modelId);
-
-  let res: Response;
   try {
-    if (useResponses) {
-      res = await fetch(`${resolveOpenAiBaseUrl()}/v1/responses`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: args.modelId,
-          instructions: args.systemPrompt,
-          input: `Return a single JSON object exactly per the instructions.\n\n${userPrompt}`,
-          reasoning: { effort: resolveReasoningEffort() },
-          max_output_tokens: resolveMaxTokens(),
-          text: {
-            format: { type: "json_object" },
-            verbosity: "medium",
-          },
-        }),
-        signal: controller.signal,
-      });
-    } else {
-      res = await fetch(`${resolveOpenAiBaseUrl()}/v1/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: args.modelId,
-          temperature: resolveTemperature(),
-          max_completion_tokens: resolveMaxTokens(),
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: args.systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-        }),
-        signal: controller.signal,
-      });
-    }
+    const result = await buildLLMRequest({
+      systemPrompt: args.systemPrompt,
+      userPrompt,
+      model: args.modelId,
+      reasoningEffort: DEFAULT_REASONING_EFFORT,
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+      maxOutputTokens: DEFAULT_MAX_TOKENS,
+      verbosity: "medium",
+    });
+    return result.parsed;
   } catch (e) {
-    clearTimeout(timer);
-    if ((e as { name?: string })?.name === "AbortError") {
-      throw new CrossTowerPlanLLMError(
-        `OpenAI call timed out after ${resolveTimeoutMs()}ms`,
-        e,
-        true,
-      );
+    if (e instanceof VersantLLMError) {
+      throw new CrossTowerPlanLLMError(e.message, e, e.retriable);
     }
-    throw new CrossTowerPlanLLMError("OpenAI network error", e, true);
-  }
-  clearTimeout(timer);
-
-  const rawText = await res.text().catch(() => "");
-  if (!res.ok) {
-    const retriable = res.status === 429 || res.status >= 500;
     throw new CrossTowerPlanLLMError(
-      `OpenAI ${res.status}: ${rawText.slice(0, 400) || res.statusText}`,
-      undefined,
-      retriable,
+      e instanceof Error ? e.message : "OpenAI call failed",
+      e,
+      true,
     );
   }
-
-  let body: unknown;
-  try {
-    body = rawText ? JSON.parse(rawText) : {};
-  } catch (e) {
-    throw new CrossTowerPlanLLMError("OpenAI returned non-JSON body", e);
-  }
-
-  let content: string | null = null;
-  if (useResponses) {
-    const status = (body as { status?: string; error?: { message?: string } })
-      .status;
-    if (status === "failed" || status === "cancelled") {
-      const err = (body as { error?: { message?: string } }).error?.message;
-      throw new CrossTowerPlanLLMError(
-        `OpenAI Responses status ${status}${err ? `: ${err}` : ""}`,
-      );
-    }
-    content = extractResponsesOutputText(body);
-  } else {
-    content =
-      (body as { choices?: { message?: { content?: string } }[] })?.choices?.[0]
-        ?.message?.content ?? null;
-  }
-  if (typeof content !== "string" || !content.trim()) {
-    throw new CrossTowerPlanLLMError("OpenAI returned empty content");
-  }
-  try {
-    return JSON.parse(content);
-  } catch (e) {
-    throw new CrossTowerPlanLLMError("OpenAI content was not valid JSON", e);
-  }
-}
-
-function extractResponsesOutputText(body: unknown): string | null {
-  const b = body as {
-    output_text?: string;
-    output?: Array<{
-      type?: string;
-      content?: Array<{ type?: string; text?: string }>;
-    }>;
-  };
-  if (typeof b.output_text === "string" && b.output_text.trim()) {
-    return b.output_text;
-  }
-  for (const item of b.output ?? []) {
-    if (item.type !== "message") continue;
-    for (const part of item.content ?? []) {
-      if (
-        part.type === "output_text" &&
-        typeof part.text === "string" &&
-        part.text.trim()
-      ) {
-        return part.text;
-      }
-    }
-  }
-  return null;
 }
 
 // ===========================================================================

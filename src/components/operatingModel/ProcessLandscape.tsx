@@ -316,7 +316,7 @@ function L5ActivityRow({
                   l5.isPlaceholder ? "italic text-forge-subtle" : "text-forge-ink",
                 )}
               >
-                {l5.name}
+                {l5.initiativeName ?? l5.name}
               </span>
               {l5.source === "fuzzy-match" ? (
                 <span
@@ -343,6 +343,17 @@ function L5ActivityRow({
                 compact
               />
             </div>
+            {l5.initiativeName && l5.initiativeName !== l5.name ? (
+              <p
+                className="mt-0.5 text-[11px] leading-snug text-forge-hint"
+                title="The L5 Activity this AI initiative automates"
+              >
+                <span className="font-mono uppercase tracking-wider text-forge-hint/80">
+                  Activity
+                </span>{" "}
+                · {l5.name}
+              </p>
+            ) : null}
             {l5.aiRationale ? (
               <p className="mt-1 text-xs leading-relaxed text-forge-subtle">
                 {l5.aiRationale}

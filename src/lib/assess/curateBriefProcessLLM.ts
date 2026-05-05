@@ -30,28 +30,32 @@ import type { GeneratedBrief, TowerId } from "@/data/assess/types";
 import { digitalCore, orchestration, role, tool, workState } from "@/data/helpers";
 import { VENDOR_ALLOW_LIST } from "./curateInitiativesLLM";
 import { TOWER_READINESS_MAX_DIGEST_CHARS } from "@/lib/assess/towerReadinessIntake";
+import {
+  ALLOWED_VENDORS,
+  TOWER_CONTEXT,
+  VersantLLMError,
+  buildAllowListsBlock,
+  buildLLMRequest,
+  buildTowerContextBlock,
+  buildVersantPreamble,
+  buildVoiceRulesBlock,
+  getInferenceMeta,
+  isLLMConfigured as kitIsLLMConfigured,
+  resolveModelId,
+  shouldUseResponsesApi as kitShouldUseResponsesApi,
+} from "@/lib/llm/prompts/versantPromptKit";
 
-const HARDCODED_MODEL = "gpt-5.5";
-/** Override with `OPENAI_CURATE_BRIEF_MODEL`. GPT-5.x uses the Responses API + `reasoning` in this module. */
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 const VENDOR_TBD = "TBD — subject to discovery";
 
-export const TOWER_BRAND_HINT: Record<TowerId, string> = {
-  finance: "Multi-entity JV close, BlackLine GL, BB- credit covenant context.",
-  hr: "~9K employees across union (writers, IATSE, NABET) + non-union talent.",
-  "research-analytics": "Audience measurement across linear, FAST, streaming, digital.",
-  legal: "GC + commercial + IP for sports rights, news brands (CNBC, MS NOW), split-rights IP.",
-  "corp-services": "Real estate, facilities, EHS, indirect procurement across studio + corporate.",
-  "tech-engineering": "Streaming, GolfNow / GolfPass, Fandango, Rotten Tomatoes, ad-tech.",
-  "operations-technology": "Broadcast operations, playout, on-air technology — physical, US-required.",
-  sales: "National + local ad sales (greenfield post-TSA), affiliate carriage, sponsorship.",
-  "marketing-comms": "Brand marketing across MS NOW / CNBC / Golf / Free TV / Fandango.",
-  service: "Customer service for GolfNow, GolfPass, Fandango.",
-  "editorial-news": "Newsroom for CNBC, MS NOW, Golf Channel, USA Network sports — editorial judgment stays human.",
-  production: "Live and studio production — sets, control rooms, talent, on-air ops.",
-  "programming-dev": "Programming strategy, scheduling, content acquisition / dev — strategic.",
-};
+/**
+ * @deprecated Use `TOWER_CONTEXT` from `@/lib/llm/prompts/versantPromptKit`
+ * (richer paragraphs that already reconcile this hint with the Step-1/2/4
+ * tower context). Re-exported here verbatim from the kit so the existing
+ * `curateBriefLLM.ts` barrel re-export keeps compiling for back-compat.
+ */
+export const TOWER_BRAND_HINT: Record<TowerId, string> = TOWER_CONTEXT;
 
 export type CurateBriefLLMInput = {
   towerId: TowerId;
@@ -97,96 +101,51 @@ class LLMError extends Error {
   }
 }
 
-function resolveModel(options: CurateBriefLLMOptions): string {
-  return (
-    options.model?.trim() ||
-    process.env.OPENAI_CURATE_BRIEF_MODEL?.trim() ||
-    process.env.OPENAI_MODEL?.trim() ||
-    HARDCODED_MODEL
-  );
-}
-
 /**
- * Exposed for `/api/assess/curate-brief` and the LLM-brief page footer. Same
- * resolution order as the actual call (per-request `options` usually empty).
+ * Exposed for `/api/assess/curate-brief` and the LLM-brief page footer.
+ * Routes through the kit so every Versant module reports the same
+ * (model, mode, reasoningEffort) triple.
  */
 export function getCurateBriefInferenceMeta(
   options: CurateBriefLLMOptions = {},
 ): { model: string; mode: "responses" | "chat" } {
-  const model = resolveModel(options);
-  const useResponses = shouldUseResponsesApi(model);
-  return { model, mode: useResponses ? "responses" : "chat" };
+  const meta = getInferenceMeta(options.model, mapBriefReasoningEffort(resolveReasoningEffort(options)));
+  return { model: meta.model, mode: meta.mode };
 }
 
 function resolveTimeoutMs(options: CurateBriefLLMOptions): number {
-  const env = process.env.CURATE_BRIEF_TIMEOUT_MS;
   if (options.timeoutMs != null) return options.timeoutMs;
-  if (env && /^\d+$/.test(env)) return parseInt(env, 10);
   return DEFAULT_TIMEOUT_MS;
 }
 
 function resolveMaxOutputTokens(options: CurateBriefLLMOptions): number {
-  const env = process.env.OPENAI_CURATE_BRIEF_MAX_OUTPUT_TOKENS;
   if (options.maxOutputTokens != null) return options.maxOutputTokens;
-  if (env && /^\d+$/.test(env)) return parseInt(env, 10);
   return DEFAULT_MAX_OUTPUT_TOKENS;
 }
 
-/** GPT-5 family: use Responses API with `reasoning` (see OpenAI "Using GPT-5.5"). */
-function shouldUseResponsesApi(model: string): boolean {
-  if (process.env.OPENAI_CURATE_BRIEF_USE_CHAT_COMPLETIONS === "1") {
-    return false;
-  }
-  return (
-    model.startsWith("gpt-5") ||
-    model === "gpt-5.5-pro" ||
-    model.startsWith("gpt-5.5")
-  );
-}
-
+/**
+ * Brief authoring keeps a wider reasoning-effort vocabulary than the kit's
+ * canonical `minimal | low | medium | high` because a few callers wired the
+ * `none` and `xhigh` values into env-var docs. We collapse them at the
+ * boundary so the kit's `buildLLMRequest` receives a value it accepts.
+ */
 function resolveReasoningEffort(
   options: CurateBriefLLMOptions,
 ): "none" | "minimal" | "low" | "medium" | "high" | "xhigh" {
   if (options.reasoningEffort) return options.reasoningEffort;
-  const env = process.env.OPENAI_CURATE_BRIEF_REASONING_EFFORT?.trim().toLowerCase();
-  const allowed = new Set([
-    "none",
-    "minimal",
-    "low",
-    "medium",
-    "high",
-    "xhigh",
-  ]);
-  if (env && allowed.has(env)) {
-    return env as "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
-  }
   return "medium";
 }
 
-function extractResponsesOutputText(body: unknown): string | null {
-  const b = body as {
-    output_text?: string;
-    output?: Array<{
-      type?: string;
-      content?: Array<{ type?: string; text?: string }>;
-    }>;
-  };
-  if (typeof b.output_text === "string" && b.output_text.trim()) {
-    return b.output_text;
-  }
-  for (const item of b.output ?? []) {
-    if (item.type !== "message") continue;
-    for (const part of item.content ?? []) {
-      if (part.type === "output_text" && typeof part.text === "string" && part.text.trim()) {
-        return part.text;
-      }
-    }
-  }
-  return null;
+function mapBriefReasoningEffort(
+  raw: "none" | "minimal" | "low" | "medium" | "high" | "xhigh",
+): "minimal" | "low" | "medium" | "high" {
+  if (raw === "none") return "minimal";
+  if (raw === "xhigh") return "high";
+  return raw;
 }
 
 export function isLLMConfigured(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+  return kitIsLLMConfigured();
 }
 
 function truncate(s: string, max = 160): string {
@@ -760,36 +719,47 @@ export function normalizeLlmProcess(rawRoot: unknown, input: CurateBriefLLMInput
 }
 
 function buildSystemPrompt(towerId: TowerId, towerIntakeDigest?: string): string {
-  const th = TOWER_BRAND_HINT[towerId] ?? "Versant tower (context not authored).";
   const digest = towerIntakeDigest?.trim()
     ? towerIntakeDigest.trim().slice(0, TOWER_READINESS_MAX_DIGEST_CHARS)
     : "";
   const digestBlock = digest
     ? [
         "",
-        "TOWER LEAD QUESTIONNAIRE (authoritative for this tower when it conflicts with generic hints):",
+        "===========================================================================",
+        "TOWER LEAD QUESTIONNAIRE (authoritative for this tower when it conflicts)",
+        "===========================================================================",
         digest,
       ].join("\n")
     : "";
+  // Reference the unused legacy export so trimming the inline list later
+  // doesn't strand the import (the kit's ALLOWED_VENDORS is the canonical
+  // source rendered into the prompt below).
+  void VENDOR_ALLOW_LIST;
   return [
-    "You are a senior Versant operating partner. Output ONE JSON object only (the root fields of a 'Process' initiative). Every string must be Versant-specific. Declarative voice. No emojis. No hedging (no 'may', 'could', 'leverage AI').",
+    "You are a senior Versant operating partner. Output ONE JSON object only (the root fields of a 'Process' initiative). Every string must be Versant-specific. Declarative voice. No emojis. No hedging.",
     "",
     "Hierarchy context (5-layer Versant capability map):",
     "  L1 Function > L2 Job Grouping > L3 Job Family > L4 Activity Group > L5 Activity.",
     "  The brief you author IS the deep-dive for ONE L5 Activity (the 'leaf' in the user prompt). Anchor the work, workforce, workbench, and digital-core lenses in that L5 Activity, with the L4 Activity Group as immediate parent context.",
     "",
-    "Content policy (strict):",
+    buildVersantPreamble({ grain: "program" }),
+    "",
+    buildTowerContextBlock(towerId),
+    "",
+    "CONTENT POLICY (strict):",
     "  - Do not state dollar amounts, revenue, or Versant-specific financial figures unless they appear verbatim in the user prompt. Use 'TBD — subject to discovery' for unknowns.",
     "  - Do not present operational numbers (days, %, error rates, touchpoint counts) as facts about **this** client. If you use numbers in work.pre / work.post (avgCycleTime, errorRate, step durations, touchpoints), prefix or suffix so they read as **illustrative / industry-typical**, not a Versant forecast — e.g. 'Indicative: …' or 'Example range (not client-specific)'.",
     "  - **Headcount** may be described in **qualitative** terms (role mix, 'analyst-heavy', shift to review) and the RoleState.headcount field may use 'TBD — subject to discovery' or narrative labels. Do **not** claim measured FTE reduction, net headcount cut, or quantified workforce savings for Versant — workforceImpactSummary stays qualitative; timeAllocation is about time-in-role, not FTE counts.",
     "",
-    "Versant: MS NOW, CNBC, Golf Channel, GolfNow, GolfPass, USA Network, Fandango, Rotten Tomatoes, SportsEngine, Free TV, etc. TSA, BB- context when relevant. Use real vendor names from the allow-list in tools/roles, or the exact string 'TBD — subject to discovery' (em dash).",
+    buildVoiceRulesBlock(),
     "",
-    `Tower: ${towerId} — ${th}`,
+    buildAllowListsBlock({ includePeople: true, includeVendors: true }),
+    "",
+    `Vendor names in workbench tools, digitalCore.requiredPlatforms.examples, and agents.toolsUsed MUST come from the ALLOWED VENDORS list above (case-insensitive). Compound stacks separate with " + ". When no allow-list vendor fits, return the exact string "${VENDOR_TBD}".`,
     "",
     "The JSON must fully satisfy this TypeScript-style shape: Process { id, name, description, isAiEligible, complexity, timelineMonths, impactTier, currentPainPoints[], work{ pre: WorkState, post: WorkState, keyShifts[] }, work.pre/post have: description, steps[WorkStep], avgCycleTime, touchpoints, errorRate }. WorkStep: step number, action, owner, duration, isManual. workforce{ pre, post: RoleState[], keyShifts, workforceImpactTier, workforceImpactSummary } RoleState: role, headcount, primaryActivities, skillsRequired, timeAllocation: { string: number summing to ~100 }. workbench, digitalCore with requiredPlatforms[{platform,purpose,priority,examples}]. agents: Agent[] min 1 — each: id, name, role, type: Orchestrator|Specialist|Monitor|Router|Executor, inputs, outputs, llmRequired, toolsUsed. agentOrchestration: pattern, description, flow: {from,to,dataPassed,trigger}[] where from/to are agent id strings that exist in agents.",
-    "Vendor allow (match loosely; or use TBD):",
-    VENDOR_ALLOW_LIST.map((v) => `  - ${v}`).join("\n"),
+    "",
+    `Total allowed vendors: ${ALLOWED_VENDORS.length}.`,
     "",
     "Return strict JSON. No keys outside the Process. No markdown fences.",
   ].join("\n") + digestBlock;
@@ -830,165 +800,47 @@ function buildUserPrompt(input: CurateBriefLLMInput): string {
 
 /**
  * OpenAI call — returns a normalized `Process` or throws `LLMError`.
- */
-async function fetchProcessJsonFromChatCompletions(
-  apiKey: string,
-  model: string,
-  maxOut: number,
-  input: CurateBriefLLMInput,
-  signal: AbortSignal,
-): Promise<unknown> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      max_tokens: maxOut,
-      response_format: { type: "json_object" },
-        messages: [
-        {
-          role: "system",
-          content: buildSystemPrompt(input.towerId, input.towerIntakeDigest),
-        },
-        { role: "user", content: buildUserPrompt(input) },
-      ],
-    }),
-    signal,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new LLMError(
-      `OpenAI ${res.status}: ${text.slice(0, 400) || res.statusText}`,
-    );
-  }
-  let body: unknown;
-  try {
-    body = await res.json();
-  } catch (e) {
-    throw new LLMError("OpenAI returned non-JSON body", e);
-  }
-  const content = (body as {
-    choices?: { message?: { content?: string } }[];
-  })?.choices?.[0]?.message?.content;
-  if (typeof content !== "string" || !content.trim()) {
-    throw new LLMError("OpenAI returned empty content");
-  }
-  try {
-    return JSON.parse(content);
-  } catch (e) {
-    throw new LLMError("OpenAI content was not valid JSON", e);
-  }
-}
-
-async function fetchProcessJsonFromResponsesApi(
-  apiKey: string,
-  model: string,
-  maxOut: number,
-  reasoningEffort: ReturnType<typeof resolveReasoningEffort>,
-  input: CurateBriefLLMInput,
-  signal: AbortSignal,
-): Promise<unknown> {
-  const res = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      instructions: buildSystemPrompt(input.towerId, input.towerIntakeDigest),
-      // Responses API requires the word "json" in the user input when using text.format json_object
-      input: `Return a single JSON object (Process shape per instructions).\n\n${buildUserPrompt(input)}`,
-      reasoning: { effort: reasoningEffort },
-      max_output_tokens: maxOut,
-      // `temperature` is not supported on some Responses API models (e.g. gpt-5.5)
-      text: {
-        format: { type: "json_object" },
-        verbosity: "medium",
-      },
-    }),
-    signal,
-  });
-  const rawText = await res.text().catch(() => "");
-  if (!res.ok) {
-    throw new LLMError(
-      `OpenAI Responses ${res.status}: ${rawText.slice(0, 500) || res.statusText}`,
-    );
-  }
-  let body: unknown;
-  try {
-    body = rawText ? JSON.parse(rawText) : {};
-  } catch (e) {
-    throw new LLMError("OpenAI Responses returned non-JSON body", e);
-  }
-  const st = (body as { status?: string; error?: { message?: string } })
-    .status;
-  if (st === "failed" || st === "cancelled") {
-    const err = (body as { error?: { message?: string } }).error?.message;
-    throw new LLMError(
-      `OpenAI Responses status ${st}${err ? `: ${err}` : ""}`,
-    );
-  }
-  const text = extractResponsesOutputText(body);
-  if (typeof text !== "string" || !text.trim()) {
-    throw new LLMError("OpenAI Responses returned empty output text");
-  }
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    throw new LLMError("OpenAI Responses output was not valid JSON", e);
-  }
-}
-
-/**
- * OpenAI call — returns a normalized `Process` or throws `LLMError`.
- * GPT-5 family (default `gpt-5.5`): [Responses API](https://platform.openai.com/docs/api-reference/responses/create) with `reasoning.effort`. Other models: Chat Completions.
+ * Routes through `versantPromptKit.buildLLMRequest` so model selection,
+ * Chat-vs-Responses-API choice, JSON-mode, abort propagation, and timeout
+ * all share the kit's implementation. Per-route env overrides (model,
+ * Chat-vs-Responses, reasoning effort) have been retired — every Versant
+ * call uses the same model.
  */
 export async function curateBriefWithLLM(
   input: CurateBriefLLMInput,
   options: CurateBriefLLMOptions = {},
 ): Promise<Process> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
+  if (!kitIsLLMConfigured()) {
     throw new LLMError("OPENAI_API_KEY not set");
   }
-  const model = resolveModel(options);
   const timeoutMs = resolveTimeoutMs(options);
   const maxOut = resolveMaxOutputTokens(options);
-  const reasoningEffort = resolveReasoningEffort(options);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const reasoningEffort = mapBriefReasoningEffort(resolveReasoningEffort(options));
+  // Surface the model resolution in case future callers want to log; the
+  // actual fetch is delegated to the kit.
+  void resolveModelId(options.model);
+  void kitShouldUseResponsesApi(resolveModelId(options.model));
   let parsed: unknown;
   try {
-    parsed = shouldUseResponsesApi(model)
-      ? await fetchProcessJsonFromResponsesApi(
-          apiKey,
-          model,
-          maxOut,
-          reasoningEffort,
-          input,
-          controller.signal,
-        )
-      : await fetchProcessJsonFromChatCompletions(
-          apiKey,
-          model,
-          maxOut,
-          input,
-          controller.signal,
-        );
+    const result = await buildLLMRequest({
+      systemPrompt: buildSystemPrompt(input.towerId, input.towerIntakeDigest),
+      userPrompt: buildUserPrompt(input),
+      model: options.model,
+      reasoningEffort,
+      timeoutMs,
+      maxOutputTokens: maxOut,
+      verbosity: "medium",
+    });
+    parsed = result.parsed;
   } catch (e) {
-    clearTimeout(timer);
-    if ((e as { name?: string })?.name === "AbortError") {
-      throw new LLMError(`OpenAI call timed out after ${timeoutMs}ms`, e);
+    if (e instanceof VersantLLMError) {
+      throw new LLMError(e.message, e);
     }
     if (e instanceof LLMError) throw e;
-    throw new LLMError("OpenAI network error", e);
-  } finally {
-    clearTimeout(timer);
+    throw new LLMError(
+      e instanceof Error ? e.message : "OpenAI call failed",
+      e,
+    );
   }
   return normalizeLlmProcess(parsed, input);
 }

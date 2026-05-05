@@ -51,6 +51,15 @@ export type AiCurationOverride = {
   currentMaturity?: TowerProcessMaturity;
   primaryVendor?: string;
   agentOneLine?: string;
+  /**
+   * AI-initiative-style display title — what the AI does, not the underlying
+   * activity. Mirrors the `initiativeName` field on `L5Item` so a hand-authored
+   * P1 override can supply a clean headline title without going through the
+   * LLM. Optional — when absent, the UI falls back to the L5 Activity label.
+   *
+   *   l4Name = "Vendor MDM — execution"  →  initiativeName = "Vendor master data automation"
+   */
+  initiativeName?: string;
   /** Optional click-through to existing 4-lens initiative or brief. */
   initiativeId?: string;
   briefSlug?: string;

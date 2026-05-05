@@ -70,6 +70,13 @@ export type ComposedVerdict = {
   currentMaturity?: TowerProcessMaturity;
   primaryVendor?: string;
   agentOneLine?: string;
+  /**
+   * AI-initiative-style display title — what the AI does, not the underlying
+   * activity. Mirrors `L5Item.initiativeName`. Surfaced here so the
+   * deterministic fallback path in `/api/assess/curate-initiatives` can emit
+   * a usable title even when the LLM is offline.
+   */
+  initiativeName?: string;
   initiativeId?: string;
   briefSlug?: string;
   /**
@@ -165,6 +172,10 @@ export function composeL4Verdict(input: ComposeInput): ComposedVerdict {
       frequency: l4.frequency,
       criticality: l4.criticality,
       currentMaturity: l4.currentMaturity,
+      initiativeName:
+        l4.aiCurationStatus === "curated"
+          ? deterministicInitiativeName(l4.name)
+          : undefined,
       initiativeId: l4.initiativeId,
       briefSlug: l4.briefSlug,
       source: "canonical",
@@ -193,6 +204,10 @@ export function composeL4Verdict(input: ComposeInput): ComposedVerdict {
       currentMaturity: overlay.currentMaturity,
       primaryVendor: overlay.primaryVendor,
       agentOneLine: overlay.agentOneLine,
+      initiativeName:
+        overlay.aiCurationStatus === "curated"
+          ? overlay.initiativeName ?? deterministicInitiativeName(l4.name)
+          : undefined,
       initiativeId: overlay.initiativeId,
       briefSlug: overlay.briefSlug,
       source: "overlay",
@@ -213,6 +228,55 @@ export function composeL4Verdict(input: ComposeInput): ComposedVerdict {
     feasibility: verdict.feasibility,
     aiRationale: verdict.aiRationale,
     notEligibleReason: verdict.notEligibleReason,
+    initiativeName: verdict.aiEligible
+      ? deterministicInitiativeName(l4.name)
+      : undefined,
     source: "rubric",
   };
+}
+
+/**
+ * Synthesize an AI-initiative-style title from the underlying L5 Activity
+ * label when no LLM- or hand-authored title is available. The rule is
+ * conservative — strip stage suffixes ("— execution", "— review", "—
+ * reporting") and append " automation" when the cleaned label doesn't
+ * already read like an initiative.
+ *
+ * Examples:
+ *   "Bank Reconciliations"          → "Bank reconciliation automation"
+ *   "Vendor MDM — execution"        → "Vendor MDM automation"
+ *   "MD&A Narrative Drafting"       → "MD&A narrative drafting automation"
+ *   "Newsroom Briefing — review"    → "Newsroom briefing automation"
+ */
+function deterministicInitiativeName(l5ActivityName: string): string {
+  const trimmed = l5ActivityName.trim();
+  if (!trimmed) return "AI initiative";
+  // Strip the canonical stage suffixes the LLM is told to avoid.
+  const stripped = trimmed.replace(
+    /\s*—\s*(execution|review and exception handling|review|reporting|exception handling|exceptions)\s*$/i,
+    "",
+  );
+  const base = stripped.trim();
+  if (!base) return "AI initiative";
+  // Lowercase first letter only to keep brand names cased.
+  const lowered = base.charAt(0).toLowerCase() + base.slice(1);
+  // Avoid double-suffixing if the label already ends in an initiative-y word.
+  const tail = lowered.toLowerCase();
+  if (
+    tail.endsWith("automation") ||
+    tail.endsWith("agent") ||
+    tail.endsWith("copilot") ||
+    tail.endsWith("co-pilot") ||
+    tail.endsWith("generator") ||
+    tail.endsWith("optimizer") ||
+    tail.endsWith("engine") ||
+    tail.endsWith("platform")
+  ) {
+    return capitalizeFirst(lowered);
+  }
+  return capitalizeFirst(`${lowered} automation`);
+}
+
+function capitalizeFirst(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }

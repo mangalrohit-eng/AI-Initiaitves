@@ -15,9 +15,19 @@ import {
   type LLMOffshoreRowInput,
   type LLMOffshoreRowResult,
 } from "@/lib/llm/prompts/offshorePlan.v1";
+import {
+  VERSANT_DEFAULT_REASONING_EFFORT,
+  VersantLLMError,
+  buildLLMRequest,
+  isLLMConfigured as kitIsLLMConfigured,
+  resolveModelId as kitResolveModelId,
+} from "@/lib/llm/prompts/versantPromptKit";
 
 export type InferOffshoreLLMOptions = {
-  /** Override (`OPENAI_OFFSHORE_PLAN_MODEL` then `OPENAI_MODEL`; default `gpt-4o-mini`). */
+  /**
+   * Test-only model override. Production callers should let the kit resolve
+   * the model from `OPENAI_MODEL` (or the default `gpt-5.5`).
+   */
   model?: string;
   /** Abort timeout in ms per chunk (default 45_000). */
   timeoutMs?: number;
@@ -36,7 +46,6 @@ export type InferOffshoreLLMOptions = {
   maxConcurrency?: number;
 };
 
-const DEFAULT_MODEL = "gpt-4o-mini";
 const DEFAULT_TIMEOUT_MS = 45_000;
 const DEFAULT_CHUNK_SIZE = 30;
 const DEFAULT_MAX_CONCURRENCY = 6;
@@ -54,16 +63,11 @@ export class OffshoreLLMError extends Error {
 }
 
 export function isOffshoreLLMConfigured(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+  return kitIsLLMConfigured();
 }
 
 export function resolveOffshoreModel(options: InferOffshoreLLMOptions = {}): string {
-  return (
-    options.model ??
-    process.env.OPENAI_OFFSHORE_PLAN_MODEL?.trim() ??
-    process.env.OPENAI_MODEL?.trim() ??
-    DEFAULT_MODEL
-  );
+  return kitResolveModelId(options.model);
 }
 
 export type InferOffshoreClassifyResult = {
@@ -91,8 +95,9 @@ export async function inferOffshoreClassifyWithLLM(
   ctx: LLMOffshoreClassifyContext,
   options: InferOffshoreLLMOptions = {},
 ): Promise<InferOffshoreClassifyResult> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new OffshoreLLMError("OPENAI_API_KEY not set");
+  if (!kitIsLLMConfigured()) {
+    throw new OffshoreLLMError("OPENAI_API_KEY not set");
+  }
 
   const model = resolveOffshoreModel(options);
   if (!rows.length) {
@@ -135,8 +140,7 @@ export async function inferOffshoreClassifyWithLLM(
         const chunk = chunks[idx]!;
         try {
           const part = await callOpenAIChunk(chunk, ctx, {
-            apiKey,
-            model,
+            model: options.model,
             timeoutMs,
           });
           out.push(...part.rows);
@@ -189,78 +193,45 @@ export async function inferOffshoreClassifyWithLLM(
 }
 
 /**
- * Single-chunk OpenAI call. Each chunk is independent — its own timeout,
- * its own response, its own validation. Throws `OffshoreLLMError` on any
- * failure so the chunk-pool loop can record it.
+ * Single-chunk OpenAI call. Routes through `versantPromptKit.buildLLMRequest`
+ * so model selection, Chat-vs-Responses-API choice, JSON-mode, abort
+ * propagation, and timeout all share the kit's implementation. Each chunk
+ * is independent — its own timeout, its own response, its own validation.
+ * Throws `OffshoreLLMError` on any failure so the chunk-pool loop can
+ * record it.
  */
 async function callOpenAIChunk(
   rows: LLMOffshoreRowInput[],
   ctx: LLMOffshoreClassifyContext,
-  args: { apiKey: string; model: string; timeoutMs: number },
+  args: { model?: string; timeoutMs: number },
 ): Promise<{
   rows: LLMOffshoreRowResult[];
   tokenUsage?: { prompt?: number; completion?: number; total?: number };
 }> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), args.timeoutMs);
-
-  let res: Response;
+  let parsed: unknown;
+  let tokenUsage:
+    | { prompt?: number; completion?: number; total?: number }
+    | undefined;
   try {
-    res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${args.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: args.model,
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: buildOffshoreSystemPrompt(ctx) },
-          { role: "user", content: buildOffshoreUserPrompt(rows) },
-        ],
-      }),
-      signal: controller.signal,
+    const result = await buildLLMRequest({
+      systemPrompt: buildOffshoreSystemPrompt(ctx),
+      userPrompt: buildOffshoreUserPrompt(rows),
+      model: args.model,
+      reasoningEffort: VERSANT_DEFAULT_REASONING_EFFORT,
+      timeoutMs: args.timeoutMs,
     });
+    parsed = result.parsed;
+    tokenUsage = result.tokenUsage;
   } catch (e) {
-    clearTimeout(timer);
-    if ((e as { name?: string })?.name === "AbortError") {
-      throw new OffshoreLLMError(
-        `OpenAI call timed out after ${args.timeoutMs}ms`,
-        e,
-      );
+    if (e instanceof VersantLLMError) {
+      throw new OffshoreLLMError(e.message, e);
     }
-    throw new OffshoreLLMError("OpenAI network error", e);
-  }
-  clearTimeout(timer);
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
     throw new OffshoreLLMError(
-      `OpenAI ${res.status}: ${text.slice(0, 400) || res.statusText}`,
+      e instanceof Error ? e.message : "OpenAI call failed",
+      e,
     );
   }
 
-  let body: unknown;
-  try {
-    body = await res.json();
-  } catch (e) {
-    throw new OffshoreLLMError("OpenAI returned non-JSON body", e);
-  }
-  const content =
-    (body as { choices?: { message?: { content?: string } }[] })?.choices?.[0]
-      ?.message?.content;
-  if (typeof content !== "string" || !content.trim()) {
-    throw new OffshoreLLMError("OpenAI returned empty content");
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch (e) {
-    throw new OffshoreLLMError("OpenAI content was not valid JSON", e);
-  }
   const items = (parsed as { items?: unknown[] })?.items;
   if (!Array.isArray(items)) {
     throw new OffshoreLLMError("OpenAI JSON missing `items` array");
@@ -303,23 +274,7 @@ async function callOpenAIChunk(
     out.push({ rowId, lane, justification });
   }
 
-  const tokenUsage = (body as {
-    usage?: {
-      prompt_tokens?: number;
-      completion_tokens?: number;
-      total_tokens?: number;
-    };
-  })?.usage;
-  return {
-    rows: out,
-    tokenUsage: tokenUsage
-      ? {
-          prompt: tokenUsage.prompt_tokens,
-          completion: tokenUsage.completion_tokens,
-          total: tokenUsage.total_tokens,
-        }
-      : undefined,
-  };
+  return { rows: out, tokenUsage };
 }
 
 /**

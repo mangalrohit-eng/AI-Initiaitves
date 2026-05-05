@@ -373,7 +373,11 @@ export function selectInitiativesForProgram(
             id: l4.initiativeId ?? l4.briefSlug ?? `${tower.id}:${l3.rowId}:${l4.id}`,
             towerId: tower.id as TowerId,
             towerName: tower.name,
-            name: l4.name,
+            // Prefer the AI-initiative-style headline ("what AI does") over
+            // the underlying activity label so cross-tower views read as a
+            // plan of initiatives rather than a list of activities. Falls
+            // back to the L5 name when no initiativeName was emitted.
+            name: l4.initiativeName ?? l4.name,
             l2Name: l3.l2Name,
             l3Name: l3.l3.name,
             aiPriority: l4.aiPriority,

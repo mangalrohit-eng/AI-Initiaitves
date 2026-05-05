@@ -49,6 +49,7 @@ import {
   type LLMRowInput,
   type LLMRowResult,
 } from "@/lib/assess/inferDefaultsLLM";
+import { resolveRowDescriptions } from "@/data/capabilityMap/descriptions";
 import type { TowerId } from "@/data/assess/types";
 
 export const runtime = "nodejs";
@@ -104,10 +105,19 @@ export async function POST(req: Request) {
   const rows: LLMRowInput[] = body.rows.map((raw) => {
     const r = (raw ?? {}) as Record<string, unknown>;
     const l4 = typeof r.l4 === "string" ? r.l4 : "";
+    const l2 = typeof r.l2 === "string" ? r.l2 : "";
+    const l3 = typeof r.l3 === "string" ? r.l3 : "";
+    // Resolve per-row L2/L3/L4 narrative context from the canonical
+    // map. Empty bundle (towers without descriptions) is skipped in
+    // the LLM module's prompt builder — no behavior change there.
+    const desc = resolveRowDescriptions(towerId, l2, l3, l4 || undefined);
     return {
-      l2: typeof r.l2 === "string" ? r.l2 : "",
-      l3: typeof r.l3 === "string" ? r.l3 : "",
+      l2,
+      l3,
       l4: l4 || undefined,
+      ...(desc.l2Description ? { l2Description: desc.l2Description } : {}),
+      ...(desc.l3Description ? { l3Description: desc.l3Description } : {}),
+      ...(desc.l4Description ? { l4Description: desc.l4Description } : {}),
     };
   });
 

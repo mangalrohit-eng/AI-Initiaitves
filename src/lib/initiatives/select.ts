@@ -66,6 +66,7 @@ import { buildProcessByL4Map, fuzzyMatchL4 } from "./processL4Map";
 import { composeL4Verdict, type ComposedVerdict } from "./composeVerdict";
 import { computeFeasibility } from "./feasibility";
 import { isCacheValidForRow } from "./curationHash";
+import { resolveRowDescriptions } from "@/data/capabilityMap/descriptions";
 
 // ===========================================================================
 //   View-model types
@@ -78,6 +79,15 @@ export type InitiativeL4 = {
   id: string;
   /** Display name from the canonical L4 (or the placeholder copy). */
   name: string;
+  /**
+   * AI-initiative-style headline — what the agent does, not the underlying
+   * activity (e.g. `"Bank reconciliation automation"` for an L5 named
+   * `"Bank Reconciliations"`). Populated when the LLM, the hand-authored
+   * overlay, or the deterministic fallback emits one. UI uses this as the
+   * primary card title and falls back to `name` when undefined. Always
+   * undefined for placeholders and not-eligible L5s.
+   */
+  initiativeName?: string;
   /** Curation provenance — how the curated metadata got attached. */
   source: InitiativeL4Source;
   /** True when the row is a synthesized placeholder for ghost-L3 prevention. */
@@ -340,7 +350,13 @@ export function selectInitiativesForTower(
     // entirely. This is the post-refresh state — the curationPipeline
     // orchestrator wrote l5Items + l5Activities + hash atomically, so
     // re-deriving the hash from l5Activities here is guaranteed to match.
-    if (isCacheValidForRow(row) && row.l5Items) {
+    if (
+      isCacheValidForRow(
+        row,
+        resolveRowDescriptions(towerId, row.l2, row.l3, row.l4),
+      ) &&
+      row.l5Items
+    ) {
       for (const item of row.l5Items) {
         if (!item.aiEligible) continue;
         l4Views.push(buildL4FromCachedItem(item, towerId, row.id));
@@ -621,6 +637,11 @@ function buildL4FromOverlay(
     initiativeId: initiative?.id,
     briefSlug,
   };
+  // Note: this overlay path comes from `operating-models.ts` `TowerProcess`
+  // entries which don't carry an `initiativeName` field. The composer
+  // (`composeL4Verdict`) handles that for non-overlay paths; if a tower
+  // lead wants a custom initiativeName on an overlay row, set it via
+  // `aiCurationOverlay` instead.
 }
 
 /**
@@ -648,6 +669,7 @@ function buildL4FromComposedVerdict(
   return {
     id: l4.id,
     name: l4.name,
+    initiativeName: verdict.initiativeName,
     source: "curated",
     isPlaceholder: false,
     aiPriority: verdict.aiPriority,
@@ -694,6 +716,7 @@ function buildL4FromCachedItem(
   return {
     id: item.id,
     name: item.name,
+    initiativeName: item.initiativeName,
     source: "curated",
     isPlaceholder: false,
     aiPriority: item.aiPriority,

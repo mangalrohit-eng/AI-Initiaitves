@@ -45,6 +45,7 @@ import {
   type LLMGenerateL4Result,
 } from "@/lib/assess/generateL4ActivitiesLLM";
 import { getCapabilityMapForTower } from "@/data/capabilityMap/maps";
+import { resolveRowDescriptions } from "@/data/capabilityMap/descriptions";
 import type { TowerId } from "@/data/assess/types";
 
 export const runtime = "nodejs";
@@ -104,11 +105,20 @@ export async function POST(req: Request) {
     const fbRaw = typeof r.feedback === "string" ? r.feedback.trim() : "";
     const feedback = fbRaw ? fbRaw.slice(0, MAX_FEEDBACK_CHARS) : undefined;
     const l4 = typeof r.l4 === "string" ? r.l4 : "";
+    const l2 = typeof r.l2 === "string" ? r.l2 : "";
+    const l3 = typeof r.l3 === "string" ? r.l3 : "";
+    // Resolve per-row L2/L3/L4 narrative context from the canonical
+    // map. Empty bundle (towers without descriptions) is skipped in
+    // the LLM module's prompt builder — no behavior change there.
+    const desc = resolveRowDescriptions(towerId, l2, l3, l4 || undefined);
     return {
-      l2: typeof r.l2 === "string" ? r.l2 : "",
-      l3: typeof r.l3 === "string" ? r.l3 : "",
+      l2,
+      l3,
       ...(l4 ? { l4 } : {}),
       ...(feedback ? { feedback } : {}),
+      ...(desc.l2Description ? { l2Description: desc.l2Description } : {}),
+      ...(desc.l3Description ? { l3Description: desc.l3Description } : {}),
+      ...(desc.l4Description ? { l4Description: desc.l4Description } : {}),
     };
   });
 
@@ -165,9 +175,16 @@ export async function POST(req: Request) {
  * Deterministic fallback: look up the canonical capability map for this
  * tower and pull L5 Activity names whose (L3 Job Family, L4 Activity Group)
  * match (case-insensitive). For legacy v4 callers (no `l4` in input), treat
- * `l3` as the parent and walk the canonical map's L4 names instead. When no
- * match is found, return three generic verb-noun activities derived from
- * the deepest available label.
+ * `l3` as the parent and walk the canonical map's L4 names instead.
+ *
+ * When no canonical match is found, return a SINGLE-element list whose name
+ * mirrors the L4 Activity Group label (or the deepest available parent).
+ * Pre-PR2 we returned three synthetic suffixes (`"— execution"`, `"— review
+ * and exception handling"`, `"— reporting"`) which read as filler and
+ * polluted Step 4 with repetitive look-alike L5s. The honest signal when
+ * we have no map coverage is "the activity itself is the only leaf" — one
+ * row, named after the Activity Group, which Step 4 then scores as a
+ * single AI initiative candidate.
  */
 function fallbackActivities(towerId: TowerId, row: LLMGenerateL4Row): string[] {
   const map = getCapabilityMapForTower(towerId);
@@ -205,11 +222,7 @@ function fallbackActivities(towerId: TowerId, row: LLMGenerateL4Row): string[] {
     }
   }
   const base = (l4Name || row.l3 || "Activities").trim();
-  return [
-    `${base} — execution`,
-    `${base} — review and exception handling`,
-    `${base} — reporting`,
-  ];
+  return [base];
 }
 
 async function isAuthed(): Promise<boolean> {

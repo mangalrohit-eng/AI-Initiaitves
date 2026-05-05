@@ -43,107 +43,46 @@
  * manual flushes.
  */
 
-import { VENDOR_ALLOW_LIST } from "@/lib/assess/curateInitiativesLLM";
 import type { CrossTowerAssumptions } from "@/lib/cross-tower/assumptions";
 import type {
   AIProjectLLM,
   BriefDepth,
   L4Cohort,
 } from "@/lib/cross-tower/aiProjects";
+import {
+  ALLOWED_BRANDS as KIT_ALLOWED_BRANDS,
+  ALLOWED_PEOPLE as KIT_ALLOWED_PEOPLE,
+  ALLOWED_VENDORS as KIT_ALLOWED_VENDORS,
+  HEDGE_PHRASES as KIT_HEDGE_PHRASES,
+  VERSANT_CONTEXT_BLOCK as KIT_VERSANT_CONTEXT_BLOCK,
+} from "@/lib/llm/prompts/versantPromptKit";
 
-export const PROMPT_VERSION = "v3.1.0";
+export const PROMPT_VERSION = "v3.2.0";
 
 // ---------------------------------------------------------------------------
-//   Static grounding (Versant context, brand/people/vendor allow-lists)
+//   Static grounding — re-exported from versantPromptKit
 // ---------------------------------------------------------------------------
+//
+// This file used to inline its own copies of the Versant context, brand
+// list, people list, vendor allow-list, and hedge phrases. They are now
+// centralized in `versantPromptKit` so every Versant LLM module shares the
+// same grounding. The re-exports below preserve the import paths used by
+// `crossTowerPlanLLM.ts` and any external consumer.
 
-/**
- * Verbatim Versant context for the system prompt. Sourced from
- * `docs/context.md` (single source of truth). Update this block — and bump
- * `PROMPT_VERSION` — when context.md changes materially.
- */
-export const VERSANT_CONTEXT_BLOCK = [
-  "VERSANT MEDIA GROUP (NASDAQ: VSNT) — independent, publicly traded media company spun off from Comcast/NBCUniversal on January 2, 2026. The company exists to transform: linear TV revenue is declining 5–9 percent annually, and Versant must be AI-native by Day 1 — there is no 'add AI later'.",
-  "",
-  "FINANCIALS (FY2025 — first reported year): total revenue, distribution revenue, advertising revenue, platforms revenue, programming and production cost, adjusted EBITDA, free cash flow, gross debt at BB- (junk), quarterly dividend, and an authorised share buyback are tracked deterministically in the app. Do NOT echo any of these numbers in your output — the deterministic engine renders them.",
-  "",
-  "BRAND PORTFOLIO — name these specifically when relevant:",
-  "  Political news: MS NOW (formerly MSNBC) — progressive editorial positioning; election-night audience leader; DTC community/membership launching in summer 2026.",
-  "  Business news: CNBC — global #1 business news brand; CNBC Pro; Kalshi partnership; StockStory acquisition (small AI team) integration in flight; Nikkei CNBC JV (Japan).",
-  "  Golf and sports participation: Golf Channel, GolfNow, GolfPass, SportsEngine — USGA partnership through 2032; Rory McIlroy / Firethorn JV.",
-  "  Entertainment and sports: USA Network (USA Sports), E!, Syfy, Oxygen True Crime — Winter Olympics on USA/CNBC; Kardashians split rights (on-air retained at Versant; streaming sold to Hulu).",
-  "  Digital platforms: Fandango (75 percent Versant, 25 percent WBD), Rotten Tomatoes, Free TV Networks, Indy Cinema Group.",
-  "",
-  "LEADERSHIP — name only when relevant to the project's tower:",
-  "  Mark Lazarus (CEO), Anand Kini (CFO and COO), Deep Bagchee (CPTO News), Rebecca Kutler (President MS NOW), KC Sullivan (President CNBC), Matthew Hong (President Sports), Nate Balogh (EVP and CIO), Brian Carovillano (SVP Standards and Editorial — gatekeeper for editorial AI), Caroline Richardson (SVP and CISO), Frank Tanki (CMO Entertainment and Sports), Tom Clendenin (CMO CNBC and MS NOW), David Novak (Board Chair).",
-  "",
-  "STRUCTURAL CONSTRAINTS — these define which projects matter and why:",
-  "  - NBCU TSA expiration (~2028): NBCU runs ad sales and shared services until the Transition Services Agreement expires. Versant must build standalone capability before then. Ad sales is greenfield; finance close, payroll, IT, broadcast operations all have hard cutover deadlines.",
-  "  - BB- credit rating + dividend commitment: covenant compliance is existential. Treasury, monitoring, and run-rate cost discipline matter on every initiative.",
-  "  - Multi-entity consolidation: 7+ brands plus the Fandango JV (75/25 with WBD) plus Nikkei CNBC JV. Intercompany reconciliation is non-trivial.",
-  "  - Split rights complexity (Kardashians-style): on-air retained while streaming sold to Hulu. Any rights-adjacent project must reconcile both windows.",
-  "  - MS NOW progressive positioning: brand-safety, crisis-detection, and content-moderation models must respect editorial intent without flattening voice.",
-  "  - Editorial / news-judgment floor: anchors, reporters, fact-checking, political coverage stay onshore and human. AI is co-pilot in the newsroom, never byline.",
-  "  - Live-broadcast physical floor: master control, on-air ops, in-studio production are physical, US-located, talent-relationship-driven. Automation targets surrounding workflow.",
-  "  - New public company SEC obligations: Versant is a fresh NASDAQ issuer (2026). 10-K, disclosure controls, segment reporting, internal audit all need standalone process.",
-  "",
-  "TONE — declarative, never hedging. Forbidden phrases: 'potentially', 'could possibly', 'may help to', 'leverage AI', 'harness the power of AI', 'transformative impact'. If you could swap 'Versant' for 'any media company' and the sentence still works, rewrite it.",
-].join("\n");
+/** Verbatim Versant context for the system prompt. */
+export const VERSANT_CONTEXT_BLOCK = KIT_VERSANT_CONTEXT_BLOCK;
 
 /** Real Versant brands the model may name in copy. */
-export const ALLOWED_BRANDS: readonly string[] = [
-  "Versant",
-  "Versant Media Group",
-  "MS NOW",
-  "CNBC",
-  "Golf Channel",
-  "GolfNow",
-  "GolfPass",
-  "USA Network",
-  "USA Sports",
-  "E!",
-  "Syfy",
-  "Oxygen True Crime",
-  "Fandango",
-  "Rotten Tomatoes",
-  "SportsEngine",
-  "Free TV Networks",
-  "Indy Cinema Group",
-  "NBCU",
-  "Hulu",
-  "StockStory",
-  "Kalshi",
-  "Nikkei CNBC",
-];
+export const ALLOWED_BRANDS = KIT_ALLOWED_BRANDS;
 
 /** Real Versant people — used only when relevant to the cohort tower. */
-export const ALLOWED_PEOPLE: readonly string[] = [
-  "Mark Lazarus",
-  "Anand Kini",
-  "Deep Bagchee",
-  "Rebecca Kutler",
-  "KC Sullivan",
-  "Matthew Hong",
-  "Nate Balogh",
-  "Brian Carovillano",
-  "Caroline Richardson",
-  "Frank Tanki",
-  "Tom Clendenin",
-  "David Novak",
-];
+export const ALLOWED_PEOPLE = KIT_ALLOWED_PEOPLE;
 
-/** Vendors the LLM is permitted to name. Mirrors the upstream curation list. */
-export const ALLOWED_VENDORS: readonly string[] = VENDOR_ALLOW_LIST;
+/** Vendors the LLM is permitted to name. */
+export const ALLOWED_VENDORS = KIT_ALLOWED_VENDORS;
 
 /** Hedge phrases the validator rejects. */
-export const HEDGE_PHRASES: readonly string[] = [
-  "potentially",
-  "could possibly",
-  "may help to",
-  "leverage ai",
-  "harness the power of ai",
-  "transformative impact",
-];
+export const HEDGE_PHRASES = KIT_HEDGE_PHRASES;
 
 // ---------------------------------------------------------------------------
 //   Prompt input shapes

@@ -13,6 +13,7 @@ import { parseAssessFile } from "@/lib/assess/parseAssessFile";
 import { weightedTowerLevers } from "@/lib/assess/scenarioModel";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
 import { markRowsQueuedOnUpload } from "@/lib/initiatives/curationHash";
+import { resolveRowDescriptions } from "@/data/capabilityMap/descriptions";
 import { stepCompletionNudge } from "@/lib/program/stepCompletionNudges";
 import {
   getAssessProgram,
@@ -100,7 +101,9 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       // values themselves, so the soft-default sliders don't mislead users.
       // Sign-off timestamps are cleared so the "Reviewed by Tower Lead" pill
       // returns to "Pending" without needing extra disable logic on Step 2.
-      const queuedRows = markRowsQueuedOnUpload(res.rows);
+      const queuedRows = markRowsQueuedOnUpload(res.rows, (row) =>
+        resolveRowDescriptions(towerId, row.l2, row.l3, row.l4),
+      );
       setTowerAssess(towerId, {
         l4Rows: queuedRows,
         baseline: { ...defaultTowerBaseline },

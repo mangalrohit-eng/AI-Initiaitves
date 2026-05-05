@@ -24,6 +24,7 @@ import {
   bootstrapHashOnRead,
   markRowsStaleByHash,
 } from "@/lib/initiatives/curationHash";
+import { resolveRowDescriptions } from "@/data/capabilityMap/descriptions";
 import { mergeLeadDeadlines, parseLeadDeadlines } from "@/lib/program/leadDeadlines";
 import { parseAiReadinessIntakeFromUnknown } from "@/lib/assess/towerReadinessIntake";
 //
@@ -914,12 +915,20 @@ function migrateBootstrapCurationHash(program: AssessProgramV2): AssessProgramV2
   const towers: AssessProgramV2["towers"] = {};
   for (const [k, t] of Object.entries(program.towers)) {
     if (!t) continue;
-    const stamped = bootstrapHashOnRead(t.l4Rows);
+    // PR3: thread per-row narrative context through the bootstrap hash so
+    // the staleness predicate stays consistent with the server-side
+    // write path (which stamps a description-aware hash post-curation).
+    // Towers without authored descriptions return an empty bundle and the
+    // hash is byte-identical to the pre-PR3 output — no migration churn.
+    const towerId = k as TowerId;
+    const stamped = bootstrapHashOnRead(t.l4Rows, (row) =>
+      resolveRowDescriptions(towerId, row.l2, row.l3, row.l4),
+    );
     if (stamped !== t.l4Rows) {
-      towers[k as TowerId] = { ...t, l4Rows: stamped };
+      towers[towerId] = { ...t, l4Rows: stamped };
       touched = true;
     } else {
-      towers[k as TowerId] = t;
+      towers[towerId] = t;
     }
   }
   return touched ? { ...program, towers } : program;
@@ -1030,9 +1039,13 @@ export function setTowerAssess(towerId: TowerId, patch: Partial<TowerAssessState
     // StaleCurationBanner. Idempotent: rows whose names didn't change keep
     // their existing stage. Rows that haven't been bootstrapped yet (no
     // curationContentHash) are intentionally left alone — bootstrapHashOnRead
-    // handles those at read.
+    // handles those at read. PR3: thread the per-row narrative context
+    // resolver so authoring or revising L2/L3/L4 descriptions also flips
+    // the row to `queued` (in addition to name-footprint changes).
     const nextRows = patch.l4Rows
-      ? markRowsStaleByHash(patch.l4Rows)
+      ? markRowsStaleByHash(patch.l4Rows, (row) =>
+          resolveRowDescriptions(towerId, row.l2, row.l3, row.l4),
+        )
       : cur.l4Rows;
     return {
       ...p,

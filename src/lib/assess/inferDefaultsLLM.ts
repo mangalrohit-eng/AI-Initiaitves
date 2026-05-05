@@ -13,22 +13,31 @@
  * in that case we score on the L3 label as before so existing programs
  * continue to function during cutover.
  *
- * Design notes:
+ * Design notes (post-PR1 unification):
  *  - Single batched call per tower (one request, N row scores back). We do NOT
  *    call OpenAI per row — too slow, too expensive, and unnecessary since the
  *    model can score the whole list in one shot with consistent reasoning.
- *  - Uses Chat Completions JSON mode (`response_format: { type: "json_object" }`)
- *    so we can `JSON.parse` the response without retries.
- *  - The system prompt is grounded in Versant-specific context (TSA expiration,
- *    political brand sensitivity for MS NOW, on-air talent, multi-entity JV,
- *    BB- credit rating) so the model doesn't generate generic media-company
- *    averages.
+ *  - Routes through `versantPromptKit` for identity, per-tower context, and
+ *    voice rules so Step 1 dial scoring shares grounding with Steps 2/4/5.
+ *  - Uses `gpt-5.5` via the Responses API + reasoning by default; the global
+ *    `OPENAI_MODEL` env var still overrides. Per-route `OPENAI_*_MODEL`
+ *    overrides are gone.
  *  - On any failure (no key, network error, timeout, malformed JSON, length
  *    mismatch) the caller should fall back to the deterministic heuristic.
  *    This file does not contain the fallback itself — it's pure "try LLM."
  */
 
 import type { TowerId } from "@/data/assess/types";
+import {
+  VERSANT_DEFAULT_REASONING_EFFORT,
+  VersantLLMError,
+  buildAllowListsBlock,
+  buildLLMRequest,
+  buildTowerContextBlock,
+  buildVersantPreamble,
+  buildVoiceRulesBlock,
+  isLLMConfigured as kitIsLLMConfigured,
+} from "@/lib/llm/prompts/versantPromptKit";
 
 export type LLMRowInput = {
   /** L2 Job Grouping (prompt context). */
@@ -41,6 +50,18 @@ export type LLMRowInput = {
    * the row using the L3 label as the dial-row name.
    */
   l4?: string;
+  /**
+   * Optional L2 / L3 / L4 narrative context. Server route looks these
+   * up from the canonical map (`resolveRowDescriptions`) before invoking;
+   * when present, the user prompt renders a per-row "ROW NARRATIVE
+   * CONTEXT" block so the model has explicit grounding instead of
+   * inferring from the row label alone. Omitted on towers that
+   * haven't been description-authored — prompt skips the block, model
+   * falls back to the tower context paragraph.
+   */
+  l2Description?: string;
+  l3Description?: string;
+  l4Description?: string;
 };
 
 export type LLMRowResult = {
@@ -53,13 +74,15 @@ export type LLMRowResult = {
 };
 
 export type InferLLMOptions = {
-  /** Override env (`OPENAI_INFER_DEFAULTS_MODEL` then `OPENAI_MODEL`; default `gpt-4o-mini`). */
+  /**
+   * Test-only model override. Production callers should let the kit resolve
+   * the model from `OPENAI_MODEL` (or the default `gpt-5.5`).
+   */
   model?: string;
   /** Abort timeout in ms (default 60_000). */
   timeoutMs?: number;
 };
 
-const DEFAULT_MODEL = "gpt-4o-mini";
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 const OFFSHORE_MIN = 5;
@@ -67,26 +90,9 @@ const OFFSHORE_MAX = 85;
 const AI_MIN = 10;
 const AI_MAX = 75;
 
-/** Tower-level priors are still useful as anchor context for the LLM. */
-const TOWER_CONTEXT: Record<TowerId, string> = {
-  finance: "Finance & treasury for a newly public BB-rated company. Heavy AP/AR/reconciliation routine + TSA-driven SEC reporting build-out + treasury covenant monitoring (high consequence).",
-  hr: "HR for ~9K employees across union (writers, IATSE, NABET) and non-union talent in US studio + corporate. New SEC issuer, new payroll stack post-TSA.",
-  "research-analytics": "Audience, ad measurement, viewership analytics across linear, FAST, streaming, and digital. Heavy data work; some currency/methodology negotiation with MRC and JIC.",
-  legal: "GC + commercial + IP + regulatory + litigation for a US-listed media company with sports rights, news brands (CNBC, MS NOW), and split-rights entertainment IP (e.g., Kardashians on-air vs streaming).",
-  "corp-services": "Real estate, facilities, EHS, indirect procurement, travel, office services for ~9K headcount across studio + corporate sites. Mostly US-physical work.",
-  "tech-engineering": "Product + platform engineering for streaming (Peacock-adjacent), GolfNow / GolfPass apps, Fandango, Rotten Tomatoes, ad-tech. Already partially offshored / contractor-heavy.",
-  "operations-technology": "Broadcast operations, media supply chain, playout, studio ops, on-air technology — physical, on-prem, low-latency, US-required.",
-  sales: "National + local ad sales (greenfield post-TSA — Versant is standing up its own ad-sales org for the first time), affiliate carriage, sponsorship, branded content. Relationship-driven.",
-  "marketing-comms": "Brand marketing, PR, comms, social, growth marketing across all consumer brands. Mix of high-touch creative (US) + executable analytics (offshorable).",
-  service: "Customer service / subscriber support for direct-to-consumer products (GolfNow, GolfPass, Fandango, etc.). High volume, AI-friendly, classically offshorable.",
-  "editorial-news": "Newsroom for CNBC, MS NOW, Golf Channel, USA Network sports, NBC News-adjacent. EDITORIAL JUDGMENT IS NOT OFFSHORABLE — anchors, reporters, fact-checking, news judgment, political coverage are all US-required and AI-restricted.",
-  production: "Live and studio production — sets, control rooms, talent, on-air operations. Physical, US-located, talent-relationship-driven.",
-  "programming-dev": "Programming strategy, scheduling, content acquisition / dev — strategic, deal-making, executive judgment.",
-};
-
 /** Returns true iff `OPENAI_API_KEY` is configured. Cheap, no network call. */
 export function isLLMConfigured(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+  return kitIsLLMConfigured();
 }
 
 class LLMError extends Error {
@@ -97,11 +103,12 @@ class LLMError extends Error {
 }
 
 function buildSystemPrompt(towerId: TowerId): string {
-  const towerContext = TOWER_CONTEXT[towerId] ?? "Versant tower (context not authored).";
   return [
     "You score Versant Media Group capability-map rows for an illustrative impact model.",
     "",
-    "Versant Media Group (NASDAQ: VSNT) is the spin-off of NBCUniversal's news, sports, streaming, and digital portfolio: MS NOW, CNBC, Golf Channel, GolfNow, GolfPass, USA Network, E!, Syfy, Oxygen True Crime, Fandango, Rotten Tomatoes, SportsEngine, Free TV Networks. ~$6.7B revenue, ~$2.4B Adj. EBITDA, ~$2.75B debt (BB-), running on NBCU shared services until the TSA expires.",
+    buildVersantPreamble({ grain: "row" }),
+    "",
+    buildTowerContextBlock(towerId),
     "",
     "Versant capability maps are now FIVE layers: L1 Function > L2 Job Grouping > L3 Job Family > L4 Activity Group > L5 Activity. Dial scores live on the L4 Activity Group (the row I send you). L5 Activities are display-only and not part of this scoring task.",
     "",
@@ -109,20 +116,22 @@ function buildSystemPrompt(towerId: TowerId): string {
     "  - offshorePct (5-85, integer, multiple of 5): share of the WORK that can plausibly move to a global delivery centre (India/Philippines/etc.). LOWER for editorial judgment, on-air talent, US-physical work, deal-making, regulator-facing work, high-trust client relationships, brand strategy. HIGHER for routine processing (AP, AR, reconciliation, payroll), helpdesk, data prep, analytics support, software test, document review.",
     "  - aiPct (10-75, integer, multiple of 5): share of the WORK that AI (LLMs, agents, classifiers, copilots) can realistically displace or 10x today. HIGHER for summarization, transcription, captioning, translation, document review, anomaly detection, monitoring, lead scoring, structured extraction. LOWER for executive judgment, in-person relationships, on-camera work, crisis decisions.",
     "",
-    "Versant-specific constraints you MUST respect:",
-    "  - Editorial / news judgment / on-air talent / fact-checking / political coverage → very low offshore + low AI (AP-style summarization OK; final judgment must stay onshore + human).",
+    "VERSANT-SPECIFIC CONSTRAINTS YOU MUST RESPECT:",
+    "  - Editorial / news judgment / on-air talent / fact-checking / political coverage → very low offshore + low AI (AP-style summarization OK; final judgment must stay onshore + human). Brian Carovillano gates editorial AI.",
     "  - MS NOW progressive positioning → political brand sensitivity, low AI for any user-facing crisis-detection or content output.",
-    "  - Sales is GREENFIELD post-TSA — relationship-driven, mostly US-onshore for now; AI-augmentation OK (lead scoring, outreach drafting).",
-    "  - BB- credit rating → Treasury / covenant / debt management is high-consequence; humans stay in the loop.",
-    "  - Multi-entity JV, split-rights deals (e.g., Kardashians on-air retained, streaming to Hulu) → rights & legal complexity = lower offshore, AI-augmentable for first-pass.",
-    "  - Operations-technology / production / studio ops are PHYSICAL — low offshore (work happens at the venue/studio), low-medium AI.",
+    "  - Sales is GREENFIELD post-TSA — relationship-driven, mostly US-onshore for now; AI-augmentation OK (lead scoring, outreach drafting). Election-cycle 2026 capture matters for MS NOW.",
+    "  - BB- credit rating + dividend + buyback → Treasury / covenant / debt management is high-consequence; humans stay in the loop.",
+    "  - Multi-entity JV (Fandango 75/25 WBD, Nikkei CNBC), split-rights deals (Kardashians on-air retained, streaming to Hulu) → rights & legal complexity = lower offshore, AI-augmentable for first-pass.",
+    "  - Operations & Technology / Production / studio ops are PHYSICAL — low offshore (work happens at the venue/studio), low-medium AI. Olympics on USA/CNBC, USGA through 2032 are high-stakes live windows where downtime is unacceptable.",
     "",
-    `Tower currently being scored: ${towerId} — ${towerContext}`,
+    buildVoiceRulesBlock(),
+    "",
+    buildAllowListsBlock({ includePeople: false, includeVendors: true }),
     "",
     "Return STRICT JSON ONLY in this exact shape, with one item per input row, in INPUT ORDER. Each item carries TWO short rationales — offshore and AI are independent levers and each deserves its own one-liner:",
     '{"items": [{"offshorePct": <int>, "aiPct": <int>, "offshoreRationale": "<≤15 words why this offshorePct>", "aiRationale": "<≤15 words why this aiPct>"}, ...]}',
     "",
-    "Rationale guidance — be Versant-specific, declarative, and concrete. Name brands (MS NOW / CNBC / Golf Channel / GolfNow / GolfPass / USA Network / E! / Syfy / Fandango / Rotten Tomatoes / SportsEngine), the TSA carve-out, BB- credit, multi-entity JV, or named vendors (BlackLine / Eightfold / Amagi / LiveRamp / Piano / Deepgram) where they fit. Never use hedge language ('potentially', 'could possibly', 'may help to', 'leverage AI'). Never write rationales that could apply to any media company.",
+    "Rationale guidance — be Versant-specific, declarative, and concrete. Name brands, structural constraints, or vendors from the allow-list. Never write rationales that could apply to any media company.",
     "",
     "Do not return any prose outside the JSON. Do not skip rows. Do not add extra rows. Always return integers (not floats) and round to the nearest 5.",
   ].join("\n");
@@ -133,20 +142,53 @@ function buildUserPrompt(rows: LLMRowInput[]): string {
   //   V5: { l2, l3, l4 }  → dial row is the L4 Activity Group
   //   V4 (legacy): { l2, l3 } → dial row is the L3 (we treat L3 as the
   //                              row label so older programs still score)
-  const lines = rows.map((r, i) => {
+  // When ANY description field is non-empty for a row, render a per-row
+  // "ROW NARRATIVE CONTEXT" sub-block immediately after the label line.
+  // The block is skipped entirely for rows whose tower hasn't been
+  // description-authored yet — keeps the prompt clean across the
+  // mid-rollout state where some towers have descriptions and others
+  // don't.
+  const lines: string[] = [];
+  rows.forEach((r, i) => {
     if (r.l4 && r.l4.trim()) {
-      return `${i + 1}. L2="${truncate(r.l2)}" / L3="${truncate(r.l3)}" / L4="${truncate(r.l4)}"`;
+      lines.push(
+        `${i + 1}. L2="${truncate(r.l2)}" / L3="${truncate(r.l3)}" / L4="${truncate(r.l4)}"`,
+      );
+    } else {
+      lines.push(`${i + 1}. L2="${truncate(r.l2)}" / L3="${truncate(r.l3)}"`);
     }
-    return `${i + 1}. L2="${truncate(r.l2)}" / L3="${truncate(r.l3)}"`;
+    const ctxBlock = renderRowDescriptionBlock(r);
+    if (ctxBlock) lines.push(ctxBlock);
   });
   const grain = rows.some((r) => r.l4 && r.l4.trim())
     ? "L4 Activity Groups (5-layer map)"
     : "L3 capabilities (legacy 4-layer map)";
   return [
     `Score these ${rows.length} ${grain}. Preserve order.`,
+    "When a row carries a NARRATIVE CONTEXT block, ground your scores in those specifics — they're authored by Versant tower leads and outrank generic inferences from the row label.",
     "",
     ...lines,
   ].join("\n");
+}
+
+/**
+ * Render the per-row narrative context sub-block. Returns the empty
+ * string when no description fields are populated, so the user prompt
+ * stays compact for towers that haven't been authored yet.
+ */
+function renderRowDescriptionBlock(row: LLMRowInput): string {
+  const parts: string[] = [];
+  if (row.l2Description?.trim()) {
+    parts.push(`     L2 — ${truncate(row.l2Description, 480)}`);
+  }
+  if (row.l3Description?.trim()) {
+    parts.push(`     L3 — ${truncate(row.l3Description, 480)}`);
+  }
+  if (row.l4Description?.trim()) {
+    parts.push(`     L4 — ${truncate(row.l4Description, 480)}`);
+  }
+  if (parts.length === 0) return "";
+  return ["     NARRATIVE CONTEXT:", ...parts].join("\n");
 }
 
 function truncate(s: string, max = 160): string {
@@ -174,73 +216,33 @@ export async function inferTowerDefaultsWithLLM(
   rows: LLMRowInput[],
   options: InferLLMOptions = {},
 ): Promise<LLMRowResult[]> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
+  if (!kitIsLLMConfigured()) {
     throw new LLMError("OPENAI_API_KEY not set");
   }
   if (!rows.length) return [];
 
-  const model =
-    options.model ??
-    process.env.OPENAI_INFER_DEFAULTS_MODEL?.trim() ??
-    process.env.OPENAI_MODEL?.trim() ??
-    DEFAULT_MODEL;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  let res: Response;
-  try {
-    res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: buildSystemPrompt(towerId) },
-          { role: "user", content: buildUserPrompt(rows) },
-        ],
-      }),
-      signal: controller.signal,
-    });
-  } catch (e) {
-    clearTimeout(timer);
-    if ((e as { name?: string })?.name === "AbortError") {
-      throw new LLMError(`OpenAI call timed out after ${timeoutMs}ms`, e);
-    }
-    throw new LLMError("OpenAI network error", e);
-  }
-  clearTimeout(timer);
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new LLMError(`OpenAI ${res.status}: ${text.slice(0, 400) || res.statusText}`);
-  }
-
-  let body: unknown;
-  try {
-    body = await res.json();
-  } catch (e) {
-    throw new LLMError("OpenAI returned non-JSON body", e);
-  }
-  const content =
-    (body as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message?.content;
-  if (typeof content !== "string" || !content.trim()) {
-    throw new LLMError("OpenAI returned empty content");
-  }
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(content);
+    const result = await buildLLMRequest({
+      systemPrompt: buildSystemPrompt(towerId),
+      userPrompt: buildUserPrompt(rows),
+      model: options.model,
+      reasoningEffort: VERSANT_DEFAULT_REASONING_EFFORT,
+      timeoutMs,
+    });
+    parsed = result.parsed;
   } catch (e) {
-    throw new LLMError("OpenAI content was not valid JSON", e);
+    if (e instanceof VersantLLMError) {
+      throw new LLMError(e.message, e);
+    }
+    throw new LLMError(
+      e instanceof Error ? e.message : "OpenAI call failed",
+      e,
+    );
   }
+
   const items = (parsed as { items?: unknown[] })?.items;
   if (!Array.isArray(items)) {
     throw new LLMError("OpenAI JSON missing `items` array");

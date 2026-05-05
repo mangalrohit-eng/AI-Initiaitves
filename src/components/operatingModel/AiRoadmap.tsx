@@ -100,8 +100,19 @@ function RoadmapCard({
                 : "text-forge-ink group-hover:text-accent-purple-dark",
             )}
           >
-            {l4.name}
+            {l4.initiativeName ?? l4.name}
           </div>
+          {l4.initiativeName && l4.initiativeName !== l4.name ? (
+            <div
+              className="mt-0.5 text-[11px] leading-snug text-forge-hint"
+              title="The L5 Activity this AI initiative automates"
+            >
+              <span className="font-mono uppercase tracking-wider text-forge-hint/80">
+                Activity
+              </span>{" "}
+              · {l4.name}
+            </div>
+          ) : null}
           <div className="mt-1 text-[11px] uppercase tracking-wide text-forge-hint">
             {l3.l2Name} · {l3.l3.name}
           </div>

@@ -16,7 +16,6 @@ import "server-only";
 
 import { towers } from "@/data/towers";
 import { processBriefs } from "@/data/processBriefs";
-import { resolveOpenAiBaseUrl } from "@/lib/llm/openaiBase";
 import { ASK_PROMPT_VERSION, buildAskSystemPrompt, buildAskUserPrompt } from "./askPrompt";
 import type {
   AskAssistantResponse,
@@ -35,13 +34,16 @@ import type {
   AskRequestMessage,
   ProgramDigest,
 } from "./types";
+import {
+  VersantLLMError,
+  buildLLMRequest,
+  isLLMConfigured as kitIsLLMConfigured,
+  resolveModelId as kitResolveModelId,
+  type ReasoningEffort,
+} from "@/lib/llm/prompts/versantPromptKit";
 
-const DEFAULT_MODEL = "gpt-5.5";
 const DEFAULT_TIMEOUT_MS = 120_000;
-const DEFAULT_TEMPERATURE = 0.2;
 const DEFAULT_MAX_TOKENS = 12_000;
-
-type ReasoningEffort = "minimal" | "low" | "medium" | "high";
 const DEFAULT_REASONING_EFFORT: ReasoningEffort = "low";
 
 export class AskLLMError extends Error {
@@ -61,49 +63,11 @@ export class AskLLMError extends Error {
 }
 
 export function isAskLLMConfigured(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+  return kitIsLLMConfigured();
 }
 
 export function resolveAskModel(): string {
-  return (
-    process.env.OPENAI_ASK_MODEL?.trim() ||
-    process.env.OPENAI_MODEL?.trim() ||
-    DEFAULT_MODEL
-  );
-}
-
-function shouldUseResponsesApi(model: string): boolean {
-  if (process.env.OPENAI_ASK_USE_CHAT_COMPLETIONS === "1") return false;
-  const m = model.toLowerCase();
-  return m.startsWith("gpt-5") || m.startsWith("o1") || m.startsWith("o3") || m.startsWith("o4");
-}
-
-function resolveReasoningEffort(): ReasoningEffort {
-  const raw = process.env.OPENAI_ASK_REASONING_EFFORT?.trim().toLowerCase();
-  if (raw === "minimal" || raw === "low" || raw === "medium" || raw === "high") return raw;
-  return DEFAULT_REASONING_EFFORT;
-}
-
-function extractResponsesOutputText(body: unknown): string | null {
-  const b = body as {
-    output_text?: string;
-    output?: Array<{
-      type?: string;
-      content?: Array<{ type?: string; text?: string }>;
-    }>;
-  };
-  if (typeof b.output_text === "string" && b.output_text.trim()) {
-    return b.output_text;
-  }
-  for (const item of b.output ?? []) {
-    if (item.type !== "message") continue;
-    for (const part of item.content ?? []) {
-      if (part.type === "output_text" && typeof part.text === "string" && part.text.trim()) {
-        return part.text;
-      }
-    }
-  }
-  return null;
+  return kitResolveModelId();
 }
 
 export type AskLLMResult = {
@@ -124,136 +88,56 @@ export async function generateAskAnswer(args: {
   clientMode: boolean;
   signal?: AbortSignal;
 }): Promise<AskLLMResult> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
+  if (!kitIsLLMConfigured()) {
     throw new AskLLMError("OPENAI_API_KEY not set", "api_key_missing");
   }
 
-  const modelId = resolveAskModel();
-  const useResponses = shouldUseResponsesApi(modelId);
   const systemPrompt = buildAskSystemPrompt();
   const userPrompt = buildAskUserPrompt(args.messages, args.programDigest);
 
-  const controller = new AbortController();
-  const timeoutMs = Number(process.env.OPENAI_ASK_TIMEOUT_MS?.trim() || "") || DEFAULT_TIMEOUT_MS;
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  if (args.signal) {
-    args.signal.addEventListener("abort", () => controller.abort());
-  }
-  const startedAt = Date.now();
-
-  let res: Response;
-  try {
-    if (useResponses) {
-      res = await fetch(`${resolveOpenAiBaseUrl()}/v1/responses`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: modelId,
-          instructions: systemPrompt,
-          input: `Return a single JSON object exactly per the OUTPUT CONTRACT.\n\n${userPrompt}`,
-          reasoning: { effort: resolveReasoningEffort() },
-          max_output_tokens: DEFAULT_MAX_TOKENS,
-          text: {
-            format: { type: "json_object" },
-            verbosity: "medium",
-          },
-        }),
-        signal: controller.signal,
-      });
-    } else {
-      res = await fetch(`${resolveOpenAiBaseUrl()}/v1/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: modelId,
-          temperature: DEFAULT_TEMPERATURE,
-          max_completion_tokens: DEFAULT_MAX_TOKENS,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-        }),
-        signal: controller.signal,
-      });
-    }
-  } catch (e) {
-    clearTimeout(timer);
-    if ((e as { name?: string })?.name === "AbortError") {
-      throw new AskLLMError(`OpenAI call timed out after ${timeoutMs}ms`, "timeout", true, e);
-    }
-    throw new AskLLMError("OpenAI network error", "network", true, e);
-  }
-  clearTimeout(timer);
-  const latencyMs = Date.now() - startedAt;
-
-  const rawText = await res.text().catch(() => "");
-
-  if (!res.ok) {
-    const code: AskLLMError["code"] =
-      res.status === 429
-        ? "rate_limit"
-        : res.status === 413
-          ? "prompt_too_large"
-          : res.status >= 500
-            ? "network"
-            : "unknown";
-    throw new AskLLMError(
-      `OpenAI ${res.status}: ${rawText.slice(0, 400) || res.statusText}`,
-      code,
-      code === "rate_limit" || code === "network",
-    );
-  }
-
-  let body: unknown;
-  try {
-    body = rawText ? JSON.parse(rawText) : {};
-  } catch (e) {
-    throw new AskLLMError("OpenAI returned non-JSON body", "unknown", false, e);
-  }
-
-  let content: string | null;
+  let parsed: unknown;
+  let modelId: string;
+  let latencyMs: number;
   let usage: { prompt?: number; completion?: number; total?: number } | undefined;
 
-  if (useResponses) {
-    const status = (body as { status?: string }).status;
-    if (status === "failed" || status === "cancelled") {
-      const err = (body as { error?: { message?: string } }).error?.message;
-      throw new AskLLMError(`OpenAI Responses status ${status}${err ? `: ${err}` : ""}`);
-    }
-    content = extractResponsesOutputText(body);
-    const u = (body as {
-      usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
-    }).usage;
-    if (u) {
-      usage = { prompt: u.input_tokens, completion: u.output_tokens, total: u.total_tokens };
-    }
-  } else {
-    content = (body as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message?.content ?? null;
-    const u = (body as {
-      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-    }).usage;
-    if (u) {
-      usage = { prompt: u.prompt_tokens, completion: u.completion_tokens, total: u.total_tokens };
-    }
-  }
-
-  if (typeof content !== "string" || !content.trim()) {
-    throw new AskLLMError("OpenAI returned empty content");
-  }
-
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(content);
+    const result = await buildLLMRequest({
+      systemPrompt,
+      userPrompt,
+      reasoningEffort: DEFAULT_REASONING_EFFORT,
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+      maxOutputTokens: DEFAULT_MAX_TOKENS,
+      verbosity: "medium",
+      signal: args.signal,
+    });
+    parsed = result.parsed;
+    modelId = result.model;
+    latencyMs = result.latencyMs;
+    usage = result.tokenUsage;
   } catch (e) {
-    throw new AskLLMError("OpenAI content was not valid JSON", "validation_failed", false, e);
+    if (e instanceof VersantLLMError) {
+      const code: AskLLMError["code"] =
+        e.code === "rate_limit"
+          ? "rate_limit"
+          : e.code === "api_key_missing"
+            ? "api_key_missing"
+            : e.code === "prompt_too_large"
+              ? "prompt_too_large"
+              : e.code === "timeout"
+                ? "timeout"
+                : e.code === "non_json_response" || e.code === "empty_content"
+                  ? "validation_failed"
+                  : e.code === "network" || e.code === "responses_failed"
+                    ? "network"
+                    : "unknown";
+      throw new AskLLMError(e.message, code, e.retriable, e);
+    }
+    throw new AskLLMError(
+      e instanceof Error ? e.message : "OpenAI call failed",
+      "unknown",
+      true,
+      e,
+    );
   }
 
   const validated = validateAskResponse(parsed, args.clientMode);

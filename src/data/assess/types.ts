@@ -83,7 +83,32 @@ export type GeneratedProcessCache = {
 export type L5Item = {
   /** Stable id — hash of `(towerId + l2 + l3 + l4 + name)`. */
   id: string;
+  /**
+   * The L5 Activity inventory label — this is the work performed under the
+   * parent L4 Activity Group (e.g. "Bank Reconciliations", "Vendor MDM —
+   * execution"). Drives the canonical hierarchy and stays stable across
+   * regenerations.
+   */
   name: string;
+  /**
+   * AI-initiative-style display title — names what the AI does, NOT the
+   * underlying activity. Verb-led / noun-led, 3-7 words. MUST be
+   * semantically distinct from `name` (which describes the work). The
+   * Step 4 / Step 5 UI uses this as the headline title and renders `name`
+   * as the "Underlying activity" subtitle.
+   *
+   * Examples:
+   *   name = "Vendor MDM — execution"   →  initiativeName = "Vendor master data automation"
+   *   name = "Bank Reconciliations"      →  initiativeName = "Bank reconciliation auto-match"
+   *   name = "MD&A Narrative Drafting"   →  initiativeName = "MD&A first-draft generator"
+   *
+   * Optional because:
+   *   - Legacy snapshots predate the field — readers fall back to `name`.
+   *   - `reviewed-not-eligible` items don't have an AI initiative to name.
+   *   - Hand-authored canonical seeds may omit it (the LLM authors it on
+   *     first regeneration).
+   */
+  initiativeName?: string;
   source: L5ItemSource;
   /** ISO timestamp; undefined for canonical seeds. */
   generatedAt?: string;

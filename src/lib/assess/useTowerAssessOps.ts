@@ -21,7 +21,6 @@ import {
   setTowerAssess,
   subscribe,
 } from "@/lib/localStore";
-import { isL1L3TreeLocked } from "@/lib/assess/capabilityMapStepStatus";
 
 export type TowerAssessOps = ReturnType<typeof useTowerAssessOps>;
 
@@ -70,18 +69,6 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
   );
   const hasAnyOffshoreInput = rows.some((r) => r.offshoreAssessmentPct != null);
   const hasAnyAiInput = rows.some((r) => r.aiImpactAssessmentPct != null);
-
-  const patchRow = React.useCallback(
-    (id: string, patch: Partial<L3WorkforceRow>) => {
-      const cur = getAssessProgram().towers[towerId] ?? defaultTowerState(towerId);
-      if (isL1L3TreeLocked(cur)) return;
-      setTowerAssess(towerId, {
-        l4Rows: cur.l4Rows.map((r) => (r.id === id ? { ...r, ...patch } : r)),
-        status: cur.status === "empty" ? "data" : cur.status,
-      });
-    },
-    [towerId],
-  );
 
   const importOp = useAsyncOp<{ rows: L3WorkforceRow[]; warnings: string[] }, [File]>({
     run: async (f) => {
@@ -293,7 +280,6 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     hasHeadcount,
     hasAnyOffshoreInput,
     hasAnyAiInput,
-    patchRow,
     importOp,
     fillBlanksOp,
     overwriteAllOp,

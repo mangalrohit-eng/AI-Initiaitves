@@ -24,7 +24,7 @@ import { TowerJourneyStepper } from "@/components/layout/TowerJourneyStepper";
 import { Term } from "@/components/help/Term";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { getCapabilityMapForTower } from "@/data/capabilityMap/maps";
-import type { L3WorkforceRow, TowerId } from "@/data/assess/types";
+import type { TowerId } from "@/data/assess/types";
 import { useTowerAssessOps } from "@/lib/assess/useTowerAssessOps";
 import {
   definitionToViewModel,
@@ -47,7 +47,6 @@ import {
 } from "@/lib/assess/capabilityMapStepStatus";
 import { TowerDataExports } from "@/components/assess/TowerDataExports";
 import { towers } from "@/data/towers";
-import { useRedactDollars } from "@/lib/clientMode";
 import { cn } from "@/lib/utils";
 import {
   ReplaceUploadConfirmDialog,
@@ -75,7 +74,6 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
     rows,
     tState,
     importOp,
-    patchRow,
     markL1L3TreeValidated,
     clearL1L3TreeValidation,
   } = ops;
@@ -390,23 +388,6 @@ export function CapabilityMapTowerClient({ towerId, towerName }: Props) {
             No <Term termKey="capability map">capability map</Term> is defined for this tower and no headcount is loaded yet. Use the
             CTA above to upload your file.
           </p>
-        ) : null}
-
-        {rows.length > 0 ? (
-          <details className="group mt-4 rounded-2xl border border-forge-border bg-forge-surface/40 open:bg-forge-surface/60">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2.5 text-sm font-medium text-forge-body">
-              <span>
-                Edit headcount values
-                <span className="ml-2 font-mono text-[11px] text-forge-hint">
-                  {rows.length} row{rows.length === 1 ? "" : "s"}
-                </span>
-              </span>
-              <span className="text-forge-subtle transition-transform group-open:rotate-90" aria-hidden>
-                ›
-              </span>
-            </summary>
-            <HeadcountTable readOnly={mapStepLocked} rows={rows} onPatch={patchRow} />
-          </details>
         ) : null}
 
         {rows.length > 0 ? (
@@ -913,96 +894,3 @@ function Step1LeadSignoff({
   );
 }
 
-function HeadcountTable({
-  rows,
-  onPatch,
-  readOnly,
-}: {
-  rows: L3WorkforceRow[];
-  onPatch: (id: string, patch: Partial<L3WorkforceRow>) => void;
-  readOnly?: boolean;
-}) {
-  const redact = useRedactDollars();
-  return (
-    <div className="overflow-x-auto border-t border-forge-border">
-      <table className="w-full min-w-[760px] border-collapse text-left text-sm">
-        <thead>
-          <tr className="border-b border-forge-border bg-forge-well/50 text-xs text-forge-subtle">
-            <th className="px-3 py-2 font-medium">L2</th>
-            <th className="px-3 py-2 font-medium">L3</th>
-            <th className="px-3 py-2 font-medium" title="Full-time employees onshore (US)">
-              FTE on
-            </th>
-            <th className="px-3 py-2 font-medium" title="Full-time employees offshore (non-US)">
-              FTE off
-            </th>
-            <th className="px-3 py-2 font-medium" title="Contractors onshore">
-              Contr on
-            </th>
-            <th className="px-3 py-2 font-medium" title="Contractors offshore">
-              Contr off
-            </th>
-            <th className="px-3 py-2 font-medium" title="Annual spend in USD (optional)">
-              Annual spend
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className="border-b border-forge-border/70">
-              <td className="max-w-[160px] px-3 py-1.5 text-forge-subtle">{r.l2}</td>
-              <td className="max-w-[260px] px-3 py-1.5 text-forge-ink">{r.l3}</td>
-              {(["fteOnshore", "fteOffshore", "contractorOnshore", "contractorOffshore"] as const).map(
-                (k) => (
-                  <td key={k} className="px-1 py-1">
-                    <input
-                      className="w-16 rounded border border-forge-border bg-forge-page px-1 py-0.5 text-right font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
-                      type="number"
-                      min={0}
-                      step={1}
-                      disabled={readOnly}
-                      value={r[k]}
-                      onChange={(e) => {
-                        const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
-                        onPatch(r.id, { [k]: n } as Partial<L3WorkforceRow>);
-                      }}
-                    />
-                  </td>
-                ),
-              )}
-              <td className="px-1 py-1">
-                {redact ? (
-                  <span
-                    className="inline-block w-24 rounded border border-forge-border bg-forge-page px-1 py-0.5 text-right font-mono text-xs text-forge-subtle"
-                    aria-label="Annual spend not available"
-                  >
-                    —
-                  </span>
-                ) : (
-                  <input
-                    className="w-24 rounded border border-forge-border bg-forge-page px-1 py-0.5 text-right font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
-                    type="number"
-                    min={0}
-                    step={1000}
-                    disabled={readOnly}
-                    value={r.annualSpendUsd ?? ""}
-                    placeholder="optional"
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      if (raw === "") {
-                        onPatch(r.id, { annualSpendUsd: undefined });
-                        return;
-                      }
-                      const n = Math.max(0, Number(raw));
-                      if (Number.isFinite(n)) onPatch(r.id, { annualSpendUsd: n });
-                    }}
-                  />
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}

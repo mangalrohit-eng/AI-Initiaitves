@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, Eye, Users } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Eye, Users } from "lucide-react";
 import type { L3WorkforceRow } from "@/data/assess/types";
 import type {
   CapabilityMapViewModel,
@@ -228,8 +228,11 @@ export function CapabilityMapPanel({
           group owns its L2 header bar and the L3 columns directly below
           it. L3 columns are fixed-width so L2 header widths scale
           naturally with the number of L3s under them, and the whole
-          tier scrolls horizontally as one unit on narrow viewports. */}
-      <div className="overflow-x-auto pb-1">
+          tier scrolls horizontally as one unit on narrow viewports.
+          ScrollableTier surfaces edge fades + chevron buttons when the
+          content overflows the viewport so users see (and can act on)
+          the cut-off edges. */}
+      <ScrollableTier>
         <div className="flex items-stretch gap-5">
           {view.l2.map((l2) => (
             <L2Group
@@ -243,7 +246,118 @@ export function CapabilityMapPanel({
             />
           ))}
         </div>
+      </ScrollableTier>
+    </div>
+  );
+}
+
+/**
+ * Horizontal scroll wrapper that signals overflow to the user. When the
+ * tier's content exceeds the viewport width, we render:
+ *
+ *   - Edge fade gradients on the cut-off side so the cliff edge is
+ *     visible without reading as an empty column.
+ *   - Floating chevron buttons that scroll the tier ~80% of the
+ *     viewport width on click. Buttons only appear (visually + for
+ *     pointer / focus) when scroll is possible in that direction.
+ *
+ * The component listens to scroll + resize so the indicators stay
+ * accurate after L4 toggles (which may add the L5 band and shift
+ * heights / widths). When content fits, both indicators stay hidden
+ * and the wrapper is visually inert.
+ */
+function ScrollableTier({ children }: { children: React.ReactNode }) {
+  const ref = React.useRef<HTMLDivElement | null>(null);
+  const [canLeft, setCanLeft] = React.useState(false);
+  const [canRight, setCanRight] = React.useState(false);
+
+  const update = React.useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setCanLeft(scrollLeft > 1);
+    setCanRight(scrollLeft + clientWidth < scrollWidth - 1);
+  }, []);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    update();
+    const onScroll = () => update();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    const ro =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => update())
+        : null;
+    ro?.observe(el);
+    if (el.firstElementChild) ro?.observe(el.firstElementChild);
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      ro?.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [update]);
+
+  const scrollByDir = React.useCallback((dir: -1 | 1) => {
+    const el = ref.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: "smooth" });
+  }, []);
+
+  return (
+    <div className="relative">
+      <div ref={ref} className="overflow-x-auto pb-1 scroll-smooth">
+        {children}
       </div>
+
+      {/* Left edge fade — fades the page background over content as it
+          scrolls past the viewport edge. Pointer-events disabled so it
+          never blocks clicks on the underlying L4 buttons. */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-y-0 left-0 w-10 rounded-l-md bg-gradient-to-r from-forge-page via-forge-page/70 to-transparent transition-opacity",
+          canLeft ? "opacity-100" : "opacity-0",
+        )}
+      />
+      <button
+        type="button"
+        onClick={() => scrollByDir(-1)}
+        aria-label="Scroll capability map left"
+        tabIndex={canLeft ? 0 : -1}
+        className={cn(
+          "absolute left-1 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-accent-purple/35 bg-forge-surface text-accent-purple-dark shadow-card transition",
+          "hover:border-accent-purple/70 hover:text-accent-purple",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/50",
+          canLeft ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+      >
+        <ChevronLeft className="h-4 w-4" aria-hidden />
+      </button>
+
+      {/* Right edge fade + chevron — mirror of the left side. */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-y-0 right-0 w-10 rounded-r-md bg-gradient-to-l from-forge-page via-forge-page/70 to-transparent transition-opacity",
+          canRight ? "opacity-100" : "opacity-0",
+        )}
+      />
+      <button
+        type="button"
+        onClick={() => scrollByDir(1)}
+        aria-label="Scroll capability map right"
+        tabIndex={canRight ? 0 : -1}
+        className={cn(
+          "absolute right-1 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-accent-purple/35 bg-forge-surface text-accent-purple-dark shadow-card transition",
+          "hover:border-accent-purple/70 hover:text-accent-purple",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/50",
+          canRight ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+      >
+        <ChevronRight className="h-4 w-4" aria-hidden />
+      </button>
     </div>
   );
 }

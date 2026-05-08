@@ -25,31 +25,32 @@ type Props = {
 };
 
 /**
- * Layered capability tree under the 5-layer V5 capability map. The view
- * is rendered as a sequence of L2 sections, one per L2 Job Grouping in
- * the view (the canonical maps ship a single dummy L2 named after the
- * function; uploads can supply multiple). Inside every L2 section:
+ * Layered capability tree under the 5-layer V5 capability map. The whole
+ * view renders as a single horizontal tier so multiple L2 Job Groupings
+ * sit side-by-side on one row instead of stacking vertically:
  *
  *   1. L1 Function banner (rendered once at the top, full width).
- *   2. L2 Job Grouping header bar (one per L2, full section width).
- *   3. Main band — equal-width L3 Job Family columns laid out
- *      horizontally. Each column has its L3 column header on top and an
- *      L4 Activity Group button stack underneath. L4 is the dial-bearing
- *      rung and the only clickable rung in the main band; every L4 is
- *      permanently visible.
- *   4. L5 band (renders only when at least one L4 in this L2 section is
- *      active). Same horizontal column structure as the main band: each
- *      L3 column reveals ghost L4 captions + L5 Activity chips for the
- *      active L4s under it. L5 chips sit in the same column as their
- *      parent L4 so the linkage stays obvious.
+ *   2. Main band — a single horizontal flex of L2 groups. Each L2 group
+ *      owns its L2 header bar at the top (width naturally scales with
+ *      the L3 count beneath it) and a flex row of fixed-width L3 Job
+ *      Family columns directly underneath. L3 columns stay uniform
+ *      across the entire tier so the L2 header widths read as
+ *      proportional to scope.
+ *   3. Each L3 column has its L3 header on top and an L4 Activity Group
+ *      button stack underneath. L4 is the dial-bearing rung and the only
+ *      clickable rung in the main band; every L4 is permanently visible.
+ *   4. L5 band (per L2 group). Renders inside an L2 group only when at
+ *      least one L4 inside that group is active. Same column structure
+ *      as the main band so L5 chips line up under their parent L4.
  *
- * The L5 reveal is per-L2 (not global). Activating an L4 in one L2
- * section opens the L5 band only inside that section. The "Show all L5
- * Activities" master toggle is global and flips every L4 id at once.
+ * The L5 reveal stays per-L2 (not global): activating an L4 in one L2
+ * group opens the L5 band only inside that group, keeping the linkage
+ * to the parent L4 column obvious. The "Show all L5 Activities" master
+ * toggle is global and flips every L4 id at once.
  *
  * Headcount roll-up: workforce rows are 1-per-L4 in V5. The L4 button
  * reads its row's headcount directly via the row id; the L3 column header
- * shows the sum of its L4s; the L2 section header shows the sum of its
+ * shows the sum of its L4s; the L2 group header shows the sum of its
  * L3s; the L1 banner shows the tower total. In preview mode (no rows
  * yet) every headcount renders as null.
  *
@@ -223,21 +224,25 @@ export function CapabilityMapPanel({
       {/* L1 banner — full width, deepest purple wash. */}
       <L1Banner name={view.l1Name} hc={towerHeadcount} />
 
-      {/* One L2 section per L2 Job Grouping. Each section owns its own
-          main band and L5 band so activating an L4 only opens leaves
-          inside that section. */}
-      <div className="space-y-4">
-        {view.l2.map((l2) => (
-          <L2Section
-            key={l2.name}
-            l2={l2}
-            hc={l2Headcount(l2)}
-            active={active}
-            onToggleL4={toggleL4}
-            l3HeadcountFn={l3Headcount}
-            l4HeadcountFn={l4Headcount}
-          />
-        ))}
+      {/* Single horizontal tier — all L2 groups sit on one row. Each
+          group owns its L2 header bar and the L3 columns directly below
+          it. L3 columns are fixed-width so L2 header widths scale
+          naturally with the number of L3s under them, and the whole
+          tier scrolls horizontally as one unit on narrow viewports. */}
+      <div className="overflow-x-auto pb-1">
+        <div className="flex items-stretch gap-5">
+          {view.l2.map((l2) => (
+            <L2Group
+              key={l2.name}
+              l2={l2}
+              hc={l2Headcount(l2)}
+              active={active}
+              onToggleL4={toggleL4}
+              l3HeadcountFn={l3Headcount}
+              l4HeadcountFn={l4Headcount}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -331,7 +336,7 @@ function L1Banner({ name, hc }: { name: string; hc: number | null }) {
   );
 }
 
-function L2Section({
+function L2Group({
   l2,
   hc,
   active,
@@ -352,41 +357,38 @@ function L2Section({
   );
 
   return (
-    <div data-l2-section={l2.name} className="space-y-2">
+    <div data-l2-group={l2.name} className="flex shrink-0 flex-col gap-2">
       <L2HeaderBar name={l2.name} hc={hc} />
 
-      {/* Main band: horizontal flex of equal-width L3 Job Family columns. */}
-      <div className="overflow-x-auto pb-1">
-        <div className="flex items-stretch gap-3">
-          {l2.l3.map((l3) => (
-            <L3Column
-              key={l3.name}
-              l3={l3}
-              hc={l3HeadcountFn(l3)}
-              active={active}
-              onToggleL4={onToggleL4}
-              l4HeadcountFn={l4HeadcountFn}
-            />
-          ))}
-        </div>
+      {/* L3 row: fixed-width columns laid out horizontally. The L2
+          header above naturally spans the full width of this row. */}
+      <div className="flex items-stretch gap-3">
+        {l2.l3.map((l3) => (
+          <L3Column
+            key={l3.name}
+            l3={l3}
+            hc={l3HeadcountFn(l3)}
+            active={active}
+            onToggleL4={onToggleL4}
+            l4HeadcountFn={l4HeadcountFn}
+          />
+        ))}
       </div>
 
-      {/* L5 band: only when at least one L4 inside this L2 is active.
-          Same column structure as the main band — L5 chips sit in the
-          same column as their parent L4. */}
+      {/* L5 band: only when at least one L4 inside this L2 group is
+          active. Same column structure as the main band so chips line
+          up under their parent L4 column. */}
       {anyL4ActiveInL2 ? (
         <>
           <BandDivider />
-          <div className="overflow-x-auto">
-            <div className="flex items-start gap-3">
-              {l2.l3.map((l3) => (
-                <L5BandColumnForL3
-                  key={l3.name}
-                  l3={l3}
-                  active={active}
-                />
-              ))}
-            </div>
+          <div className="flex items-start gap-3">
+            {l2.l3.map((l3) => (
+              <L5BandColumnForL3
+                key={l3.name}
+                l3={l3}
+                active={active}
+              />
+            ))}
           </div>
         </>
       ) : null}
@@ -433,7 +435,7 @@ function L3Column({
   return (
     <div
       data-l3-col={l3.name}
-      className="flex min-w-[180px] flex-1 flex-col gap-1.5"
+      className="flex w-[200px] shrink-0 flex-col gap-1.5"
     >
       <Box
         tier="l3"
@@ -500,7 +502,7 @@ function L5BandColumnForL3({
   return (
     <div
       data-l5-col={l3.name}
-      className="flex min-w-[180px] flex-1 flex-col gap-1.5"
+      className="flex w-[200px] shrink-0 flex-col gap-1.5"
     >
       {activeL4s.length === 0 ? (
         <div

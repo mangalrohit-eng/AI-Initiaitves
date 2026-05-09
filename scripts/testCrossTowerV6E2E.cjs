@@ -30,8 +30,12 @@ const setCookie = (res) => {
 };
 const cookieHeader = () => cookieJar.join("; ");
 
-const args = new Set(process.argv.slice(2));
+const argv = process.argv.slice(2);
+const args = new Set(argv);
 const SKIP_LLM = args.has("--skip-llm");
+const REPEAT_ARG = argv.find((a) => a.startsWith("--repeat="));
+const REPEAT = REPEAT_ARG ? Math.max(1, parseInt(REPEAT_ARG.split("=")[1], 10)) : 1;
+const STRICT = args.has("--strict") || REPEAT > 1;
 
 const out = {
   login: null,
@@ -41,6 +45,9 @@ const out = {
   generate: null,
   generate_initiatives: 0,
   generate_warnings: 0,
+  generate_synthesis_status: null,
+  generate_validation_failed: false,
+  generate_call_failed: false,
   state_put: null,
   state_get_roundtrip: null,
   hydrate_match: null,
@@ -215,11 +222,34 @@ async function generate(initiatives, towers) {
   }
   out.generate_warnings = (json.warnings ?? []).length;
   out.generate_initiatives = (json.narratives ?? []).length;
-  console.log(
-    `    HTTP 200 — schema=${json.schema}, narratives=${out.generate_initiatives}, warnings=${out.generate_warnings}, model=${json.modelId ?? "?"}`,
+  out.generate_synthesis_status = json.synthesisStatus ?? null;
+  const warningsArr = json.warnings ?? [];
+  out.generate_validation_failed = warningsArr.some((w) =>
+    typeof w === "string" && /Synthesis validation failed/i.test(w),
   );
-  if (json.warnings && json.warnings.length > 0) {
-    console.log(`    warnings: ${JSON.stringify(json.warnings)}`);
+  out.generate_call_failed = warningsArr.some((w) =>
+    typeof w === "string" && /Synthesis call failed/i.test(w),
+  );
+  console.log(
+    `    HTTP 200 — schema=${json.schema}, synthesisStatus=${json.synthesisStatus}, narratives=${out.generate_initiatives}, warnings=${out.generate_warnings}, model=${json.modelId ?? "?"}`,
+  );
+  if (warningsArr.length > 0) {
+    console.log(`    warnings: ${JSON.stringify(warningsArr)}`);
+  }
+  // Hard sanity check on the LLM synthesis itself: the engine must have
+  // returned a real LLM-authored synthesis, not the deterministic stub.
+  // If the determinism guard rejects the output (or the OpenAI call fails),
+  // we land in stub mode with a "Synthesis validation failed" / "Synthesis
+  // call failed" warning. That MUST trip a smoke-test failure in strict
+  // mode — otherwise the bug we just fixed could regress silently.
+  if (json.synthesisStatus !== "ok") {
+    console.error(`    ! synthesisStatus is "${json.synthesisStatus}" — fell back to deterministic stub.`);
+  }
+  if (out.generate_validation_failed) {
+    console.error(`    ! synthesis validation failed — determinism guard rejected the LLM output.`);
+  }
+  if (out.generate_call_failed) {
+    console.error(`    ! synthesis call failed — OpenAI request errored before validation.`);
   }
   return json;
 }
@@ -368,11 +398,87 @@ async function main() {
 
   console.log("\n=== SUMMARY ===");
   console.log(JSON.stringify(out, null, 2));
+
+  // Strict-mode pass criteria: the LLM synthesis MUST land "ok" with no
+  // validation/call failures. Flake-checking via --repeat=N catches any
+  // output that drifts close to the determinism-guard boundary.
+  const passed =
+    out.login === 200 &&
+    out.assess_get === 200 &&
+    out.generate === 200 &&
+    out.state_put === 200 &&
+    out.state_get_roundtrip === 200 &&
+    out.generate_synthesis_status === "ok" &&
+    !out.generate_validation_failed &&
+    !out.generate_call_failed &&
+    out.hydrate_match &&
+    Object.values(out.hydrate_match).every(Boolean);
+
+  return passed;
 }
 
-main().catch((e) => {
-  console.error("Fatal error:", e);
-  console.log("\n=== PARTIAL SUMMARY ===");
-  console.log(JSON.stringify(out, null, 2));
-  process.exit(1);
-});
+async function runAll() {
+  let passed = 0;
+  let failed = 0;
+  const failures = [];
+  for (let i = 0; i < REPEAT; i += 1) {
+    if (REPEAT > 1) {
+      console.log(`\n========== ITERATION ${i + 1} of ${REPEAT} ==========\n`);
+    }
+    cookieJar.length = 0;
+    out.login = null;
+    out.state_get_initial = null;
+    out.assess_get = null;
+    out.initiative_count = 0;
+    out.generate = null;
+    out.generate_initiatives = 0;
+    out.generate_warnings = 0;
+    out.generate_synthesis_status = null;
+    out.generate_validation_failed = false;
+    out.generate_call_failed = false;
+    out.state_put = null;
+    out.state_get_roundtrip = null;
+    out.hydrate_match = null;
+    out.routes = {};
+    let ok = false;
+    try {
+      ok = await main();
+    } catch (e) {
+      console.error(`Iteration ${i + 1} threw:`, e);
+      ok = false;
+    }
+    if (ok) passed += 1;
+    else {
+      failed += 1;
+      failures.push({
+        iteration: i + 1,
+        synthesisStatus: out.generate_synthesis_status,
+        validationFailed: out.generate_validation_failed,
+        callFailed: out.generate_call_failed,
+      });
+    }
+  }
+  if (REPEAT > 1) {
+    console.log(`\n========== AGGREGATE ==========`);
+    console.log(`Iterations: ${REPEAT}, passed: ${passed}, failed: ${failed}`);
+    if (failures.length > 0) {
+      console.log("Failures:", JSON.stringify(failures, null, 2));
+    }
+  }
+  return failed === 0;
+}
+
+runAll()
+  .then((ok) => {
+    if (STRICT && !ok) {
+      console.error("\nSTRICT MODE: at least one iteration failed.");
+      process.exit(1);
+    }
+    process.exit(0);
+  })
+  .catch((e) => {
+    console.error("Fatal error:", e);
+    console.log("\n=== PARTIAL SUMMARY ===");
+    console.log(JSON.stringify(out, null, 2));
+    process.exit(1);
+  });

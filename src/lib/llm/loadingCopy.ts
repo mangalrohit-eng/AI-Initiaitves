@@ -107,14 +107,25 @@ export function llmLoadingCopy(shape: LLMCallShape): LLMLoadingCopy {
  * Helper for the curation banner — formats a "scored X of Y" progress
  * string with a fallback to the static description while the count is
  * still zero.
+ *
+ * `noun` lets the caller pick the row label that matches the active
+ * schema grain — `"Activity Group"` under v5 (L4-grain pipeline) or
+ * `"Job Family"` under v6 (L3-grain pipeline). Defaults to
+ * `"Activity Group"` to preserve the v5 wording for any caller that
+ * predates the schema flag.
  */
-export function curationProgressLine(scored: number, total: number): string {
+export function curationProgressLine(
+  scored: number,
+  total: number,
+  noun: string = "Activity Group",
+): string {
   if (total === 0) return llmLoadingCopy("curate-initiatives").description;
+  const plural = total === 1 ? noun : `${noun}s`;
   if (scored === 0) {
-    return `Calling the Versant model for ${total} Activity Group${total === 1 ? "" : "s"}. Rows fill in as each finishes — don't refresh.`;
+    return `Calling the Versant model for ${total} ${plural}. Rows fill in as each finishes — don't refresh.`;
   }
   if (scored < total) {
-    return `Scored ${scored} of ${total} Activity Group${total === 1 ? "" : "s"} so far. Rows fill in as each finishes — don't refresh.`;
+    return `Scored ${scored} of ${total} ${plural} so far. Rows fill in as each finishes — don't refresh.`;
   }
-  return `Scored all ${total} Activity Group${total === 1 ? "" : "s"} — finalizing.`;
+  return `Scored all ${total} ${plural} — finalizing.`;
 }

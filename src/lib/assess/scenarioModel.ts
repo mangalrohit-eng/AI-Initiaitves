@@ -1,14 +1,40 @@
 import type {
   AssessProgramV2,
-  L3WorkforceRow,
+  TowerAssessState,
   TowerBaseline,
   TowerId,
   TowerRates,
 } from "@/data/assess/types";
 import { defaultTowerRates } from "@/data/assess/types";
 import { towers } from "@/data/towers";
+import { IS_V6 } from "@/lib/schemaFlag";
 
-export type RowCostResult = { row: L3WorkforceRow; annualCost: number };
+/**
+ * Structural type covering both v5 `L4WorkforceRow` (= `L3WorkforceRow`)
+ * and v6 `L3WorkforceRowV6`. The savings model only ever reads the seven
+ * fields below, so widening to this interface lets every helper accept
+ * either row shape without conditional branching at the call site.
+ *
+ * Phase 7 cleanup will rename this to `WorkforceRow` once the L3
+ * vs. L4 distinction is gone.
+ */
+export type DialBearingRow = {
+  /**
+   * Used by `l2Concentration` to bucket rows by Job Grouping. v5 L4
+   * rows carry the L2 Job Grouping name here directly; v6 L3 rows carry
+   * the same value (derived from the L4 children at upload time).
+   */
+  l2: string;
+  fteOnshore: number;
+  fteOffshore: number;
+  contractorOnshore: number;
+  contractorOffshore: number;
+  annualSpendUsd?: number;
+  offshoreAssessmentPct?: number;
+  aiImpactAssessmentPct?: number;
+};
+
+export type RowCostResult = { row: DialBearingRow; annualCost: number };
 
 /* =====================================================================
  * SAVINGS MODEL — single source of truth
@@ -41,9 +67,9 @@ export type RowCostResult = { row: L3WorkforceRow; annualCost: number };
  *
  * ==================================================================== */
 
-/** $ pool for one L4 row — sum of rates × headcount, or annualSpendUsd override. */
+/** $ pool for one row — sum of rates × headcount, or annualSpendUsd override. */
 export function rowAnnualCost(
-  row: L3WorkforceRow,
+  row: DialBearingRow,
   rates: TowerRates,
 ): number {
   if (row.annualSpendUsd != null && row.annualSpendUsd > 0) {
@@ -57,17 +83,20 @@ export function rowAnnualCost(
   );
 }
 
-export function towerPoolUsd(rows: L3WorkforceRow[], rates: TowerRates): number {
+export function towerPoolUsd(
+  rows: ReadonlyArray<DialBearingRow>,
+  rates: TowerRates,
+): number {
   return rows.reduce((s, r) => s + rowAnnualCost(r, rates), 0);
 }
 
 /**
- * Cost-weighted offshore / AI dials across L4 rows. Used for *display only*
+ * Cost-weighted offshore / AI dials across rows. Used for *display only*
  * (e.g., "this tower averages 32% offshore"). Not used to compute $ —
  * the $ comes from per-row math summed, not from these aggregates.
  */
 export function weightedTowerLevers(
-  rows: L3WorkforceRow[],
+  rows: ReadonlyArray<DialBearingRow>,
   baseline: TowerBaseline,
   rates: TowerRates,
 ): { offshorePct: number; aiPct: number } {
@@ -89,7 +118,7 @@ export function weightedTowerLevers(
 
 /** Cost share by L2 name — drives the concentration tile on tower pages. */
 export function l2Concentration(
-  rows: L3WorkforceRow[],
+  rows: ReadonlyArray<DialBearingRow>,
   rates: TowerRates,
 ): { l2: string; sharePct: number; subtotal: number }[] {
   const byL2 = new Map<string, number>();
@@ -119,9 +148,13 @@ export type RowSavings = {
 /**
  * Per-row modeled savings. Uses the row's own dials if set; otherwise the
  * tower baseline. All rates come from the tower's `TowerRates`.
+ *
+ * Accepts both v5 `L4WorkforceRow` and v6 `L3WorkforceRowV6` via the
+ * `DialBearingRow` structural type — every field the math needs lives
+ * on both shapes.
  */
 export function rowModeledSaving(
-  row: L3WorkforceRow,
+  row: DialBearingRow,
   baseline: TowerBaseline,
   rates: TowerRates,
 ): RowSavings {
@@ -139,7 +172,7 @@ export function rowModeledSaving(
  * Two branches: headcount-based (preferred) and annualSpendUsd fallback.
  */
 function computeRowOffshore(
-  row: L3WorkforceRow,
+  row: DialBearingRow,
   offshoreDialPct: number,
   rates: TowerRates,
 ): number {
@@ -190,9 +223,12 @@ export type TowerSavings = {
 /**
  * Modeled savings for a tower — the sum of `rowModeledSaving` across rows.
  * Returns the cost-weighted offshore/AI % for display (not used to compute $).
+ *
+ * Polymorphic over row shape: passes through any `DialBearingRow[]` so v5
+ * (L4-grain) and v6 (L3-grain) callers share the same totals helper.
  */
 export function modeledSavingsForTower(
-  rows: L3WorkforceRow[],
+  rows: ReadonlyArray<DialBearingRow>,
   baseline: TowerBaseline,
   rates: TowerRates,
 ): TowerSavings {
@@ -241,14 +277,35 @@ export function towerRatesFromState(
   return state.towers[towerId]?.rates ?? defaultTowerRates(towerId);
 }
 
+/**
+ * Pick the dial-bearing rows for a tower under the active schema:
+ *   - v6: `l3Rows` if present (the L3-grain dials own the math).
+ *   - v5: `l4Rows` (the L4-grain dials).
+ *
+ * v6 falls through to `l4Rows` when `l3Rows` hasn't been derived yet
+ * (e.g. mid-migration first read) so the math layer never returns null
+ * just because the post-processor hasn't run. Phase 7 cleanup tightens
+ * this to "v6 always reads l3Rows" once the migration is permanent.
+ */
+export function dialBearingRowsForTower(
+  state: TowerAssessState,
+): ReadonlyArray<DialBearingRow> {
+  if (IS_V6 && state.l3Rows && state.l3Rows.length > 0) {
+    return state.l3Rows;
+  }
+  return state.l4Rows;
+}
+
 /** Single per-tower outcome — no scenario stress-test overlay. */
 export function towerOutcomeForState(
   towerId: TowerId,
   state: AssessProgramV2,
 ): TowerOutcome | null {
   const t = state.towers[towerId];
-  if (!t?.l4Rows.length) return null;
-  return modeledSavingsForTower(t.l4Rows, t.baseline, towerRatesFromState(towerId, state));
+  if (!t) return null;
+  const rows = dialBearingRowsForTower(t);
+  if (rows.length === 0) return null;
+  return modeledSavingsForTower(rows, t.baseline, towerRatesFromState(towerId, state));
 }
 
 export function allTowerIdsValid(id: string): id is TowerId {
@@ -260,7 +317,7 @@ export function allTowerIdsValid(id: string): id is TowerId {
  * (or AI) dial bumped +10 pts? Used by tooltips next to a row.
  */
 export function rowSensitivityDeltas(
-  row: L3WorkforceRow,
+  row: DialBearingRow,
   baseline: TowerBaseline,
   rates: TowerRates,
 ): { dOff10: number; dAi10: number } {
@@ -331,9 +388,14 @@ export function programImpactSummary(state: AssessProgramV2): ProgramImpactSumma
 }
 
 /**
- * Program-level sensitivity ribbon: net $ if every L4's offshore (or AI) dial
- * bumped +10 pts. Each L4 row holds one dial pair, so summing the +10 delta
- * across every L4 row is exactly the program-wide +10 sensitivity.
+ * Program-level sensitivity ribbon: net $ if every dial-bearing row's
+ * offshore (or AI) dial bumped +10 pts. Each row holds one dial pair, so
+ * summing the +10 delta across every row is exactly the program-wide +10
+ * sensitivity.
+ *
+ * Under v6, "every row" means every `L3WorkforceRowV6`. Under v5 it
+ * means every `L4WorkforceRow`. `dialBearingRowsForTower` picks the
+ * right shape per tower.
  */
 export function programSensitivityDeltas(state: AssessProgramV2): {
   dOff10: number;
@@ -343,9 +405,11 @@ export function programSensitivityDeltas(state: AssessProgramV2): {
   let dAi10 = 0;
   for (const t of towers) {
     const st = state.towers[t.id];
-    if (!st?.l4Rows.length) continue;
+    if (!st) continue;
+    const rows = dialBearingRowsForTower(st);
+    if (rows.length === 0) continue;
     const rates = towerRatesFromState(t.id, state);
-    for (const r of st.l4Rows) {
+    for (const r of rows) {
       const d = rowSensitivityDeltas(r, st.baseline, rates);
       dOff10 += d.dOff10;
       dAi10 += d.dAi10;
@@ -366,7 +430,9 @@ export function buildExportCsv(
   ];
   for (const t of towers) {
     const st = program.towers[t.id];
-    if (!st?.l4Rows.length) continue;
+    if (!st) continue;
+    const rows = dialBearingRowsForTower(st);
+    if (rows.length === 0) continue;
     const o = towerOutcomeForState(t.id, program);
     if (!o) continue;
     const rates = towerRatesFromState(t.id, program);

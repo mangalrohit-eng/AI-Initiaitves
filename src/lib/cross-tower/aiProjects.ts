@@ -371,11 +371,24 @@ export type CrossTowerAiPlanLLM = {
 // ---------------------------------------------------------------------------
 
 export type AIProjectResolved = {
-  /** Project id (`proj-{l4RowId}`). */
+  /**
+   * Project id. Under v5 this is `proj-{l4RowId}`; under v6 it's the
+   * `L3Initiative.id` (one project per AI Solution, no consolidation).
+   */
   id: string;
-  /** L4 Activity Group id. */
+  /**
+   * Parent identifier for the project.
+   *   - v5: L4 Activity Group row id.
+   *   - v6: `L3Initiative.id` (same as `id`) — there is no parent under v6.
+   * Field name retained so v5 consumers (lineage filters, persistence
+   * sanitizers) keep compiling. Reads "context anchor" under v6.
+   */
   parentL4ActivityGroupId: string;
-  /** L4 Activity Group name. */
+  /**
+   * Parent display name.
+   *   - v5: L4 Activity Group name.
+   *   - v6: `L3WorkforceRowV6.l3` (the parent Job Family) for context.
+   */
   parentL4ActivityGroupName: string;
   /** Primary tower id. */
   primaryTowerId: TowerId;
@@ -385,15 +398,15 @@ export type AIProjectResolved = {
   name: string;
   /** Narrative (LLM-authored when available). */
   narrative: string;
-  /** Full project brief — null on stubs. */
+  /** Full project brief — null on stubs (v5) or always null (v6 — handled per-initiative deep-dive). */
   brief: AIProjectBriefLLM | null;
-  /** Per-L5 inclusion rationales (empty when stub). */
+  /** Per-L5 inclusion rationales (v5; empty under v6). */
   perInitiativeRationale: PerInitiativeRationale[];
-  /** Constituent L5 ids — always present from the cohort. */
+  /** Constituent L5 ids (v5; the single initiative id under v6). */
   constituentInitiativeIds: string[];
-  /** Constituent L5 rows — engine-resolved from program. */
+  /** Constituent rows — engine-resolved from program (v5; empty under v6). */
   constituents: ProgramInitiativeRow[];
-  /** Effort drivers payload (or null on stubs). */
+  /** Effort drivers payload (or null on stubs / under v6). */
   effortDrivers: EffortDriversLLM | null;
   /** Value bucket (null on stubs). */
   valueBucket: ValueBucket | null;
@@ -405,7 +418,13 @@ export type AIProjectResolved = {
   effortRationale: string;
   /** Resolved 2x2 quadrant — null when buckets unset (stub). */
   quadrant: Quadrant | null;
-  /** Modeled $ for the project (the L4 prize, deterministic). */
+  /**
+   * Modeled $ for the project.
+   *   - v5: the L4 Activity Group prize (deterministic).
+   *   - v6: the parent L3 row's `attributedAiUsd` for this initiative
+   *     (even-split share of the L3 prize across non-placeholder
+   *     initiatives on the row).
+   */
   attributedAiUsd: number;
   /** Project start month (1-indexed) — derived from quadrant + assumptions. */
   startMonth: number;
@@ -419,6 +438,36 @@ export type AIProjectResolved = {
   isStub: boolean;
   /** True when the project has been quadrant'd into Deprioritize (excluded from Gantt). */
   isDeprioritized: boolean;
+  // -----------------------------------------------------------------------
+  //  Optional v6-only fields. Populated by `composeProjectsV6`; undefined
+  //  on v5 projects so the existing UI keeps rendering. UI surfaces gate
+  //  on `IS_V6` (or feature-detect `aiRationale`/`primaryVendor`).
+  // -----------------------------------------------------------------------
+  /** Versant-grounded rationale carried from the L3Initiative (2-4 sentences). */
+  aiRationale?: string;
+  /** Named primary vendor / short stack on the L3Initiative. */
+  primaryVendor?: string;
+  /** Binary ship-readiness label from the L3Initiative — drives the v6 chip. */
+  feasibility?: "High" | "Low";
+  /**
+   * 1-line solution tagline — used for the v6 card body (in addition to
+   * `narrative`, which v6 fills with `aiRationale`).
+   */
+  tagline?: string;
+  /** Parent L3 Job Family display name — for the breadcrumb chip. */
+  l3FamilyName?: string;
+  /**
+   * Click-through to `/tower/<towerId>/initiative/<l3RowId>/<initiativeId>`.
+   * v5 cards open the per-page drawer; v6 cards link to the deep-dive.
+   */
+  deepDiveHref?: string;
+  /**
+   * Program tier (P1/P2/P3) of the project. Under v5 this is derived from
+   * `resolveTierFromConstituents`; under v6 it's the parent
+   * `ProgramInitiativeRowV6.programTier`. Optional so legacy persisted
+   * docs without it still parse.
+   */
+  programTier?: import("@/data/types").ProgramTier;
 };
 
 // ---------------------------------------------------------------------------

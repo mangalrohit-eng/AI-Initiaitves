@@ -5,6 +5,7 @@ import type { Quadrant } from "@/lib/cross-tower/aiProjects";
 import type { CrossTowerDeckPayload, DeckProjectSlice } from "@/lib/cross-tower/deckPayload";
 import { deckExecutiveFallback } from "@/lib/cross-tower/deckPayload";
 import { formatUsdCompact } from "@/lib/format";
+import { IS_V6 } from "@/lib/schemaFlag";
 import { DeckSlide } from "./DeckSlide";
 import { DeckValueChart } from "./DeckValueChart";
 import {
@@ -165,8 +166,9 @@ export function CrossTowerDeckDocument({ payload }: { payload: CrossTowerDeckPay
               Plan
             </h1>
             <p className="mt-3 max-w-2xl text-sm text-forge-subtle">
-              24-month agentic AI plan across thirteen towers — one AI Project per in-plan L4
-              Activity Group.
+              {IS_V6
+                ? "24-month agentic AI plan across thirteen towers — sourced from the L3 AI Initiatives curated in each tower workshop."
+                : "24-month agentic AI plan across thirteen towers — one AI Project per in-plan L4 Activity Group."}
             </p>
           </div>
           <p className="font-mono text-xs text-forge-hint">

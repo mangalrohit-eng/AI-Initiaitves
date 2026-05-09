@@ -40,12 +40,39 @@ import {
   validatePersistedPlan,
   type PersistedCrossTowerAiPlan,
 } from "@/lib/cross-tower/persistedPlan";
+import {
+  validatePersistedPlanV2,
+  type PersistedCrossTowerAiPlanV2,
+} from "@/lib/cross-tower/persistedPlanV2";
+import { IS_V6 } from "@/lib/schemaFlag";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** 2 MB ceiling on the JSONB document — covers ~60 cohorts with full briefs. */
 const MAX_BODY_BYTES = 2_000_000;
+
+/**
+ * Schema-aware validator. Under v6 the document MUST be the v2 shape
+ * (`version: 2, schema: "v6"`); v1 docs from a previous v5 deployment are
+ * rejected so the page falls through to the empty-state regenerate flow.
+ * Under v5 the validator behaves exactly as before.
+ */
+type AnyPersistedPlan = PersistedCrossTowerAiPlan | PersistedCrossTowerAiPlanV2;
+type ValidatedPlan =
+  | { ok: true; plan: AnyPersistedPlan }
+  | { ok: false; error: string };
+
+function validateForActiveSchema(raw: unknown): ValidatedPlan {
+  if (IS_V6) {
+    const v2 = validatePersistedPlanV2(raw);
+    if (v2.ok) return { ok: true, plan: v2.plan };
+    return { ok: false, error: v2.error };
+  }
+  const v1 = validatePersistedPlan(raw);
+  if (v1.ok) return { ok: true, plan: v1.plan };
+  return { ok: false, error: v1.error };
+}
 
 type DbDisposition = "ok" | "unconfigured" | "unavailable";
 
@@ -78,7 +105,7 @@ export async function GET() {
         { status: 200 },
       );
     }
-    const validated = validatePersistedPlan(rows[0].document);
+    const validated = validateForActiveSchema(rows[0].document);
     if (!validated.ok) {
       // Don't 500 — let the page render first-run UX with a quiet warning.
       // The most likely cause is a schema bump; no point blocking the user.
@@ -154,11 +181,11 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const validated = validatePersistedPlan(body);
+  const validated = validateForActiveSchema(body);
   if (!validated.ok) {
     return NextResponse.json({ error: validated.error }, { status: 400 });
   }
-  const document: PersistedCrossTowerAiPlan = validated.plan;
+  const document: AnyPersistedPlan = validated.plan;
 
   const sql = getDb()!;
   try {
@@ -181,8 +208,7 @@ export async function PUT(req: Request) {
       modelId: document.modelId,
       promptVersion: document.promptVersion,
       inputHash: document.inputHash,
-      cohortCount: document.cohorts.length,
-      projectCount: document.plan.projects.length,
+      schema: "schema" in document ? document.schema : "v1",
       bytes: text.length,
     });
     return NextResponse.json(
@@ -210,7 +236,7 @@ export async function PUT(req: Request) {
 
 type GetResponse = {
   ok: true;
-  plan: PersistedCrossTowerAiPlan | null;
+  plan: AnyPersistedPlan | null;
   db: DbDisposition;
   updatedAt: string | null;
   /** Optional one-liner the client surfaces when validator soft-rejected. */

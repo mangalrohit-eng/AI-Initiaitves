@@ -1,12 +1,14 @@
 import type {
   AssessProgramV2,
   GlobalAssessAssumptions,
+  L3WorkforceRowV6,
   L4WorkforceRow,
   TowerId,
   TowerRates,
 } from "@/data/assess/types";
 import { mergeLeadDeadlines, parseLeadDeadlines } from "@/lib/program/leadDeadlines";
 import {
+  buildDefaultProgramLeadDeadlines,
   defaultGlobalAssessAssumptions,
   defaultTowerBaseline,
   defaultTowerRates,
@@ -17,9 +19,11 @@ import { getTowerFunctionName } from "@/data/towerFunctionNames";
 import { towers } from "@/data/towers";
 import { coerceInitiativeReviews, groupL4RowsToL3RowsForImport } from "@/lib/localStore";
 import { parseAiReadinessIntakeFromUnknown } from "@/lib/assess/towerReadinessIntake";
+import { deriveL3Rows } from "@/lib/assess/deriveL3Rows";
+import { IS_V6 } from "@/lib/schemaFlag";
 
 export const ASSESS_PROGRAM_FILE_FORMAT = "forge-assess-program-v5" as const;
-const SUPPORTED_PROGRAM_VERSIONS: ReadonlyArray<number> = [2, 3, 4, 5];
+const SUPPORTED_PROGRAM_VERSIONS: ReadonlyArray<number> = [2, 3, 4, 5, 6];
 
 export type AssessProgramFileEnvelope = {
   format: typeof ASSESS_PROGRAM_FILE_FORMAT;
@@ -282,7 +286,10 @@ export function importAssessProgramFromJsonText(
   const hasLegacyGlobal = Object.keys(legacyOverrides).length > 0;
 
   const program: AssessProgramV2 = {
-    version: 5,
+    // Preserve a v6 input version so a v6 export imported under v5 mode
+    // doesn't get silently downgraded. The v6 post-derivation later in
+    // this function bumps the version to 6 when IS_V6 is active.
+    version: inputVersion === 6 ? 6 : 5,
     towers: {},
   };
 
@@ -330,8 +337,19 @@ export function importAssessProgramFromJsonText(
         ratesFromSnapshot ??
         (hasLegacyGlobal ? { ...defaultTowerRates(k), ...legacyOverrides } : defaultTowerRates(k));
 
+      // V6: preserve persisted L3 rows verbatim from a v6 import. The
+      // post-derivation step (below the towers loop) takes care of
+      // deriving them when IS_V6 is active and the import is v5 (or
+      // l3Rows is missing for any reason).
+      const persistedL3Rows: L3WorkforceRowV6[] | undefined = Array.isArray(
+        v.l3Rows,
+      )
+        ? (v.l3Rows as L3WorkforceRowV6[])
+        : undefined;
+
       program.towers[k] = {
         l4Rows,
+        ...(persistedL3Rows ? { l3Rows: persistedL3Rows } : {}),
         baseline: {
           baselineOffshorePct: coalesceNumber(
             bRaw.baselineOffshorePct,
@@ -375,12 +393,67 @@ export function importAssessProgramFromJsonText(
     }
   }
 
-  if (isRecord(programRaw) && Object.prototype.hasOwnProperty.call(programRaw, "leadDeadlines")) {
-    const parsed = parseLeadDeadlines(programRaw.leadDeadlines);
-    const base = options?.mergeLeadDeadlinesFrom?.leadDeadlines;
-    program.leadDeadlines = mergeLeadDeadlines(base, parsed ?? undefined);
-  } else if (options?.mergeLeadDeadlinesFrom?.leadDeadlines) {
-    program.leadDeadlines = options.mergeLeadDeadlinesFrom.leadDeadlines;
+  // Always overlay the canonical default deadlines so that programs parsed
+  // here are normalized identically to those produced by the client-side
+  // `migrateAssessProgram` in `localStore.ts`. Without this symmetry, the
+  // route's `validateTowerScopedMutation` would see a `leadDeadlines` diff
+  // every time a non-admin saves against a DB blob that was persisted
+  // before this normalization existed (DB has no/partial deadlines; the
+  // client-side PUT body has the full default set), and reject the save
+  // with a misleading 403 "lead-deadlines updates are admin-only".
+  const parsedLeadDeadlines =
+    isRecord(programRaw) && Object.prototype.hasOwnProperty.call(programRaw, "leadDeadlines")
+      ? parseLeadDeadlines(programRaw.leadDeadlines)
+      : undefined;
+  const baseDeadlines = mergeLeadDeadlines(
+    buildDefaultProgramLeadDeadlines(),
+    options?.mergeLeadDeadlinesFrom?.leadDeadlines,
+  );
+  const mergedDeadlines = mergeLeadDeadlines(baseDeadlines, parsedLeadDeadlines);
+  if (mergedDeadlines && Object.keys(mergedDeadlines).length > 0) {
+    program.leadDeadlines = mergedDeadlines;
+  }
+
+  // V6 post-derivation: when v6 is the active runtime schema, derive
+  // `l3Rows` for any tower that lacks them (i.e. v5 imports). Mirrors
+  // `migrateToV6IfActive` in `localStore.ts` so the API GET path and the
+  // file-import path both produce the same v6 shape. No-op under v5.
+  if (IS_V6) {
+    let touchedV6 = false;
+    const towersOut: AssessProgramV2["towers"] = {};
+    for (const [k, t] of Object.entries(program.towers)) {
+      if (!t) continue;
+      const towerId = k as TowerId;
+      const needsFreshDerivation = !t.l3Rows || t.l3Rows.length === 0;
+      if (needsFreshDerivation) {
+        const cleanedL4Rows = t.l4Rows.map((r) => {
+          const next: typeof r = {
+            id: r.id,
+            l2: r.l2,
+            l3: r.l3,
+            l4: r.l4,
+            fteOnshore: r.fteOnshore,
+            fteOffshore: r.fteOffshore,
+            contractorOnshore: r.contractorOnshore,
+            contractorOffshore: r.contractorOffshore,
+          };
+          if (r.annualSpendUsd != null) next.annualSpendUsd = r.annualSpendUsd;
+          if (r.l5Activities && r.l5Activities.length > 0) {
+            next.l5Activities = r.l5Activities;
+          }
+          return next;
+        });
+        const l3Rows = deriveL3Rows(cleanedL4Rows, towerId);
+        towersOut[towerId] = { ...t, l4Rows: cleanedL4Rows, l3Rows };
+        touchedV6 = true;
+      } else {
+        towersOut[towerId] = t;
+      }
+    }
+    if (touchedV6 || program.version !== 6) {
+      program.version = 6;
+      program.towers = towersOut;
+    }
   }
 
   return { ok: true, program };

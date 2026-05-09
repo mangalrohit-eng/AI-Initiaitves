@@ -27,6 +27,12 @@ import {
 import { resolveRowDescriptions } from "@/data/capabilityMap/descriptions";
 import { mergeLeadDeadlines, parseLeadDeadlines } from "@/lib/program/leadDeadlines";
 import { parseAiReadinessIntakeFromUnknown } from "@/lib/assess/towerReadinessIntake";
+import {
+  IS_V6,
+  PRE_MIGRATION_BACKUP_PREFIX,
+  PRE_MIGRATION_BACKUP_TTL_MS,
+} from "@/lib/schemaFlag";
+import { deriveL3Rows } from "@/lib/assess/deriveL3Rows";
 //
 // Conventions:
 //   - Every key is prefixed `forge.` to avoid collisions with other apps.
@@ -882,6 +888,13 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
       (v as Record<string, unknown>).aiReadinessIntake,
     );
     if (intake) towerState.aiReadinessIntake = intake;
+    // V6: preserve persisted L3 rows verbatim. We don't deeply validate
+    // here — the field is opaque to v5 consumers and the v6 reads coerce
+    // through the typed selectors. The post-processor `migrateToV6IfActive`
+    // detects when l3Rows are missing and derives them from l4Rows.
+    if (Array.isArray(v.l3Rows)) {
+      towerState.l3Rows = v.l3Rows as TowerAssessState["l3Rows"];
+    }
     towers[k as TowerId] = towerState;
   }
 
@@ -895,7 +908,10 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
   );
 
   return {
-    version: 5,
+    // Preserve v6 input version so a flag-flap (v6 -> v5 -> v6) doesn't
+    // silently downgrade a migrated blob. Anything < 6 reads as v5; the
+    // `migrateToV6IfActive` post-processor stamps 6 when v6 is active.
+    version: versionRaw === 6 ? 6 : 5,
     towers,
     ...(leadDeadlines && Object.keys(leadDeadlines).length > 0 ? { leadDeadlines } : {}),
   };
@@ -977,11 +993,97 @@ function migrateBackfillStep1Validated(program: AssessProgramV2): AssessProgramV
   return touched ? { ...program, towers } : program;
 }
 
+/**
+ * V6 cutover migration — derive L3 Job Family rows from each tower's L4
+ * Activity Group rows when the runtime schema is v6 and the persisted
+ * blob is still at v5 (or a tower lacks `l3Rows` for any reason).
+ *
+ * Idempotent: a v6 blob whose towers already carry `l3Rows` passes through
+ * untouched. A v5 blob (or a v6 blob with a tower whose `l3Rows` was
+ * dropped — e.g. legacy import without the field) is upgraded once and
+ * stamped `version: 6`.
+ *
+ * Also strips v5 dial fields from each L4 context row when freshly
+ * migrating: the L4 dials become irrelevant under v6 (Step 2 reads from
+ * `l3Rows`) and leaving them around would surface stale numbers in any
+ * code path that still reads `l4Rows[*].offshoreAssessmentPct`. The L4
+ * rows are otherwise preserved verbatim (l5 activity name lists kept,
+ * l5Items dropped — they were the curated v5 initiatives we're discarding
+ * per the locked-in fresh-start migration strategy).
+ *
+ * No-op when `IS_V6` is false — v5 mode keeps writing `version: 5` and
+ * never derives `l3Rows`.
+ */
+function migrateToV6IfActive(p: AssessProgramV2): AssessProgramV2 {
+  if (!IS_V6) return p;
+  const inputVersion = p.version;
+  let touched = false;
+  const towers: AssessProgramV2["towers"] = {};
+  for (const [k, t] of Object.entries(p.towers)) {
+    if (!t) {
+      continue;
+    }
+    const towerId = k as TowerId;
+    const needsFreshDerivation =
+      inputVersion < 6 || !t.l3Rows || t.l3Rows.length === 0;
+    if (needsFreshDerivation) {
+      // Strip v5 dial + curated-initiative fields from each L4 context
+      // row. Keep `l5Activities` (the activity names — useful as LLM
+      // context); drop `l5Items` (the curated initiatives — fresh start).
+      const cleanedL4Rows = t.l4Rows.map((r) => {
+        const next: typeof r = {
+          id: r.id,
+          l2: r.l2,
+          l3: r.l3,
+          l4: r.l4,
+          fteOnshore: r.fteOnshore,
+          fteOffshore: r.fteOffshore,
+          contractorOnshore: r.contractorOnshore,
+          contractorOffshore: r.contractorOffshore,
+        };
+        if (r.annualSpendUsd != null) next.annualSpendUsd = r.annualSpendUsd;
+        if (r.l5Activities && r.l5Activities.length > 0) {
+          next.l5Activities = r.l5Activities;
+        }
+        return next;
+      });
+      const l3Rows = deriveL3Rows(cleanedL4Rows, towerId);
+      towers[towerId] = { ...t, l4Rows: cleanedL4Rows, l3Rows };
+      touched = true;
+    } else {
+      towers[towerId] = t;
+    }
+  }
+  if (!touched && p.version === 6) return p;
+  return { ...p, version: 6, towers };
+}
+
 function finalizeAssessProgramFromRaw(raw: unknown): AssessProgramV2 {
   return migrateBootstrapCurationHash(
     migrateBackfillStep1Validated(
-      migrateBuggySeedComplete(migrateAssessProgram(raw)),
+      migrateBuggySeedComplete(
+        migrateToV6IfActive(migrateAssessProgram(raw)),
+      ),
     ),
+  );
+}
+
+/**
+ * Apply the post-`importAssessProgramFromJsonText` client-side bootstrap
+ * migrations to an already-parsed program. Intended for the API route's
+ * tower-scope validation: normalizes BOTH `current` (parsed from DB) and
+ * `next` (parsed from PUT body) through the same migration chain so the
+ * multi-tower diff guard doesn't trip on benign normalization noise
+ * (curationContentHash bootstrap, l1L5TreeValidatedAt backfill, buggy-
+ * seed status demotion).
+ *
+ * Pure / side-effect-free / server-safe (no `window` access).
+ */
+export function applyClientBootstrapMigrations(
+  p: AssessProgramV2,
+): AssessProgramV2 {
+  return migrateBootstrapCurationHash(
+    migrateBackfillStep1Validated(migrateBuggySeedComplete(p)),
   );
 }
 
@@ -997,7 +1099,103 @@ export function getAssessProgramHydrationSnapshot(): AssessProgramV2 {
   return finalizeAssessProgramFromRaw(defaultAssessProgramV2());
 }
 
+/**
+ * Pre-migration safety net for the v5 -> v6 cutover.
+ *
+ * On the FIRST call after the v6 build mounts in a browser that already
+ * has a v5 blob in localStorage, this helper:
+ *   1. Reads the raw localStorage JSON for `forge.assessProgram.v2`.
+ *   2. Inspects the embedded `program.version` field.
+ *   3. If it's < 6 (i.e. a real v5 blob, not already-migrated), it copies
+ *      the raw bytes verbatim to `forge.assessProgram.preMigration.<iso>`.
+ *   4. Sweeps any backup keys older than 30 days off the side door.
+ *
+ * Idempotent across page loads — the `markerKey` short-circuits a second
+ * mirror so we don't litter localStorage with one backup per refresh.
+ *
+ * No-op when `IS_V6 === false` (current default) so v5 development is
+ * untouched. No-op on the server (no `window`). Errors are swallowed —
+ * this is a belt-and-braces safety net, not a critical-path operation.
+ *
+ * Restore procedure (manual, in the user's browser devtools):
+ *   const k = Object.keys(localStorage)
+ *     .filter(s => s.startsWith("forge.assessProgram.preMigration."))
+ *     .sort().pop();
+ *   localStorage.setItem("forge.assessProgram.v2", localStorage.getItem(k));
+ *   location.reload();
+ */
+function mirrorLegacyBlobIfNeededOnce(): void {
+  if (!IS_V6 || !canUse()) return;
+  const markerKey = "forge.assessProgram.preMigration.marker.v6";
+  try {
+    if (window.localStorage.getItem(markerKey)) {
+      // Already mirrored once in this browser — only sweep stale backups.
+      sweepStaleMigrationBackups();
+      return;
+    }
+    const raw = window.localStorage.getItem(KEYS.assessProgram);
+    if (!raw) {
+      // No v5 blob to mirror — stamp the marker so we don't keep checking.
+      window.localStorage.setItem(markerKey, new Date().toISOString());
+      return;
+    }
+    let version = 0;
+    try {
+      const parsed = JSON.parse(raw) as { version?: unknown };
+      if (typeof parsed.version === "number") version = parsed.version;
+    } catch {
+      // If the blob is unparseable, mirror it anyway — preserving raw bytes
+      // is more valuable than understanding them.
+    }
+    if (version >= 6) {
+      // Already a v6 blob (e.g. someone flipped the flag back and forth).
+      // Stamp the marker so we don't keep parsing it.
+      window.localStorage.setItem(markerKey, new Date().toISOString());
+      return;
+    }
+    const stamp = new Date().toISOString();
+    window.localStorage.setItem(`${PRE_MIGRATION_BACKUP_PREFIX}${stamp}`, raw);
+    window.localStorage.setItem(markerKey, stamp);
+    sweepStaleMigrationBackups();
+  } catch {
+    // Quota exceeded / private mode / parse error — silent. The v6 read
+    // path will still run; we just lose the backup safety net for this
+    // user. The plan calls this out as acceptable in the runbook.
+  }
+}
+
+/**
+ * Sweep pre-migration backup keys older than `PRE_MIGRATION_BACKUP_TTL_MS`
+ * (30 days) so localStorage doesn't accumulate them indefinitely. Called
+ * from `mirrorLegacyBlobIfNeededOnce` on every cold load — cheap because
+ * the count is at most ~1 per browser ever.
+ */
+function sweepStaleMigrationBackups(): void {
+  if (!canUse()) return;
+  try {
+    const cutoff = Date.now() - PRE_MIGRATION_BACKUP_TTL_MS;
+    const stale: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (!k || !k.startsWith(PRE_MIGRATION_BACKUP_PREFIX)) continue;
+      // Key format: `${PREFIX}${iso}` — slice off the prefix to get the iso.
+      const iso = k.slice(PRE_MIGRATION_BACKUP_PREFIX.length);
+      // The "marker" key uses a sub-prefix `marker.v6` and is not a backup.
+      if (iso.startsWith("marker.")) continue;
+      const ts = Date.parse(iso);
+      if (Number.isFinite(ts) && ts < cutoff) stale.push(k);
+    }
+    for (const k of stale) window.localStorage.removeItem(k);
+  } catch {
+    /* noop */
+  }
+}
+
 export function getAssessProgram(): AssessProgramV2 {
+  // V6 cutover safety net: mirror the v5 blob to a timestamped backup
+  // exactly once per browser before the v6 read-time migration mutates
+  // anything. No-op when the schema flag is still v5.
+  mirrorLegacyBlobIfNeededOnce();
   const raw = safeGet<unknown>(KEYS.assessProgram, defaultAssessProgramV2());
   return finalizeAssessProgramFromRaw(raw);
 }

@@ -126,6 +126,7 @@ export function composeProjects(input: ComposeProjectsInput): AIProjectResolved[
       parentL4ActivityGroupName: cohort.l4Name,
       primaryTowerId: cohort.towerId,
       primaryTowerName: cohort.towerName,
+      programTier: tier,
       name: llm?.name ?? `${cohort.l4Name} — Agentic AI`,
       narrative:
         llm?.narrative ??

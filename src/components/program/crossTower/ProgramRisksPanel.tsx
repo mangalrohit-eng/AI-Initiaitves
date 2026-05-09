@@ -2,6 +2,7 @@
 
 import { AlertTriangle, ShieldCheck, Sparkles } from "lucide-react";
 import type { ProgramSynthesisLLM } from "@/lib/cross-tower/aiProjects";
+import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
  * Cross-Tower AI Plan v3 — program-level risks panel.
@@ -30,10 +31,10 @@ export function ProgramRisksPanel({
           Program risks
         </h2>
         <p className="mt-1 max-w-2xl text-sm text-forge-subtle">
-          Risks specific to this AI Project mix — no generic boilerplate.
-          Mitigations name the Versant towers, executives, and structural
-          constraints (TSA, BB- credit, editorial floor, on-air resilience)
-          that bear the weight.
+          Risks specific to this {IS_V6 ? "AI Solution" : "AI Project"} mix —
+          no generic boilerplate. Mitigations name the Versant towers,
+          executives, and structural constraints (TSA, BB- credit, editorial
+          floor, on-air resilience) that bear the weight.
         </p>
       </div>
       {synthesis ? (

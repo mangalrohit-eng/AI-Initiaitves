@@ -11,25 +11,30 @@ import {
   buildProgramWideTowerIntakeDigest,
   TOWER_READINESS_ATTRIBUTION_LABEL,
 } from "@/lib/assess/towerReadinessIntake";
+import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
- * Cross-Tower AI Plan v3 — program architecture panel.
+ * Cross-Tower AI Plan — program architecture panel.
  *
- * Three LLM-authored narrative blocks from `ProgramSynthesisLLM`:
+ * Three LLM-authored narrative blocks from `ProgramSynthesisLLM` (v5) or
+ * the v5-adapter shape derived from `ProgramSynthesisLLMV6`:
  *
- *   - `architectureOrchestration` — orchestration pattern commentary.
+ *   - `architectureOrchestration` — orchestration / delivery commentary.
  *   - `architectureVendors`       — vendor stack commentary.
  *   - `architectureDataCore`      — data + digital core commentary.
  *
- * Plus deterministic rollups derived from the resolved project briefs:
+ * Deterministic rollups derived from the resolved project set:
  *
- *   - **Vendor stack** — every named tool / vendor across project briefs
- *     (workbench post-state, digital core platforms, agent toolsUsed).
- *   - **Agent fleet** — total agents across briefs, grouped by type.
- *   - **Orchestration mix** — count of each orchestration pattern in use.
- *
- * The deterministic rollups are computed client-side from the brief —
- * the LLM never authors counts.
+ *   - **Vendor stack** — every named tool / vendor.
+ *     v5 sources from each project's brief (workbench post, platforms,
+ *     agent toolsUsed). v6 sources from the per-initiative `primaryVendor`
+ *     declared at curation time (initiative bodies are lazy and not in
+ *     scope at the cross-tower view).
+ *   - **Agent fleet** + **Orchestration mix** — v5 only. Under v6 the
+ *     program substrate doesn't carry agents at the cross-tower grain;
+ *     they're authored on each initiative's deep-dive page. The panel
+ *     hides those rollups under v6 and surfaces a tower-coverage rollup
+ *     instead so the right-hand column isn't empty.
  */
 export function ProgramArchitecturePanel({
   projects,
@@ -59,10 +64,9 @@ export function ProgramArchitecturePanel({
           Program architecture
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
-          Aggregate view of the agent fleet, orchestration patterns, and
-          vendor stack across the AI Projects in plan. Deterministic rollups
-          come from the project briefs; the surrounding narrative is GPT-5.5
-          authored.
+          {IS_V6
+            ? "Aggregate view of vendor partners and tower coverage across the AI Solutions in plan. Per-solution agent fleets and orchestration patterns are authored on each solution's deep-dive page."
+            : "Aggregate view of the agent fleet, orchestration patterns, and vendor stack across the AI Projects in plan. Deterministic rollups come from the project briefs; the surrounding narrative is GPT-5.5 authored."}
         </p>
         {synthesis && hasProgramIntake ? (
           <p className="mt-2 max-w-3xl text-[10px] leading-snug text-forge-hint">
@@ -85,7 +89,7 @@ export function ProgramArchitecturePanel({
       <div className="grid gap-4 lg:grid-cols-3">
         <NarrativeBlock
           icon={<Workflow className="h-3.5 w-3.5" aria-hidden />}
-          title="Orchestration"
+          title={IS_V6 ? "Orchestration & delivery" : "Orchestration"}
           body={synthesis?.architectureOrchestration}
         />
         <NarrativeBlock
@@ -102,30 +106,73 @@ export function ProgramArchitecturePanel({
 
       {/* Deterministic rollups */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <RollupCard
-          icon={<Cpu className="h-3.5 w-3.5 text-accent-purple-dark" aria-hidden />}
-          title="Agents architected"
-          total={rollups.totalAgents}
-          totalLabel="across project briefs"
-          rows={rollups.agentTypeMix}
-        />
-        <RollupCard
-          icon={<Workflow className="h-3.5 w-3.5 text-accent-teal" aria-hidden />}
-          title="Orchestration patterns"
-          total={rollups.orchestrationMix.reduce((s, r) => s + r.count, 0)}
-          totalLabel="projects sized"
-          rows={rollups.orchestrationMix}
-        />
-        <RollupCard
-          icon={<Network className="h-3.5 w-3.5 text-accent-green" aria-hidden />}
-          title="Vendor stack"
-          total={rollups.vendorStack.length}
-          totalLabel="distinct named vendors"
-          rows={rollups.vendorStack.slice(0, 10).map((v) => ({
-            label: v.vendor,
-            count: v.count,
-          }))}
-        />
+        {IS_V6 ? (
+          <>
+            <RollupCard
+              icon={
+                <Network className="h-3.5 w-3.5 text-accent-green" aria-hidden />
+              }
+              title="Vendor partners"
+              total={rollups.vendorStack.length}
+              totalLabel="distinct named vendors"
+              rows={rollups.vendorStack.slice(0, 10).map((v) => ({
+                label: v.vendor,
+                count: v.count,
+              }))}
+            />
+            <RollupCard
+              icon={
+                <Workflow className="h-3.5 w-3.5 text-accent-teal" aria-hidden />
+              }
+              title="Tower coverage"
+              total={rollups.towerCoverage.length}
+              totalLabel="towers in plan"
+              rows={rollups.towerCoverage.slice(0, 10)}
+            />
+            <RollupCard
+              icon={
+                <Cpu className="h-3.5 w-3.5 text-accent-purple-dark" aria-hidden />
+              }
+              title="Feasibility mix"
+              total={rollups.feasibilityMix.reduce((s, r) => s + r.count, 0)}
+              totalLabel="solutions classified"
+              rows={rollups.feasibilityMix}
+            />
+          </>
+        ) : (
+          <>
+            <RollupCard
+              icon={
+                <Cpu className="h-3.5 w-3.5 text-accent-purple-dark" aria-hidden />
+              }
+              title="Agents architected"
+              total={rollups.totalAgents}
+              totalLabel="across project briefs"
+              rows={rollups.agentTypeMix}
+            />
+            <RollupCard
+              icon={
+                <Workflow className="h-3.5 w-3.5 text-accent-teal" aria-hidden />
+              }
+              title="Orchestration patterns"
+              total={rollups.orchestrationMix.reduce((s, r) => s + r.count, 0)}
+              totalLabel="projects sized"
+              rows={rollups.orchestrationMix}
+            />
+            <RollupCard
+              icon={
+                <Network className="h-3.5 w-3.5 text-accent-green" aria-hidden />
+              }
+              title="Vendor stack"
+              total={rollups.vendorStack.length}
+              totalLabel="distinct named vendors"
+              rows={rollups.vendorStack.slice(0, 10).map((v) => ({
+                label: v.vendor,
+                count: v.count,
+              }))}
+            />
+          </>
+        )}
       </div>
     </div>
   );
@@ -235,34 +282,66 @@ type Rollups = {
   agentTypeMix: { label: string; count: number }[];
   orchestrationMix: { label: string; count: number }[];
   vendorStack: { vendor: string; count: number }[];
+  // v6-only rollups (the v5 path leaves these arrays empty)
+  towerCoverage: { label: string; count: number }[];
+  feasibilityMix: { label: string; count: number }[];
 };
 
 function buildRollups(projects: AIProjectResolved[]): Rollups {
   const agentTypeCounts = new Map<string, number>();
   const orchCounts = new Map<string, number>();
   const vendorCounts = new Map<string, number>();
+  const towerCounts = new Map<string, number>();
+  const feasibilityCounts = new Map<string, number>();
   let totalAgents = 0;
 
   for (const p of projects) {
-    if (p.isStub || !p.brief) continue;
+    if (p.isStub) {
+      // Even stub projects under v6 carry primaryVendor / feasibility /
+      // tower from curation; only skip the agent fleet rollups.
+      bumpVendor(vendorCounts, p.primaryVendor);
+      if (p.feasibility) {
+        feasibilityCounts.set(
+          p.feasibility,
+          (feasibilityCounts.get(p.feasibility) ?? 0) + 1,
+        );
+      }
+      towerCounts.set(p.primaryTowerId, (towerCounts.get(p.primaryTowerId) ?? 0) + 1);
+      continue;
+    }
 
-    for (const agent of p.brief.agents) {
-      totalAgents += 1;
-      agentTypeCounts.set(
-        agent.type,
-        (agentTypeCounts.get(agent.type) ?? 0) + 1,
+    if (p.brief) {
+      // v5 path — derive everything from the project brief
+      for (const agent of p.brief.agents) {
+        totalAgents += 1;
+        agentTypeCounts.set(
+          agent.type,
+          (agentTypeCounts.get(agent.type) ?? 0) + 1,
+        );
+        for (const tool of agent.toolsUsed) bumpVendor(vendorCounts, tool);
+      }
+
+      const pattern = p.brief.agentOrchestration.pattern;
+      orchCounts.set(pattern, (orchCounts.get(pattern) ?? 0) + 1);
+
+      for (const t of p.brief.workbench.post) bumpVendor(vendorCounts, t.tool);
+      for (const plat of p.brief.digitalCore.requiredPlatforms) {
+        bumpVendor(vendorCounts, plat.platform);
+        for (const ex of plat.examples ?? []) bumpVendor(vendorCounts, ex);
+      }
+    } else {
+      // v6 path — no project brief at the cross-tower view; use the
+      // initiative-grain fields the curator wrote.
+      bumpVendor(vendorCounts, p.primaryVendor);
+    }
+
+    if (p.feasibility) {
+      feasibilityCounts.set(
+        p.feasibility,
+        (feasibilityCounts.get(p.feasibility) ?? 0) + 1,
       );
-      for (const tool of agent.toolsUsed) bumpVendor(vendorCounts, tool);
     }
-
-    const pattern = p.brief.agentOrchestration.pattern;
-    orchCounts.set(pattern, (orchCounts.get(pattern) ?? 0) + 1);
-
-    for (const t of p.brief.workbench.post) bumpVendor(vendorCounts, t.tool);
-    for (const plat of p.brief.digitalCore.requiredPlatforms) {
-      bumpVendor(vendorCounts, plat.platform);
-      for (const ex of plat.examples ?? []) bumpVendor(vendorCounts, ex);
-    }
+    towerCounts.set(p.primaryTowerId, (towerCounts.get(p.primaryTowerId) ?? 0) + 1);
   }
 
   const agentTypeOrder = [
@@ -291,15 +370,35 @@ function buildRollups(projects: AIProjectResolved[]): Rollups {
     .map(([vendor, count]) => ({ vendor, count }))
     .sort((a, b) => b.count - a.count || a.vendor.localeCompare(b.vendor));
 
+  const towerCoverage = Array.from(towerCounts.entries())
+    .map(([towerId, count]) => ({ label: towerLabelForRollup(towerId), count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+
+  const feasibilityOrder = ["High", "Medium", "Low"];
+  const feasibilityMix = feasibilityOrder
+    .map((f) => ({ label: f, count: feasibilityCounts.get(f) ?? 0 }))
+    .filter((r) => r.count > 0);
+
   return {
     totalAgents,
     agentTypeMix,
     orchestrationMix,
     vendorStack,
+    towerCoverage,
+    feasibilityMix,
   };
 }
 
-function bumpVendor(map: Map<string, number>, raw: string): void {
+function towerLabelForRollup(towerId: string): string {
+  if (towerId === "hr") return "HR";
+  return towerId
+    .split("-")
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ");
+}
+
+function bumpVendor(map: Map<string, number>, raw: string | undefined | null): void {
   if (!raw) return;
   const trimmed = raw.trim();
   if (!trimmed) return;

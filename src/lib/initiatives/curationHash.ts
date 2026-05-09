@@ -27,7 +27,13 @@
  * decide whether `row.l5Items` is still valid.
  */
 
-import type { L3WorkforceRow, TowerAssessState } from "@/data/assess/types";
+import type {
+  CurationStage,
+  L3WorkforceRow,
+  L3WorkforceRowV6,
+  TowerAssessState,
+} from "@/data/assess/types";
+import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
  * djb2 — a small, dependency-free, deterministic 32-bit hash. Cryptographic
@@ -219,8 +225,14 @@ export function hasQueuedRows(rows: ReadonlyArray<L3WorkforceRow>): boolean {
 /**
  * Predicate for "is a pipeline currently in flight on this tower?" Used by
  * the banner CTA disabled-state and the per-tower in-flight lock.
+ *
+ * Accepts any row type that carries an optional `curationStage` — works
+ * for both v5 `L4WorkforceRow` (L4-grain) and v6 `L3WorkforceRowV6`
+ * (L3-grain) callers without forcing them to import a different helper.
  */
-export function hasInFlightRows(rows: ReadonlyArray<L3WorkforceRow>): boolean {
+export function hasInFlightRows(
+  rows: ReadonlyArray<{ curationStage?: CurationStage }>,
+): boolean {
   return rows.some(
     (r) =>
       r.curationStage === "running-l5" ||
@@ -310,8 +322,25 @@ export type TowerStaleState = {
 };
 
 export function getTowerStaleState(
-  towerState: Pick<TowerAssessState, "l4Rows"> | undefined,
+  towerState: Pick<TowerAssessState, "l4Rows" | "l3Rows"> | undefined,
 ): TowerStaleState {
+  // v6 — dial-bearing rows live on `l3Rows`, and the L3 row carries the
+  // curation stage. Each L3 aggregates its child L4s, so `l4Stale`
+  // (= "queued L4 has no L5 Activities") does not apply at L3 grain.
+  if (IS_V6 && towerState?.l3Rows && towerState.l3Rows.length > 0) {
+    const l3 = towerState.l3Rows;
+    return {
+      l4Stale: false,
+      dialsStale: l3.every(
+        (r) =>
+          r.offshoreAssessmentPct == null &&
+          r.aiImpactAssessmentPct == null &&
+          r.dialsRationaleSource == null,
+      ),
+      initiativesStale: hasQueuedRowsV6(l3),
+      missingL4ForRefresh: false,
+    };
+  }
   const rows = towerState?.l4Rows ?? [];
   if (rows.length === 0) {
     return {
@@ -337,4 +366,11 @@ export function getTowerStaleState(
       (!r.l5Activities || r.l5Activities.length === 0),
   );
   return { l4Stale, dialsStale, initiativesStale, missingL4ForRefresh };
+}
+
+/** v6 sibling — at least one L3 row has stage `queued`. */
+export function hasQueuedRowsV6(
+  rows: ReadonlyArray<L3WorkforceRowV6>,
+): boolean {
+  return rows.some((r) => r.curationStage === "queued");
 }

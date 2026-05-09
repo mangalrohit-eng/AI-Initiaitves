@@ -8,6 +8,7 @@ import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { TowerJourneyStepper } from "@/components/layout/TowerJourneyStepper";
 import { Term } from "@/components/help/Term";
 import { L4LeverRow } from "@/components/assess/L3LeverRow";
+import { L3LeverRowV6 } from "@/components/assess/L3LeverRowV6";
 import { AssessmentScoreboard } from "@/components/assess/AssessmentScoreboard";
 import { StaleDialsBanner } from "@/components/assess/StaleDialsBanner";
 import { TowerRatesCard } from "@/components/assess/TowerRatesCard";
@@ -28,7 +29,12 @@ import {
 } from "@/lib/assess/scenarioModel";
 import { getAssessProgram, setTowerAssess } from "@/lib/localStore";
 import { getTowerStaleState } from "@/lib/initiatives/curationHash";
-import type { L3WorkforceRow, TowerId } from "@/data/assess/types";
+import type {
+  L3WorkforceRow,
+  L3WorkforceRowV6,
+  TowerId,
+} from "@/data/assess/types";
+import { IS_V6 } from "@/lib/schemaFlag";
 import { getTowerHref } from "@/lib/towerHref";
 import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
@@ -75,7 +81,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
     return arr;
   })();
 
-  /** Patch a single L4 Activity Group row by id. */
+  /** Patch a single L4 Activity Group row by id (v5 mode). */
   const patchL3 = React.useCallback(
     (rowId: string, patch: Partial<L3WorkforceRow>) => {
       const cur = getAssessProgram().towers[towerId];
@@ -88,6 +94,37 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
     [towerId],
   );
 
+  /** Patch a single L3 Job Family row by id (v6 mode). */
+  const patchL3V6 = React.useCallback(
+    (rowId: string, patch: Partial<L3WorkforceRowV6>) => {
+      const cur = getAssessProgram().towers[towerId];
+      if (!cur || !cur.l3Rows) return;
+      setTowerAssess(towerId, {
+        l3Rows: cur.l3Rows.map((r) =>
+          r.id === rowId ? ({ ...r, ...patch } as L3WorkforceRowV6) : r,
+        ),
+        status: cur.status === "empty" ? "data" : cur.status,
+      });
+    },
+    [towerId],
+  );
+
+  /**
+   * Active dial grain — v6 reads from `l3Rows`, v5 reads from `l4Rows`.
+   * Falls through to v5 when v6 is active but the post-derivation hasn't
+   * landed yet (mid-migration first read), so the page never goes blank.
+   *
+   * `v6Rows` is wrapped in `useMemo` so the array reference is stable
+   * across renders that didn't change `tState.l3Rows` — required by the
+   * `useCallback` dependencies of `applyDefaultsV6` so the LLM call
+   * doesn't re-fire on every keystroke elsewhere on the page.
+   */
+  const v6Rows = React.useMemo<L3WorkforceRowV6[]>(
+    () => tState.l3Rows ?? [],
+    [tState.l3Rows],
+  );
+  const useV6 = IS_V6 && v6Rows.length > 0;
+
   // Defaults inference (LLM-first, heuristic fallback).
   type ApplyDefaultsOutcome = {
     changedRows: number;
@@ -96,9 +133,153 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
     warning?: string;
   };
 
+  /**
+   * v6 sibling of `applyDefaults` — dials live on the L3 Job Family row,
+   * so we infer per-L3-row defaults (sending `l4 = l3` to keep the
+   * existing API contract) and patch `l3Rows` instead of `l4Rows`.
+   *
+   * Behaviour parity with v5:
+   *   - LLM-first; deterministic Versant heuristic on failure.
+   *   - "fillBlanks" only writes where the row has no explicit value.
+   *   - "overwriteAll" replaces every dial.
+   *   - Tower baseline is recalculated from the next dial state so the
+   *     scoreboard and program roll-up stay in lock-step.
+   */
+  const applyDefaultsV6 = React.useCallback(
+    async (mode: "fillBlanks" | "overwriteAll"): Promise<ApplyDefaultsOutcome> => {
+      if (!v6Rows.length) {
+        throw new Error("L3 Job Family rows haven't derived yet — re-import the capability map.");
+      }
+      const apiInputs = v6Rows.map((r) => ({
+        l2: r.l2,
+        l3: r.l3,
+        // Under v6 the L3 row IS the dial-bearing layer. The inference
+        // API expects an L4 string; we pass the L3 name so the LLM scores
+        // the Job Family directly rather than a child Activity Group.
+        l4: r.l3,
+      }));
+      const apiRes = await clientInferTowerDefaults(towerId, apiInputs);
+
+      let source: InferDefaultsSource;
+      let warning: string | undefined;
+      let inferred: {
+        offshorePct: number;
+        aiPct: number;
+        offshoreRationale?: string;
+        aiRationale?: string;
+      }[];
+      if (apiRes.ok && apiRes.result.defaults.length === v6Rows.length) {
+        source = apiRes.result.source;
+        warning = apiRes.result.warning;
+        inferred = apiRes.result.defaults;
+      } else {
+        source = "heuristic";
+        warning = apiRes.ok
+          ? "Server returned the wrong number of defaults; used local heuristic."
+          : `Inference API unavailable (${apiRes.error}); used local heuristic.`;
+        // Local heuristic operates on L4 rows — score them and bubble up
+        // a per-L3 average so the fallback still respects the v6 grain.
+        const local = applyTowerStarterDefaults(rows, towerId, "overwriteAll");
+        const byId = new Map(local.rows.map((r) => [r.id, r]));
+        inferred = v6Rows.map((l3) => {
+          const childOff: number[] = [];
+          const childAi: number[] = [];
+          for (const childId of l3.childL4RowIds) {
+            const c = byId.get(childId);
+            if (!c) continue;
+            if (c.offshoreAssessmentPct != null) childOff.push(c.offshoreAssessmentPct);
+            if (c.aiImpactAssessmentPct != null) childAi.push(c.aiImpactAssessmentPct);
+          }
+          const avg = (xs: number[]) =>
+            xs.length === 0 ? 0 : Math.round(xs.reduce((s, x) => s + x, 0) / xs.length);
+          return { offshorePct: avg(childOff), aiPct: avg(childAi) };
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      const provenanceTag: "llm" | "heuristic" = source === "llm" ? "llm" : "heuristic";
+
+      let changedCells = 0;
+      let changedRows = 0;
+      const nextRows: L3WorkforceRowV6[] = v6Rows.map((r, i) => {
+        const d = inferred[i];
+        let nextOff = r.offshoreAssessmentPct;
+        let nextAi = r.aiImpactAssessmentPct;
+        let touched = false;
+        if (mode === "overwriteAll" || nextOff == null) {
+          if (nextOff !== d.offshorePct) {
+            nextOff = d.offshorePct;
+            changedCells += 1;
+            touched = true;
+          }
+        }
+        if (mode === "overwriteAll" || nextAi == null) {
+          if (nextAi !== d.aiPct) {
+            nextAi = d.aiPct;
+            changedCells += 1;
+            touched = true;
+          }
+        }
+
+        // Starter rationale is keyed off (l2, l3, l4). Pass `l4 = l3`
+        // mirroring the API call above so the rationale dictionary keys
+        // line up.
+        const starter = rowStarterRationale(towerId, {
+          l2: r.l2,
+          l3: r.l3,
+          l4: r.l3,
+        } as L3WorkforceRow);
+        const offshoreRationale =
+          d.offshoreRationale && d.offshoreRationale.trim()
+            ? d.offshoreRationale.trim()
+            : starter.offshore;
+        const aiRationale =
+          d.aiRationale && d.aiRationale.trim() ? d.aiRationale.trim() : starter.ai;
+        const rationaleSourceChanged = r.dialsRationaleSource !== provenanceTag;
+
+        if (touched) changedRows += 1;
+        if (touched || rationaleSourceChanged) {
+          return {
+            ...r,
+            offshoreAssessmentPct: nextOff,
+            aiImpactAssessmentPct: nextAi,
+            offshoreRationale,
+            aiImpactRationale: aiRationale,
+            dialsRationaleSource: provenanceTag,
+            dialsRationaleAt: nowIso,
+          };
+        }
+        return r;
+      });
+
+      if (mode === "fillBlanks" && changedCells === 0) {
+        throw new Error("No blanks to fill — every Job Family already has explicit values.");
+      }
+
+      const w = weightedTowerLevers(nextRows, tState.baseline, rates);
+      setTowerAssess(towerId, {
+        l3Rows: nextRows,
+        baseline: {
+          baselineOffshorePct: Math.round(w.offshorePct),
+          baselineAIPct: Math.round(w.aiPct),
+        },
+        status: tState.status === "empty" ? "data" : tState.status,
+      });
+      if (sync?.canSync) await sync.flushSave();
+      return { changedRows, changedCells, source, warning };
+    },
+    [v6Rows, rows, towerId, tState.baseline, tState.status, rates, sync],
+  );
+
   const applyDefaults = React.useCallback(
     async (mode: "fillBlanks" | "overwriteAll"): Promise<ApplyDefaultsOutcome> => {
       if (!rows.length) throw new Error("Load a capability map & headcount first.");
+      // v6 — dials live on the L3 Job Family row. Send the L3 path to the
+      // LLM (with `l4 = l3` so the API contract still holds) and patch
+      // the v6 `l3Rows` instead of the L4 rows.
+      if (useV6) {
+        return applyDefaultsV6(mode);
+      }
       // Dials live on L4 (Activity Group). Send the full L2/L3/L4 path so
       // the LLM has both Job Family and Activity Group context.
       const apiInputs = rows.map((r) => ({
@@ -210,7 +391,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
       if (sync?.canSync) await sync.flushSave();
       return { changedRows, changedCells, source, warning };
     },
-    [rows, towerId, tState.baseline, tState.status, rates, sync],
+    [rows, towerId, tState.baseline, tState.status, rates, sync, useV6, applyDefaultsV6],
   );
 
   const sourceLabel = (source: InferDefaultsSource) =>
@@ -330,8 +511,10 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-forge-body">
               Dial <Term termKey="offshore dial">offshore</Term> and{" "}
-              <Term termKey="ai impact dial">AI impact</Term> per L4 Activity Group.
-              The impact updates live against each Activity Group&apos;s annual pool.
+              <Term termKey="ai impact dial">AI impact</Term> per{" "}
+              {useV6 ? "L3 Job Family" : "L4 Activity Group"}. The impact
+              updates live against each {useV6 ? "Job Family" : "Activity Group"}
+              &apos;s annual pool.
             </p>
           </div>
           <Link
@@ -364,7 +547,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
             {staleState.dialsStale ? (
               <div className="mt-5">
                 <StaleDialsBanner
-                  totalRows={rows.length}
+                  totalRows={useV6 ? v6Rows.length : rows.length}
                   rescoring={overwriteAllOp.state === "loading"}
                   onRescore={() => setReseedDialogOpen(true)}
                   hideTitle
@@ -421,26 +604,58 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
             </div>
 
             <div className="mt-5 space-y-2">
-              {rows.map((r) => (
-                <div key={r.id} className="group">
-                  <L4LeverRow
-                    row={r}
-                    towerId={towerId}
-                    baseline={tState.baseline}
-                    rates={rates}
-                    onPatch={(patch) => patchL3(r.id, patch)}
-                  />
-                  <div className="mt-1 hidden text-right text-[10px] text-forge-hint group-hover:block">
-                    <button
-                      type="button"
-                      onClick={() => resetOverridesForRow(r)}
-                      className="underline-offset-2 hover:text-forge-subtle hover:underline"
-                    >
-                      Clear both overrides on this Activity Group
-                    </button>
-                  </div>
-                </div>
-              ))}
+              {useV6
+                ? v6Rows.map((r) => {
+                    const childL4Rows = rows.filter((c) =>
+                      r.childL4RowIds.includes(c.id),
+                    );
+                    return (
+                      <div key={r.id} className="group">
+                        <L3LeverRowV6
+                          row={r}
+                          childL4Rows={childL4Rows}
+                          towerId={towerId}
+                          baseline={tState.baseline}
+                          rates={rates}
+                          onPatch={(patch) => patchL3V6(r.id, patch)}
+                        />
+                        <div className="mt-1 hidden text-right text-[10px] text-forge-hint group-hover:block">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              patchL3V6(r.id, {
+                                offshoreAssessmentPct: undefined,
+                                aiImpactAssessmentPct: undefined,
+                              })
+                            }
+                            className="underline-offset-2 hover:text-forge-subtle hover:underline"
+                          >
+                            Clear both overrides on this Job Family
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                : rows.map((r) => (
+                    <div key={r.id} className="group">
+                      <L4LeverRow
+                        row={r}
+                        towerId={towerId}
+                        baseline={tState.baseline}
+                        rates={rates}
+                        onPatch={(patch) => patchL3(r.id, patch)}
+                      />
+                      <div className="mt-1 hidden text-right text-[10px] text-forge-hint group-hover:block">
+                        <button
+                          type="button"
+                          onClick={() => resetOverridesForRow(r)}
+                          className="underline-offset-2 hover:text-forge-subtle hover:underline"
+                        >
+                          Clear both overrides on this Activity Group
+                        </button>
+                      </div>
+                    </div>
+                  ))}
             </div>
 
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-forge-hint">
@@ -519,10 +734,11 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
           setReseedDialogOpen(false);
           await overwriteAllOp.fire();
         }}
-        title={`Re-apply starter defaults to every L4 Activity Group in ${towerName}?`}
+        title={`Re-apply starter defaults to every ${useV6 ? "L3 Job Family" : "L4 Activity Group"} in ${towerName}?`}
         description={
           <>
-            Every Activity Group&apos;s offshore% and AI% will be replaced. Explicit overrides will be lost.
+            Every {useV6 ? "Job Family" : "Activity Group"}&apos;s offshore%
+            and AI% will be replaced. Explicit overrides will be lost.
           </>
         }
         confirmLabel="Yes, replace"
@@ -636,7 +852,7 @@ function TowerLeadSignoff({
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-forge-body">
             {isComplete
               ? `${towerName} is anchored in the impact estimate. Reopen anytime if the offshore or AI dials need to change.`
-              : `Once you've reviewed and adjusted the offshore and AI dials per L4 Activity Group for ${towerName}, mark the tower reviewed. The impact estimate locks your roll-up and the AI Initiatives handoff appears below.`}
+              : `Once you've reviewed and adjusted the offshore and AI dials per ${IS_V6 ? "L3 Job Family" : "L4 Activity Group"} for ${towerName}, mark the tower reviewed. The impact estimate locks your roll-up and the AI Initiatives handoff appears below.`}
           </p>
         </div>
         <div className="flex flex-shrink-0 items-center">

@@ -9,6 +9,7 @@ import {
   isValidSessionToken,
 } from "@/lib/auth";
 import { ASSESS_WORKSHOP_ID, getDb, isDatabaseUrlConfigured } from "@/lib/db";
+import { applyClientBootstrapMigrations } from "@/lib/localStore";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -117,8 +118,13 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
   const program: AssessProgramV2 = parsed.program;
-  if (program.version !== 5) {
-    return NextResponse.json({ error: "version must be 5" }, { status: 400 });
+  // V6 cutover: accept both legacy v5 payloads and current v6 payloads on
+  // the PUT path. The server-side `importAssessProgramFromJsonText`
+  // already runs the v5 -> v6 derivation when `IS_V6` is active, so any
+  // v5 body lands as version 6 by the time it reaches this check. Both
+  // versions persist into the same JSONB column verbatim.
+  if (program.version !== 5 && program.version !== 6) {
+    return NextResponse.json({ error: "version must be 5 or 6" }, { status: 400 });
   }
 
   const sql = getDb()!;
@@ -126,6 +132,9 @@ export async function PUT(req: Request) {
   if (!isAdmin) {
     const current = await readCurrentProgram(sql);
     if (!current) {
+      console.error(
+        "[PUT /api/assess] 403 — non-admin save against empty DB. Admin must initialize first.",
+      );
       return NextResponse.json(
         {
           error:
@@ -134,9 +143,26 @@ export async function PUT(req: Request) {
         { status: 403 },
       );
     }
-    const scope = validateTowerScopedMutation(current, program);
+    // Apply the client-side bootstrap migrations to BOTH sides of the
+    // diff. Without this, the client's `getAssessProgram()` legitimately
+    // stamps fields (curationContentHash bootstrap, l1L5TreeValidatedAt
+    // backfill, buggy-seed status demotion) that the server's parser
+    // doesn't add — causing every save to look like a multi-tower
+    // mutation and tripping the 403 guard. The migrations are pure +
+    // idempotent so applying them server-side is byte-equivalent to what
+    // the client produced before sending.
+    const normalizedCurrent = applyClientBootstrapMigrations(current);
+    const normalizedNext = applyClientBootstrapMigrations(program);
+    const scope = validateTowerScopedMutation(normalizedCurrent, normalizedNext);
     if (!scope.ok) {
-      return NextResponse.json({ error: scope.error }, { status: 403 });
+      const diagnostic = describeDiff(normalizedCurrent, normalizedNext);
+      console.error(
+        `[PUT /api/assess] 403 — ${scope.error}\n  Diagnostic: ${diagnostic}`,
+      );
+      return NextResponse.json(
+        { error: scope.error, diagnostic },
+        { status: 403 },
+      );
     }
   }
 
@@ -211,8 +237,7 @@ function validateTowerScopedMutation(
   if (changedTowers.length > 1) {
     return {
       ok: false,
-      error:
-        "Only one tower can be updated per save for non-admin users (this includes per-tower cost rates). Split the change by tower and retry.",
+      error: `Only one tower can be updated per save for non-admin users (this includes per-tower cost rates). Split the change by tower and retry. (Towers detected as changed: ${changedTowers.join(", ")})`,
     };
   }
   return { ok: true, towerId: changedTowers[0] ?? null };
@@ -227,7 +252,64 @@ function changedTowerIds(current: AssessProgramV2, next: AssessProgramV2): strin
   for (const id of Array.from(ids)) {
     const a = current.towers?.[id as keyof typeof current.towers] ?? null;
     const b = next.towers?.[id as keyof typeof next.towers] ?? null;
-    if (!jsonEqual(a, b)) out.push(id);
+    if (!jsonEqual(projectTowerForDiff(a), projectTowerForDiff(b))) out.push(id);
+  }
+  return out;
+}
+
+/**
+ * Tower-state projection used by the multi-tower-mutation guard. Strips
+ * migration / cache / timestamp fields that the client-side
+ * `getAssessProgram()` legitimately stamps on read but the server-side
+ * `importAssessProgramFromJsonText()` doesn't, so the diff doesn't trip
+ * on benign normalization differences (e.g. `curationContentHash` added
+ * by `migrateBootstrapCurationHash`, `lastUpdated` bumped on every
+ * write, `l1L5TreeValidatedAt` backfilled by `migrateBackfillStep1Validated`).
+ *
+ * Keeps every field that genuinely encodes user data: the L4 / L3 rows
+ * (with their dial values, headcount, spend, activity lists, AI
+ * initiative payloads), baseline, rates, status, AI readiness intake,
+ * initiative reviews, plus the explicit confirmation timestamps that
+ * the user set by clicking "Mark complete" buttons.
+ *
+ * Strips:
+ *   - `lastUpdated` (auto-bumped on every setTowerAssess write)
+ *   - L4 row cache fields: curationContentHash, curationStage,
+ *     curationGeneratedAt, curationError (pipeline-managed; not user data)
+ *   - L3 row cache fields: same set as L4
+ *
+ * Confirmation timestamps (capabilityMapConfirmedAt, headcountConfirmedAt,
+ * offshoreConfirmedAt, aiConfirmedAt, impactEstimateValidatedAt,
+ * aiInitiativesValidatedAt, l1L5TreeValidatedAt) ARE retained — they
+ * encode an explicit user action and a non-admin SHOULD only be flipping
+ * those for their own tower.
+ */
+function projectTowerForDiff(t: unknown): unknown {
+  if (!t || typeof t !== "object") return t;
+  const tt = t as Record<string, unknown>;
+  const projected: Record<string, unknown> = { ...tt };
+  delete projected.lastUpdated;
+  if (Array.isArray(projected.l4Rows)) {
+    projected.l4Rows = (projected.l4Rows as unknown[]).map(projectRowForDiff);
+  }
+  if (Array.isArray(projected.l3Rows)) {
+    projected.l3Rows = (projected.l3Rows as unknown[]).map(projectRowForDiff);
+  }
+  return projected;
+}
+
+const ROW_CACHE_FIELDS = [
+  "curationContentHash",
+  "curationStage",
+  "curationGeneratedAt",
+  "curationError",
+] as const;
+
+function projectRowForDiff(row: unknown): unknown {
+  if (!row || typeof row !== "object") return row;
+  const out = { ...(row as Record<string, unknown>) };
+  for (const k of ROW_CACHE_FIELDS) {
+    delete out[k];
   }
   return out;
 }
@@ -247,4 +329,62 @@ function normalizeJson(v: unknown): unknown {
     return out;
   }
   return v;
+}
+
+/**
+ * Human-readable description of the diff between the DB program and the
+ * incoming PUT body. Surfaces the first ~5 fields whose normalized JSON
+ * differs so the dev terminal log shows exactly what tripped the
+ * tower-scoped mutation guard. Diagnostic only — never persisted, never
+ * shown in the UI; the front-end keeps the existing `error` string.
+ */
+function describeDiff(current: AssessProgramV2, next: AssessProgramV2): string {
+  const parts: string[] = [];
+  if (!jsonEqual(current.leadDeadlines ?? null, next.leadDeadlines ?? null)) {
+    parts.push("leadDeadlines differs");
+  }
+  const changed = changedTowerIds(current, next);
+  if (changed.length > 0) {
+    parts.push(`towers changed (${changed.length}): ${changed.join(", ")}`);
+    for (const id of changed.slice(0, 3)) {
+      const a = projectTowerForDiff(
+        (current.towers as Record<string, unknown>)?.[id] ?? null,
+      );
+      const b = projectTowerForDiff(
+        (next.towers as Record<string, unknown>)?.[id] ?? null,
+      );
+      const fieldDiff = describeTowerFieldDiff(a, b);
+      if (fieldDiff) {
+        parts.push(`  ${id}: ${fieldDiff}`);
+      }
+    }
+  }
+  if (!jsonEqual(current.offshoreAssumptions ?? null, next.offshoreAssumptions ?? null)) {
+    parts.push("offshoreAssumptions differs");
+  }
+  if (current.version !== next.version) {
+    parts.push(`version differs (${current.version} → ${next.version})`);
+  }
+  return parts.length > 0 ? parts.join("; ") : "no observable diff (identical normalized JSON?)";
+}
+
+/**
+ * Describe which top-level keys on a single tower's state are different.
+ * Lists up to 8 keys whose normalized JSON differs — gives the dev a
+ * fast path to the field that's drifting (e.g. `l4Rows`, `l3Rows`,
+ * `rates`, `aiReadinessIntake`).
+ */
+function describeTowerFieldDiff(a: unknown, b: unknown): string | null {
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") {
+    return a !== b ? "tower presence differs" : null;
+  }
+  const ar = a as Record<string, unknown>;
+  const br = b as Record<string, unknown>;
+  const keys = Array.from(new Set([...Object.keys(ar), ...Object.keys(br)]));
+  const changed: string[] = [];
+  for (const k of keys) {
+    if (!jsonEqual(ar[k], br[k])) changed.push(k);
+  }
+  if (changed.length === 0) return null;
+  return `field(s) ${changed.slice(0, 8).join(", ")}${changed.length > 8 ? `, +${changed.length - 8} more` : ""}`;
 }

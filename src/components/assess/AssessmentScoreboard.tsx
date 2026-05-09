@@ -6,6 +6,7 @@ import { MoneyCounter, formatMoney } from "@/components/ui/MoneyCounter";
 import type { AssessProgramV2, L3WorkforceRow, TowerId } from "@/data/assess/types";
 import { defaultTowerRates } from "@/data/assess/types";
 import {
+  dialBearingRowsForTower,
   programImpactSummary,
   rowAnnualCost,
   towerOutcomeForState,
@@ -106,12 +107,20 @@ export function AssessmentScoreboard(props: Props) {
     );
   }
 
-  const { program, towerId, rows, className } = props;
+  const { program, towerId, className } = props;
   const tState = program.towers[towerId];
   const rates = tState?.rates ?? defaultTowerRates(towerId);
-  const weighted = rows.length && tState ? weightedTowerLevers(rows, tState.baseline, rates) : null;
+  // Always derive the dial-bearing rows from the active schema (v6 →
+  // l3Rows, v5 → l4Rows). The `rows` prop is retained on the type for
+  // backward call-site compatibility but is intentionally ignored — the
+  // weighted dials and pool $ must reflect the same rows the math layer
+  // (`towerOutcomeForState`) is reading from.
+  const dialRows = tState ? dialBearingRowsForTower(tState) : [];
+  const weighted = dialRows.length && tState
+    ? weightedTowerLevers(dialRows, tState.baseline, rates)
+    : null;
   const outcome = towerOutcomeForState(towerId, program);
-  const pool = rows.reduce((s, r) => s + rowAnnualCost(r, rates), 0);
+  const pool = dialRows.reduce((s, r) => s + rowAnnualCost(r, rates), 0);
 
   return (
     <div

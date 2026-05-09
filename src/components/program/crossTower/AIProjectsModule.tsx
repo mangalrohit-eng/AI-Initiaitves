@@ -1,40 +1,43 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   Sparkles,
   Layers,
   AlertTriangle,
   RotateCcw,
   ExternalLink,
-  Bot,
-  Network,
+  Building2,
 } from "lucide-react";
-import type { AIProjectResolved, Quadrant } from "@/lib/cross-tower/aiProjects";
+import type {
+  AIProjectResolved,
+  Quadrant,
+} from "@/lib/cross-tower/aiProjects";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
-import { ProjectBriefDrawer } from "./ProjectBriefDrawer";
+import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
- * AI Projects card grid — replaces the legacy KeyInitiativesModule on the
- * cross-tower page. Each card renders one `AIProjectResolved`. Cards are
- * grouped by quadrant (Quick Win → Strategic Bet → Fill-in → Deprioritize →
- * Stub) so the executive's eye lands on the highest-leverage projects first.
+ * AI Projects card grid for the Cross-Tower AI Plan page.
  *
- * Card surfaces (deterministic):
- *   - Project name (LLM-authored when available; placeholder on stubs)
- *   - Tower chip + L4 Activity Group label
- *   - Modeled $ chip (the L4 prize)
- *   - Quadrant badge (color-coded per the matrix)
- *   - Constituent L5 count + agent count from the brief
+ * Under v6 each card represents one curated `L3Initiative` AI Solution
+ * (one per L3 Job Family row). Cards are grouped by Value × Effort
+ * quadrant (Quick Win → Strategic Bet → Fill-in → Deprioritize) so the
+ * executive's eye lands on the highest-leverage initiatives first.
  *
- * Card surfaces (LLM-authored, when present):
- *   - 1–2 sentence narrative
- *   - Value / Effort buckets + rationales (popover-on-hover)
+ * Card surfaces (deterministic, v6):
+ *   - Solution name + tagline (LLM-curated upstream).
+ *   - Tower chip + L3 Job Family chip.
+ *   - Modeled $ chip (the row's even-split AI $).
+ *   - Quadrant + program tier badge.
+ *   - Vendor + feasibility chips when present.
+ *   - "Open initiative" → deep-dive page that lazily generates the
+ *     full four-lens brief on first click.
  *
- * Stub cards render with a muted purple border, a "Generation pending"
- * inline message, and a per-card retry button so a single failed cohort
- * doesn't block the rest of the program.
+ * Card surfaces (LLM-overlaid synthesis, when present):
+ *   - 1-2 sentence cross-tower narrative.
+ *   - Value / Effort buckets + rationales authored by program synthesis.
  */
 
 export function AIProjectsModule({
@@ -45,39 +48,32 @@ export function AIProjectsModule({
 }: {
   projects: AIProjectResolved[];
   bare?: boolean;
+  /** v5-only: per-project retry CTA on stub cards. v6 cards never stub at this layer. */
   onRetryCohort?: (l4RowId: string) => void;
   retryDisabled?: boolean;
 }) {
-  const [activeProjectId, setActiveProjectId] = React.useState<string | null>(
-    null,
-  );
-  const activeProject = React.useMemo(
-    () => projects.find((p) => p.id === activeProjectId) ?? null,
-    [projects, activeProjectId],
-  );
-
-  // Group by quadrant for sectioned rendering.
   const sections = React.useMemo(() => groupByQuadrant(projects), [projects]);
 
   const Header = (
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h2 className="font-display text-lg font-semibold text-forge-ink">
-          <span className="font-mono text-accent-purple-dark">&gt;</span> AI
-          Projects across the program
+          <span className="font-mono text-accent-purple-dark">&gt;</span>{" "}
+          {IS_V6
+            ? "AI Solutions across the program"
+            : "AI Projects across the program"}
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
-          Each project corresponds to one in-plan L4 Activity Group. Grouping
-          is structural; project names, briefs, and value/effort scoring are
-          authored by GPT-5.5 against the live Versant context. Click any
-          card to read the full 4-lens brief.
+          {IS_V6
+            ? "One card per curated AI Solution — sourced directly from each tower's L3 Job Family roster. Quadrant assignment, modeled $, and program tier are deterministic; the cross-tower narrative is authored by the Versant model. Click any card to open the full four-lens brief."
+            : "Each project corresponds to one in-plan L4 Activity Group. Grouping is structural; project names, briefs, and value/effort scoring are authored by the Versant model against the live context. Click any card to read the full 4-lens brief."}
         </p>
       </div>
       {projects.length > 0 ? (
         <div className="flex items-center gap-2 text-xs text-forge-subtle">
           <Layers className="h-3.5 w-3.5" aria-hidden />
           <span className="font-mono text-forge-body">{projects.length}</span>{" "}
-          projects ·{" "}
+          {IS_V6 ? "solutions" : "projects"} ·{" "}
           <span className="font-mono text-forge-body">
             {projects.filter((p) => !p.isStub && !p.isDeprioritized).length}
           </span>{" "}
@@ -104,7 +100,7 @@ export function AIProjectsModule({
                 {section.title}
               </span>
               <span className="text-[11px] text-forge-hint">
-                {section.projects.length} project
+                {section.projects.length} {IS_V6 ? "solution" : "project"}
                 {section.projects.length === 1 ? "" : "s"}
               </span>
             </div>
@@ -113,7 +109,6 @@ export function AIProjectsModule({
                 <ProjectCard
                   key={p.id}
                   project={p}
-                  onOpen={() => setActiveProjectId(p.id)}
                   onRetry={
                     onRetryCohort
                       ? () => onRetryCohort(p.parentL4ActivityGroupId)
@@ -131,22 +126,16 @@ export function AIProjectsModule({
   const Wrapper = bare ? "div" : "section";
 
   return (
-    <>
-      <Wrapper
-        className={
-          bare
-            ? ""
-            : "rounded-2xl border border-forge-border bg-forge-surface p-5 shadow-card"
-        }
-      >
-        {Header}
-        {Body}
-      </Wrapper>
-      <ProjectBriefDrawer
-        project={activeProject}
-        onClose={() => setActiveProjectId(null)}
-      />
-    </>
+    <Wrapper
+      className={
+        bare
+          ? ""
+          : "rounded-2xl border border-forge-border bg-forge-surface p-5 shadow-card"
+      }
+    >
+      {Header}
+      {Body}
+    </Wrapper>
   );
 }
 
@@ -156,24 +145,31 @@ export function AIProjectsModule({
 
 function ProjectCard({
   project,
-  onOpen,
   onRetry,
   retryDisabled,
 }: {
   project: AIProjectResolved;
-  onOpen: () => void;
   onRetry?: () => void;
   retryDisabled?: boolean;
 }) {
   const redact = useRedactDollars();
   const isStub = project.isStub;
-  const agentCount = project.brief?.agents.length ?? 0;
-  const integrationCount = project.brief?.digitalCore.integrations.length ?? 0;
   const cardClass = isStub
     ? "border-accent-amber/30 bg-accent-amber/[0.03]"
     : project.isDeprioritized
       ? "border-forge-border bg-forge-surface/70"
       : "border-forge-border bg-forge-surface hover:border-accent-purple/40 hover:shadow-md";
+
+  const title = (
+    <span className="truncate">{project.name}</span>
+  );
+
+  // Headline: prefer the LLM cross-tower narrative when available; fall back
+  // to the deterministic AI rationale (v6) or the v5 placeholder narrative.
+  const headlineText = project.narrative;
+  const taglineText = project.tagline;
+
+  const hasDeepDive = Boolean(project.deepDiveHref);
 
   return (
     <article
@@ -182,17 +178,22 @@ function ProjectCard({
       <header className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={onOpen}
-              className="inline-flex max-w-full items-center gap-1 truncate text-left text-sm font-semibold text-forge-ink transition hover:text-accent-purple-dark"
-            >
-              <span className="truncate">{project.name}</span>
-              <ExternalLink
-                className="h-3.5 w-3.5 flex-shrink-0 text-forge-hint transition group-hover:text-accent-purple"
-                aria-hidden
-              />
-            </button>
+            {hasDeepDive && project.deepDiveHref ? (
+              <Link
+                href={project.deepDiveHref}
+                className="inline-flex max-w-full items-center gap-1 truncate text-left text-sm font-semibold text-forge-ink transition hover:text-accent-purple-dark"
+              >
+                {title}
+                <ExternalLink
+                  className="h-3.5 w-3.5 flex-shrink-0 text-forge-hint transition group-hover:text-accent-purple"
+                  aria-hidden
+                />
+              </Link>
+            ) : (
+              <span className="inline-flex max-w-full items-center gap-1 truncate text-left text-sm font-semibold text-forge-ink">
+                {title}
+              </span>
+            )}
             {project.quadrant ? (
               <span
                 className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${quadrantBadgeClasses(project.quadrant, false)}`}
@@ -210,17 +211,27 @@ function ProjectCard({
               {project.primaryTowerName}
             </span>
             <span className="truncate">
-              <span className="text-forge-hint">L4 ·</span>{" "}
-              {project.parentL4ActivityGroupName}
+              <span className="text-forge-hint">
+                {IS_V6 ? "Job Family ·" : "L4 ·"}
+              </span>{" "}
+              {IS_V6
+                ? project.l3FamilyName ?? project.parentL4ActivityGroupName
+                : project.parentL4ActivityGroupName}
             </span>
           </div>
         </div>
       </header>
 
+      {IS_V6 && taglineText ? (
+        <p className="mt-2 text-xs leading-relaxed text-forge-body">
+          {taglineText}
+        </p>
+      ) : null}
+
       <p
-        className={`mt-2 text-xs leading-relaxed ${isStub ? "italic text-forge-subtle" : "text-forge-body"}`}
+        className={`mt-2 text-xs leading-relaxed ${isStub ? "italic text-forge-subtle" : "text-forge-subtle"}`}
       >
-        {project.narrative}
+        {headlineText}
       </p>
 
       {!isStub && (project.valueRationale || project.effortRationale) ? (
@@ -245,21 +256,46 @@ function ProjectCard({
               {formatUsdCompact(project.attributedAiUsd)}
             </span>
           ) : null}
-          <span className="inline-flex items-center gap-1">
-            <Layers className="h-3 w-3" aria-hidden />
-            {project.constituents.length} L5
-          </span>
-          {!isStub ? (
+          {IS_V6 ? (
+            <>
+              {project.feasibility ? (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 font-medium ${
+                    project.feasibility === "High"
+                      ? "border-accent-green/40 bg-accent-green/5 text-accent-green"
+                      : "border-accent-amber/40 bg-accent-amber/5 text-accent-amber"
+                  }`}
+                  title="Curator-stamped binary ship-readiness"
+                >
+                  <span className="font-mono">FE</span>
+                  {project.feasibility}
+                </span>
+              ) : null}
+              {project.primaryVendor ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-well px-1.5 py-0.5">
+                  <Building2 className="h-3 w-3" aria-hidden />
+                  {project.primaryVendor}
+                </span>
+              ) : null}
+            </>
+          ) : (
             <>
               <span className="inline-flex items-center gap-1">
-                <Bot className="h-3 w-3" aria-hidden /> {agentCount} agents
+                <Layers className="h-3 w-3" aria-hidden />
+                {project.constituents.length} L5
               </span>
-              <span className="inline-flex items-center gap-1">
-                <Network className="h-3 w-3" aria-hidden /> {integrationCount}{" "}
-                integrations
-              </span>
+              {!isStub && project.brief ? (
+                <>
+                  <span className="inline-flex items-center gap-1">
+                    {project.brief.agents.length} agents
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    {project.brief.digitalCore.integrations.length} integrations
+                  </span>
+                </>
+              ) : null}
             </>
-          ) : null}
+          )}
         </div>
         {isStub && onRetry ? (
           <button
@@ -268,8 +304,16 @@ function ProjectCard({
             disabled={retryDisabled}
             className="inline-flex items-center gap-1 rounded-full border border-accent-amber/40 bg-accent-amber/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent-amber transition hover:bg-accent-amber/15 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <RotateCcw className="h-2.5 w-2.5" aria-hidden /> Retry project
+            <RotateCcw className="h-2.5 w-2.5" aria-hidden /> Retry
           </button>
+        ) : hasDeepDive && project.deepDiveHref ? (
+          <Link
+            href={project.deepDiveHref}
+            className="inline-flex items-center gap-1 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent-purple-dark transition hover:bg-accent-purple/15"
+          >
+            Open initiative
+            <ExternalLink className="h-2.5 w-2.5" aria-hidden />
+          </Link>
         ) : null}
       </footer>
     </article>
@@ -285,7 +329,7 @@ function RationaleChip({
   bucket: AIProjectResolved["valueBucket"];
   text: string;
 }) {
-  if (!bucket) return null;
+  if (!bucket || !text) return null;
   const isHigh = bucket === "High";
   const valueGood = kind === "value" && isHigh;
   const effortGood = kind === "effort" && !isHigh;
@@ -316,13 +360,29 @@ function EmptyState() {
         aria-hidden
       />
       <p className="mt-2 text-sm font-semibold text-forge-ink">
-        No AI Projects yet for this scenario.
+        {IS_V6
+          ? "No AI Solutions in plan yet."
+          : "No AI Projects yet for this scenario."}
       </p>
       <p className="mt-1 text-xs text-forge-subtle">
-        Either no L4 Activity Groups clear the plan threshold, or you haven&apos;t
-        clicked Regenerate yet. Adjust the threshold in Assumptions or click{" "}
-        <span className="font-medium text-forge-body">Regenerate plan</span>{" "}
-        in the page header.
+        {IS_V6 ? (
+          <>
+            Either no L3 Job Family rows clear the plan threshold, or no AI
+            Solutions have been curated yet. Curate AI Solutions on each tower
+            page (Step 4 of the workshop) and revisit this view; adjust the
+            threshold in{" "}
+            <span className="font-medium text-forge-body">Assumptions</span> to
+            include lower-prize Job Family rows.
+          </>
+        ) : (
+          <>
+            Either no L4 Activity Groups clear the plan threshold, or you
+            haven&apos;t clicked Regenerate yet. Adjust the threshold in
+            Assumptions or click{" "}
+            <span className="font-medium text-forge-body">Regenerate plan</span>{" "}
+            in the page header.
+          </>
+        )}
       </p>
     </div>
   );

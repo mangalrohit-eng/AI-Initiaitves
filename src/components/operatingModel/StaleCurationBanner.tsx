@@ -11,18 +11,25 @@ import {
 } from "@/lib/initiatives/curationHash";
 import { shouldShowIntakeStaleBannerCopy } from "@/lib/assess/towerReadinessIntake";
 import {
+  queuedL3RowIdsForTowerV6,
   queuedRowIdsForTower,
   runForRows,
   type RunSummary,
 } from "@/lib/assess/curationPipeline";
+import {
+  runForL3Rows,
+  type RunV6Summary,
+} from "@/lib/assess/curationPipelineV6";
 import { getTowerHref } from "@/lib/towerHref";
 import type {
   AssessProgramV2,
   L3WorkforceRow,
+  L3WorkforceRowV6,
   TowerId,
 } from "@/data/assess/types";
 import { cn } from "@/lib/utils";
 import { curationProgressLine, llmLoadingCopy } from "@/lib/llm/loadingCopy";
+import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
  * Banner that surfaces above the AI Initiatives view (Step 4) whenever an
@@ -58,22 +65,39 @@ export function StaleCurationBanner({
     return subscribe("assessProgram", () => setProgram(getAssessProgram()));
   }, []);
 
-  const rows: ReadonlyArray<L3WorkforceRow> = React.useMemo(
+  const v6Rows: ReadonlyArray<L3WorkforceRowV6> = React.useMemo(
+    () => program.towers[towerId]?.l3Rows ?? [],
+    [program, towerId],
+  );
+  const v5Rows: ReadonlyArray<L3WorkforceRow> = React.useMemo(
     () => program.towers[towerId]?.l4Rows ?? [],
     [program, towerId],
   );
+  const useV6 = IS_V6 && v6Rows.length > 0;
+  const grainNoun = useV6 ? "Job Family" : "Activity Group";
 
-  const queued = React.useMemo(
-    () => rows.filter((r) => r.curationStage === "queued"),
-    [rows],
+  // Both row types carry the same `curationStage` semantics — the queued
+  // list and in-flight predicate just point at whichever array is the
+  // dial-bearing layer for the active schema.
+  const queuedV6 = React.useMemo(
+    () => v6Rows.filter((r) => r.curationStage === "queued"),
+    [v6Rows],
   );
-  const inFlight = hasInFlightRows(rows);
+  const queuedV5 = React.useMemo(
+    () => v5Rows.filter((r) => r.curationStage === "queued"),
+    [v5Rows],
+  );
+  const inFlight = useV6 ? hasInFlightRows(v6Rows) : hasInFlightRows(v5Rows);
   const stale = React.useMemo(
     () => getTowerStaleState(program.towers[towerId]),
     [program, towerId],
   );
   const visible = stale.initiativesStale;
-  const missingL4ForRefresh = stale.missingL4ForRefresh;
+  // L5 Activity precondition only applies to v5 (L4-grain). Under v6 the
+  // L3 carries no `l5Activities` field directly — child L4s do, but the
+  // L3 curation pipeline pulls them from the row's `childL4RowIds` and
+  // tolerates empty L5 lists for early-discovery rows.
+  const missingL4ForRefresh = useV6 ? false : stale.missingL4ForRefresh;
   const intakeStaleCopy = shouldShowIntakeStaleBannerCopy(program.towers[towerId]);
 
   const [showDiff, setShowDiff] = React.useState(false);
@@ -85,8 +109,7 @@ export function StaleCurationBanner({
     { scored: 0, total: 0 },
   );
 
-  const onRefresh = React.useCallback(async () => {
-    if (running) return;
+  const onRefreshV5 = React.useCallback(async () => {
     const { rowIds } = queuedRowIdsForTower(towerId);
     if (rowIds.length === 0) return;
     setRunning(true);
@@ -146,12 +169,77 @@ export function StaleCurationBanner({
         (summary.warning ? ` ${summary.warning}` : ""),
       durationMs: 8000,
     });
-  }, [running, toast, towerId]);
+  }, [toast, towerId]);
+
+  /**
+   * v6 sibling — fires the L3-grain pipeline (`runForL3Rows`) directly
+   * for every queued L3 row. No batching layer; per-L3 rows-per-tower
+   * is small (~3-30) so a single streaming call is the right grain.
+   */
+  const onRefreshV6 = React.useCallback(async () => {
+    const { rowIds } = queuedL3RowIdsForTowerV6(towerId);
+    if (rowIds.length === 0) return;
+    setRunning(true);
+    setProgress({ scored: 0, total: rowIds.length });
+    let summary: RunV6Summary | undefined;
+    try {
+      summary = await runForL3Rows({ towerId, rowIds }, (p) => {
+        if (p.stage === "done" || p.stage === "failed") {
+          setProgress((prev) => ({
+            scored: Math.min(prev.scored + 1, prev.total),
+            total: prev.total,
+          }));
+        }
+      });
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      toast.error({
+        title: "Couldn't refresh AI guidance",
+        description: error,
+      });
+      setRunning(false);
+      setProgress({ scored: 0, total: 0 });
+      return;
+    }
+    setRunning(false);
+    setProgress({ scored: 0, total: 0 });
+    if (!summary) return;
+    const sourceLabel =
+      summary.source === "llm" || summary.source === "mixed"
+        ? "Versant-grounded LLM"
+        : summary.source === "fallback"
+          ? "deterministic stub"
+          : null;
+    if (summary.failed > 0) {
+      toast.error({
+        title: `Refresh finished with ${summary.failed} error${summary.failed === 1 ? "" : "s"}`,
+        description:
+          (summary.warning ? `${summary.warning} ` : "") +
+          `${summary.succeeded} Job Famil${summary.succeeded === 1 ? "y" : "ies"} succeeded; the failed rows kept their previous AI Solutions and remain in the queue.`,
+      });
+      return;
+    }
+    toast.success({
+      title: `${summary.succeeded} Job Famil${summary.succeeded === 1 ? "y" : "ies"} refreshed`,
+      description:
+        (sourceLabel ? `Sourced via ${sourceLabel}. ` : "") +
+        `${summary.succeeded} now carr${summary.succeeded === 1 ? "ies" : "y"} an updated AI Solutions list.` +
+        (summary.warning ? ` ${summary.warning}` : ""),
+      durationMs: 8000,
+    });
+  }, [toast, towerId]);
+
+  const onRefresh = React.useCallback(async () => {
+    if (running) return;
+    if (useV6) return onRefreshV6();
+    return onRefreshV5();
+  }, [running, useV6, onRefreshV5, onRefreshV6]);
 
   if (!visible && !running) return null;
 
+  const queued = useV6 ? queuedV6 : queuedV5;
   const queuedCount = queued.length;
-  const totalCount = rows.length;
+  const totalCount = useV6 ? v6Rows.length : v5Rows.length;
   const capabilityMapHref = getTowerHref(towerId, "capability-map");
 
   return (
@@ -181,7 +269,7 @@ export function StaleCurationBanner({
                   Tower AI readiness questionnaire updated.{" "}
                   <span className="font-mono text-accent-amber">{queuedCount}</span>{" "}
                   of <span className="font-mono text-forge-body">{totalCount}</span>{" "}
-                  {queuedCount === 1 ? "Activity Group has" : "Activity Groups have"} stale
+                  {queuedCount === 1 ? `${grainNoun} has` : `${grainNoun}s have`} stale
                   AI guidance.
                 </>
               ) : (
@@ -189,7 +277,7 @@ export function StaleCurationBanner({
                   Capability map updated.{" "}
                   <span className="font-mono text-accent-amber">{queuedCount}</span>{" "}
                   of <span className="font-mono text-forge-body">{totalCount}</span>{" "}
-                  {queuedCount === 1 ? "Activity Group has" : "Activity Groups have"} stale
+                  {queuedCount === 1 ? `${grainNoun} has` : `${grainNoun}s have`} stale
                   AI guidance.
                 </>
               )}
@@ -198,7 +286,9 @@ export function StaleCurationBanner({
           <p className="mt-1 text-xs leading-relaxed text-forge-subtle">
             {missingL4ForRefresh
               ? "Some queued Activity Groups have no L5 Activities yet. Generate L5 Activities on Step 1 first, then come back to refresh AI guidance."
-              : "Refresh runs the Versant-grounded LLM. If the LLM is unavailable, it falls back to the deterministic verdict composer + overlay rubric. Until you refresh, feasibility (Ship-ready / Investigate) and eligibility tags on the capability map stay out of date for the queued rows — and the cross-tower 2x2 will tier them off the older signal. Dollars and headcount on Steps 2 and 3 are unaffected."}
+              : useV6
+                ? "Refresh runs the Versant-grounded LLM at the L3 Job Family grain — one stream, one pass through every queued row. If the LLM is unavailable, each row falls back to a deterministic Versant stub. Until you refresh, AI Solutions and feasibility (Ship-ready / Investigate) stay out of date for the queued rows. Dollars and headcount on Steps 2 and 3 are unaffected."
+                : "Refresh runs the Versant-grounded LLM. If the LLM is unavailable, it falls back to the deterministic verdict composer + overlay rubric. Until you refresh, feasibility (Ship-ready / Investigate) and eligibility tags on the capability map stay out of date for the queued rows — and the cross-tower 2x2 will tier them off the older signal. Dollars and headcount on Steps 2 and 3 are unaffected."}
           </p>
         </div>
         {missingL4ForRefresh ? (
@@ -221,7 +311,9 @@ export function StaleCurationBanner({
             title={
               running || inFlight
                 ? "Refresh in progress"
-                : "Re-evaluates AI eligibility for the L3s whose L4 list changed since the last refresh."
+                : useV6
+                  ? "Re-evaluates AI Solutions for the L3 Job Families whose child Activity Group list changed since the last refresh."
+                  : "Re-evaluates AI eligibility for the L3s whose L4 list changed since the last refresh."
             }
             className={cn(
               "inline-flex items-center gap-2 rounded-lg bg-accent-amber px-4 py-2 text-sm font-semibold text-near-black transition",
@@ -239,8 +331,8 @@ export function StaleCurationBanner({
             ) : (
               <>
                 <Icons.Sparkles className="h-4 w-4" />
-                Refresh AI guidance for {queuedCount} capabilit
-                {queuedCount === 1 ? "y" : "ies"}
+                Refresh AI guidance for {queuedCount} {grainNoun}
+                {queuedCount === 1 ? "" : "s"}
               </>
             )}
           </button>
@@ -253,9 +345,9 @@ export function StaleCurationBanner({
           role="status"
           aria-live="polite"
         >
-          <Icons.Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-accent-amber" aria-hidden />
+            <Icons.Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-accent-amber" aria-hidden />
           <span className="min-w-0">
-            {curationProgressLine(progress.scored, progress.total)}
+            {curationProgressLine(progress.scored, progress.total, grainNoun)}
           </span>
         </div>
       ) : null}
@@ -278,22 +370,41 @@ export function StaleCurationBanner({
             </span>
           </summary>
           <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
-            {queued.map((row) => (
-              <li
-                key={row.id}
-                className="flex items-baseline justify-between gap-2 rounded-md border border-forge-border bg-forge-surface/70 px-2.5 py-1.5 text-[11px]"
-              >
-                <span className="min-w-0 truncate text-forge-body">
-                  <span className="text-forge-hint">{row.l2}</span>
-                  <span className="mx-1 text-forge-hint">›</span>
-                  <span className="font-medium text-forge-ink">{row.l3}</span>
-                </span>
-                <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
-                  {(row.l5Activities ?? []).length}{" "}
-                  L4{(row.l5Activities ?? []).length === 1 ? "" : "s"}
-                </span>
-              </li>
-            ))}
+            {useV6
+              ? queuedV6.map((row) => {
+                  const childCount = row.childL4RowIds.length;
+                  return (
+                    <li
+                      key={row.id}
+                      className="flex items-baseline justify-between gap-2 rounded-md border border-forge-border bg-forge-surface/70 px-2.5 py-1.5 text-[11px]"
+                    >
+                      <span className="min-w-0 truncate text-forge-body">
+                        <span className="text-forge-hint">{row.l2}</span>
+                        <span className="mx-1 text-forge-hint">›</span>
+                        <span className="font-medium text-forge-ink">{row.l3}</span>
+                      </span>
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
+                        {childCount} Activity Group{childCount === 1 ? "" : "s"}
+                      </span>
+                    </li>
+                  );
+                })
+              : queuedV5.map((row) => (
+                  <li
+                    key={row.id}
+                    className="flex items-baseline justify-between gap-2 rounded-md border border-forge-border bg-forge-surface/70 px-2.5 py-1.5 text-[11px]"
+                  >
+                    <span className="min-w-0 truncate text-forge-body">
+                      <span className="text-forge-hint">{row.l2}</span>
+                      <span className="mx-1 text-forge-hint">›</span>
+                      <span className="font-medium text-forge-ink">{row.l3}</span>
+                    </span>
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
+                      {(row.l5Activities ?? []).length}{" "}
+                      L4{(row.l5Activities ?? []).length === 1 ? "" : "s"}
+                    </span>
+                  </li>
+                ))}
           </ul>
         </details>
       ) : null}

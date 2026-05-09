@@ -16,6 +16,10 @@ import {
   type RunSummary,
 } from "@/lib/assess/curationPipeline";
 import {
+  runForL3Rows,
+  type RunV6Summary,
+} from "@/lib/assess/curationPipelineV6";
+import {
   aggregateRunSummaries,
   chunkRowsForCurationApi,
   regenerableRowsForStep4,
@@ -24,6 +28,7 @@ import type { AssessProgramV2, TowerId } from "@/data/assess/types";
 import { getTowerHref } from "@/lib/towerHref";
 import { cn } from "@/lib/utils";
 import { curationProgressLine, llmLoadingCopy } from "@/lib/llm/loadingCopy";
+import { IS_V6 } from "@/lib/schemaFlag";
 
 function applyRegenerateToast(toast: ReturnType<typeof useToast>, summary: RunSummary) {
   const sourceLabel =
@@ -73,9 +78,47 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
     return subscribe("assessProgram", () => setProgram(getAssessProgram()));
   }, []);
 
-  const rows = program.towers[towerId]?.l4Rows ?? [];
-  const inFlight = hasInFlightRows(rows);
-  const { rowIds } = regenerableRowsForStep4(program, towerId);
+  // v6 — dial-bearing rows are L3 Job Families. Regenerable rows are
+  // every L3 with `aiPct > 0` (effective dial after baseline fallback).
+  // The L5-Activity gate doesn't apply at L3 grain — child L4 Activity
+  // Groups are passed in as context to the LLM, not scored individually.
+  const v6L3Rows = React.useMemo(
+    () => program.towers[towerId]?.l3Rows ?? [],
+    [program, towerId],
+  );
+  const l4Rows = React.useMemo(
+    () => program.towers[towerId]?.l4Rows ?? [],
+    [program, towerId],
+  );
+  const useV6 = IS_V6 && v6L3Rows.length > 0;
+
+  const inFlight = useV6
+    ? hasInFlightRows(v6L3Rows)
+    : hasInFlightRows(l4Rows);
+
+  const v6RegenerableRowIds = React.useMemo(() => {
+    if (!useV6) return [] as string[];
+    const t = program.towers[towerId];
+    if (!t) return [];
+    const baseline = t.baseline;
+    // L3 Job Families need AI dial > 0 to be worth scoring AI Solutions
+    // for. Offshore-only rows (no AI headroom) are skipped — the
+    // Versant model has nothing to design against.
+    return v6L3Rows
+      .filter((r) => {
+        const ai = r.aiImpactAssessmentPct ?? baseline.baselineAIPct;
+        return ai > 0;
+      })
+      .map((r) => r.id);
+  }, [useV6, program, towerId, v6L3Rows]);
+
+  const v5RowIds = React.useMemo(
+    () => regenerableRowsForStep4(program, towerId).rowIds,
+    [program, towerId],
+  );
+
+  const rowIds = useV6 ? v6RegenerableRowIds : v5RowIds;
+  const grainNoun = useV6 ? "Job Family" : "Activity Group";
 
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [running, setRunning] = React.useState(false);
@@ -88,8 +131,7 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
 
   const impactLeversHref = getTowerHref(towerId, "impact-levers");
 
-  const onRegenerate = React.useCallback(async () => {
-    if (running || inFlight) return;
+  const onRegenerateV5 = React.useCallback(async () => {
     const fresh = getAssessProgram();
     const { rows: freshRows } = regenerableRowsForStep4(fresh, towerId);
     if (freshRows.length === 0) {
@@ -148,7 +190,97 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
     setProgress({ scored: 0, total: 0 });
     const summary = aggregateRunSummaries(summaries);
     applyRegenerateToast(toast, summary);
-  }, [running, inFlight, toast, towerId]);
+  }, [toast, towerId]);
+
+  /**
+   * v6 sibling — drives the L3-grain pipeline (`runForL3Rows`) directly.
+   * No batching layer: the per-L3 pipeline streams one row at a time,
+   * and L3 rows-per-tower is small enough (~3-30) that a single
+   * streaming request is the right granularity.
+   */
+  const onRegenerateV6 = React.useCallback(async () => {
+    const fresh = getAssessProgram();
+    const t = fresh.towers[towerId];
+    if (!t || !t.l3Rows) {
+      toast.error({
+        title: "Nothing to regenerate",
+        description: "L3 Job Family rows haven't derived yet. Re-import the capability map.",
+      });
+      setConfirmOpen(false);
+      return;
+    }
+    const baseline = t.baseline;
+    const ids = t.l3Rows
+      .filter((r) => {
+        const ai = r.aiImpactAssessmentPct ?? baseline.baselineAIPct;
+        return ai > 0;
+      })
+      .map((r) => r.id);
+    if (ids.length === 0) {
+      toast.error({
+        title: "Nothing to regenerate",
+        description:
+          "No Job Families with AI dial above zero. Open Configure Impact Levers to raise the dial.",
+      });
+      setConfirmOpen(false);
+      return;
+    }
+    setConfirmOpen(false);
+    setRunning(true);
+    setProgress({ scored: 0, total: ids.length });
+    let summary: RunV6Summary | undefined;
+    try {
+      summary = await runForL3Rows({ towerId, rowIds: ids }, (p) => {
+        if (p.stage === "done" || p.stage === "failed") {
+          setProgress((prev) => ({
+            scored: Math.min(prev.scored + 1, prev.total),
+            total: prev.total,
+          }));
+        }
+      });
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      toast.error({
+        title: "Couldn't regenerate AI guidance",
+        description: error,
+      });
+      setRunning(false);
+      setProgress({ scored: 0, total: 0 });
+      return;
+    }
+    setRunning(false);
+    setProgress({ scored: 0, total: 0 });
+    if (!summary) return;
+    const sourceLabel =
+      summary.source === "llm" || summary.source === "mixed"
+        ? "Versant-grounded LLM"
+        : summary.source === "fallback"
+          ? "deterministic stub"
+          : null;
+    if (summary.failed > 0) {
+      toast.error({
+        title: `Regenerate finished with ${summary.failed} error${summary.failed === 1 ? "" : "s"}`,
+        description:
+          (summary.warning ? `${summary.warning} ` : "") +
+          `${summary.succeeded} Job Famil${summary.succeeded === 1 ? "y" : "ies"} succeeded; failed rows kept their previous AI Solutions.`,
+      });
+      return;
+    }
+    toast.success({
+      title: `${summary.succeeded} Job Famil${summary.succeeded === 1 ? "y" : "ies"} rescored`,
+      description:
+        (sourceLabel ? `Sourced via ${sourceLabel}. ` : "") +
+        `${summary.succeeded} now carr${summary.succeeded === 1 ? "ies" : "y"} an updated AI Solutions list.` +
+        (summary.warning ? ` ${summary.warning}` : ""),
+      durationMs: 8000,
+    });
+  }, [toast, towerId]);
+
+  const onRegenerate = React.useCallback(async () => {
+    if (running || inFlight) return;
+    if (useV6) return onRegenerateV6();
+    return onRegenerateV5();
+  }, [running, inFlight, useV6, onRegenerateV5, onRegenerateV6]);
 
   if (rowIds.length === 0) return null;
 
@@ -167,7 +299,7 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
             title={
               inFlight
                 ? "Curation in progress"
-                : `Re-run Versant-grounded AI scoring for the eligible Activity Groups (typically ${curateCopy.timeWindow} for a tower)`
+                : `Re-run Versant-grounded AI scoring for the eligible ${grainNoun}s (typically ${curateCopy.timeWindow} for a tower)`
             }
             className={cn(
               "inline-flex items-center gap-2 rounded-lg border border-accent-purple/50 bg-transparent px-4 py-2 text-sm font-semibold text-forge-body transition",
@@ -194,7 +326,7 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
           >
             <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-accent-purple" aria-hidden />
             <span className="min-w-0">
-              {curationProgressLine(progress.scored, progress.total)}
+              {curationProgressLine(progress.scored, progress.total, grainNoun)}
             </span>
           </div>
         ) : null}
@@ -210,15 +342,19 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
         description={
           <div className="space-y-2 text-sm leading-relaxed text-forge-body">
             <p>
-              This re-runs Versant-grounded AI eligibility and priority scoring for{" "}
+              This re-runs Versant-grounded AI {useV6 ? "Solution" : "eligibility and priority"} scoring
+              for{" "}
               <span className="font-mono text-accent-purple-dark">{rowIds.length}</span>{" "}
-              Activity Groups where the AI dial is above zero and L5 Activities
-              exist. Cached L5 verdicts for those rows are replaced.
+              {grainNoun}
+              {rowIds.length === 1 ? "" : "s"} where the AI dial is above zero
+              {useV6 ? "" : " and L5 Activities exist"}. Cached{" "}
+              {useV6 ? "AI Solutions" : "L5 verdicts"} for those rows are
+              replaced.
             </p>
             <p>
               When the amber banner shows a capability map change, use{" "}
               <span className="font-semibold text-forge-ink">Refresh AI guidance</span>{" "}
-              first. Regenerate skips Activity Groups at zero AI dial — open{" "}
+              first. Regenerate skips {grainNoun}s at zero AI dial — open{" "}
               <Link
                 href={impactLeversHref}
                 className="font-semibold text-accent-purple-dark underline-offset-2 hover:underline"

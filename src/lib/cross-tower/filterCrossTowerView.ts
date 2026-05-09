@@ -5,6 +5,10 @@ import type {
   ProgramInitiativeRow,
   SelectProgramResult,
 } from "@/lib/initiatives/selectProgram";
+import type {
+  ProgramInitiativeRowV6,
+  SelectProgramResultV6,
+} from "@/lib/initiatives/selectV6Program";
 
 /** Active phases available on the Cross-Tower AI Plan filter (in-plan tiers only). */
 export const CROSS_TOWER_VIEW_PHASES = ["P1", "P2", "P3"] as const satisfies readonly ProgramTier[];
@@ -50,10 +54,17 @@ export function filterProjectsByView(
   return projects.filter((p) => {
     if (towerSet && !towerSet.has(p.primaryTowerId)) return false;
     if (phaseSet) {
-      const match = p.constituents.some((c) =>
-        phaseSet!.has(c.programTier as CrossTowerViewPhaseId),
-      );
-      if (!match) return false;
+      // v6: prefer the explicit programTier on the project. v5: fall back
+      // to checking any constituent — preserves the original behaviour for
+      // mixed-tier cohorts.
+      if (p.programTier) {
+        if (!phaseSet.has(p.programTier as CrossTowerViewPhaseId)) return false;
+      } else {
+        const match = p.constituents.some((c) =>
+          phaseSet!.has(c.programTier as CrossTowerViewPhaseId),
+        );
+        if (!match) return false;
+      }
     }
     return true;
   });
@@ -90,4 +101,54 @@ export function crossTowerViewFiltersActive(
   selectedPhases: readonly CrossTowerViewPhaseId[],
 ): boolean {
   return selectedTowerIds.length > 0 || selectedPhases.length > 0;
+}
+
+/**
+ * V6 sibling of `filterProgramInitiativesByView` — operates on
+ * `ProgramInitiativeRowV6` (the flat L3-grain row) instead of v5's
+ * structurally-nested `ProgramInitiativeRow`.
+ */
+export function filterProgramInitiativesV6ByView(
+  initiatives: ProgramInitiativeRowV6[],
+  selectedTowerIds: readonly TowerId[],
+  selectedPhases: readonly CrossTowerViewPhaseId[],
+): ProgramInitiativeRowV6[] {
+  const towerSet =
+    selectedTowerIds.length > 0 ? new Set(selectedTowerIds) : null;
+  const phaseSet =
+    selectedPhases.length > 0 ? new Set(selectedPhases) : null;
+
+  return initiatives.filter((r) => {
+    if (towerSet && !towerSet.has(r.towerId)) return false;
+    if (phaseSet && !phaseSet.has(r.programTier as CrossTowerViewPhaseId)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * V6 sibling of `sliceProgramForView`. Same contract — narrow `initiatives`
+ * + `towersInScope` while preserving the rest of the program shape for
+ * incidental reads (inputHash, threshold, programImpact).
+ */
+export function sliceProgramV6ForView(
+  program: SelectProgramResultV6,
+  selectedTowerIds: readonly TowerId[],
+  selectedPhases: readonly CrossTowerViewPhaseId[],
+): SelectProgramResultV6 {
+  const initiatives = filterProgramInitiativesV6ByView(
+    program.initiatives,
+    selectedTowerIds,
+    selectedPhases,
+  );
+  const towerIds = new Set(initiatives.map((i) => i.towerId));
+  const towersInScope = program.towersInScope.filter((t) =>
+    towerIds.has(t.id),
+  );
+  return {
+    ...program,
+    initiatives,
+    towersInScope,
+  };
 }

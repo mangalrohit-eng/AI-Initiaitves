@@ -18,6 +18,7 @@ import type {
 import type { CrossTowerAssumptions } from "@/lib/cross-tower/assumptions";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
+import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
  * Cross-Tower AI Plan v3 — projects-driven implementation roadmap.
@@ -79,10 +80,9 @@ export function ProjectsRoadmapModule({
           Implementation roadmap
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
-          One row per AI Project (one project = one L4 Activity Group).
-          Build / ramp / at-scale segments are deterministic from the
-          Assumptions tab. Quick Wins ladder into Strategic Bets; Fill-ins
-          slot in once team capacity opens up.
+          {IS_V6
+            ? "One row per AI Solution. Build / ramp / at-scale segments are deterministic from the Assumptions tab. Quick Wins ladder into Strategic Bets; Fill-ins slot in once team capacity opens up. Click a row to open the solution's deep-dive brief."
+            : "One row per AI Project (one project = one L4 Activity Group). Build / ramp / at-scale segments are deterministic from the Assumptions tab. Quick Wins ladder into Strategic Bets; Fill-ins slot in once team capacity opens up."}
         </p>
       </div>
       {synthesis ? (
@@ -99,8 +99,9 @@ export function ProjectsRoadmapModule({
       <div className="mt-4">
         {sequenced.length === 0 ? (
           <div className="rounded-xl border border-dashed border-forge-border bg-forge-well/40 p-10 text-center text-sm text-forge-subtle">
-            No sequenceable projects. Regenerate the plan to populate the
-            roadmap.
+            {IS_V6
+              ? "No sequenceable AI Solutions. Curate L3 initiatives in the tower workshops, then click Regenerate plan."
+              : "No sequenceable projects. Regenerate the plan to populate the roadmap."}
           </div>
         ) : (
           <ProjectsGantt

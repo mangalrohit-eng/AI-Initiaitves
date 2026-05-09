@@ -8,6 +8,7 @@ import type {
 } from "@/lib/cross-tower/aiProjects";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
+import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
  * Value × Effort 2×2 list view.
@@ -105,11 +106,9 @@ export function ValueEffortMatrix({
           × Effort 2×2
         </h2>
         <p className="mt-1 max-w-2xl text-sm text-forge-subtle">
-          Portfolio view: each project{"'"}s bucket is set by a median split across
-          the program. Value uses the modeled L4 prize; effort uses the
-          GPT-5.5-authored brief signals (complexity, integrations, agents,
-          proven elsewhere). Rationales remain GPT-5.5-authored. Click a
-          project name to open its 4-lens brief.
+          {IS_V6
+            ? "Portfolio view: each AI Solution's bucket is set deterministically — value from the L3 modeled prize, effort from the curator-set feasibility (High → low effort, Low → high effort). Click a solution to open its deep-dive brief."
+            : "Portfolio view: each project's bucket is set by a median split across the program. Value uses the modeled L4 prize; effort uses the GPT-5.5-authored brief signals (complexity, integrations, agents, proven elsewhere). Rationales remain GPT-5.5-authored. Click a project name to open its 4-lens brief."}
         </p>
       </div>
       <span className="inline-flex items-center gap-1 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-purple-dark">
@@ -121,7 +120,9 @@ export function ValueEffortMatrix({
   const Body =
     scored.length === 0 ? (
       <div className="mt-4 rounded-xl border border-dashed border-forge-border bg-forge-well/40 p-8 text-center text-sm text-forge-subtle">
-        No scored projects yet. Click Regenerate plan to populate the matrix.
+        {IS_V6
+          ? "No scored AI Solutions yet. Curate L3 initiatives in the tower workshops, then click Regenerate plan."
+          : "No scored projects yet. Click Regenerate plan to populate the matrix."}
       </div>
     ) : (
       <div className="mt-5 space-y-3">

@@ -899,9 +899,17 @@ export async function buildLLMRequest(
   try {
     parsed = JSON.parse(content);
   } catch (e) {
-    throw new VersantLLMError("OpenAI content was not valid JSON", "non_json_response", {
-      cause: e,
-    });
+    // Truncation is the dominant cause of this failure mode (output token
+    // cap hit before the model closed every brace). Surface a snippet of
+    // the trailing content so the dev terminal log + warning banner can
+    // tell truncation from a markdown wrapper or other malformed return.
+    const len = content.length;
+    const tail = content.slice(Math.max(0, len - 120)).replace(/\s+/g, " ");
+    throw new VersantLLMError(
+      `OpenAI content was not valid JSON (length=${len}; tail="${tail}")`,
+      "non_json_response",
+      { cause: e },
+    );
   }
 
   return {

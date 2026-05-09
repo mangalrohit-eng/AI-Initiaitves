@@ -354,6 +354,23 @@ export function queuedRowIdsForTower(
 }
 
 /**
+ * v6 sibling — collect the L3 row ids whose `curationStage === "queued"`.
+ * Used by the StaleCurationBanner CTA under v6 to fire
+ * `runForL3Rows(towerId, queuedL3Ids)` against the L3-grain pipeline.
+ */
+export function queuedL3RowIdsForTowerV6(
+  towerId: TowerId,
+): { rowIds: string[]; total: number } {
+  const program = getAssessProgram();
+  const t = program.towers[towerId];
+  if (!t || !t.l3Rows) return { rowIds: [], total: 0 };
+  const ids = t.l3Rows
+    .filter((r) => r.curationStage === "queued")
+    .map((r) => r.id);
+  return { rowIds: ids, total: t.l3Rows.length };
+}
+
+/**
  * The selector's cache check uses `rowCurrentHash`. Re-export here for
  * symmetry — pipeline writes the hash that selector compares.
  */

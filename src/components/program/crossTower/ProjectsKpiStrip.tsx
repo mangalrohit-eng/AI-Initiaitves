@@ -3,22 +3,24 @@
 import type { ProjectKpis, BuildupPoint } from "@/lib/llm/useCrossTowerPlan";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
+import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
- * Cross-Tower AI Plan v3 — project-centric executive KPI strip.
+ * Cross-Tower AI Plan — executive KPI strip.
  *
- * Replaces the legacy initiative-grain KPI strip. Six tiles, every value
- * derived deterministically from the resolved project set + the
- * `composeProjects` curve:
+ * Six tiles, every value derived deterministically from the resolved
+ * project set and the `composeProjects` (or `composeProjectsV6`) curve:
  *
  *   1. Program AI run-rate at full scale — sum of attributed $ across
- *      all live (non-stub, non-Deprioritize) projects.
- *   2. Modeled M24 run-rate — last point of the project-driven buildup
- *      curve.
- *   3. AI Projects in plan — count of authored, sequenced projects.
- *   4. Towers in scope — distinct primary tower count across live projects.
- *   5. Agents architected — sum of `brief.agents.length` across live
- *      projects with a brief.
+ *      all live (non-stub, non-Deprioritize) projects/initiatives.
+ *   2. Modeled M24 run-rate — last point of the buildup curve.
+ *   3. {AI Solutions | AI Projects} in plan — count of authored items.
+ *   4. Towers in scope — distinct primary tower count across live items.
+ *   5. v5: Agents architected — sum of `brief.agents.length` across live
+ *      project briefs.
+ *      v6: Initiative mix — High-feasibility share of live initiatives
+ *      (the v6 substrate carries no agent fleet at the program grain;
+ *      agents are authored per-initiative on the deep-dive page).
  *   6. Quadrant mix — Quick Win + Strategic Bet count vs total live.
  */
 export function ProjectsKpiStrip({
@@ -37,14 +39,22 @@ export function ProjectsKpiStrip({
   const gap = Math.max(0, kpis.fullScaleRunRateUsd - m24);
   const showGap = gap > 0 && kpis.fullScaleRunRateUsd > 0 && !redact;
 
+  const itemNoun = IS_V6 ? "solution" : "project";
+  const itemNounPlural = IS_V6 ? "solutions" : "projects";
+  const inPlanLabel = IS_V6 ? "AI Solutions in plan" : "AI Projects in plan";
   const initiativesSubtitle =
     kpis.liveProjects === 0
-      ? "Click Regenerate to author the project set."
+      ? `Click Regenerate to author the ${itemNoun} set.`
       : `${kpis.quickWinCount} Quick Wins · ${kpis.strategicBetCount} Strategic Bets · ${kpis.fillInCount} Fill-ins`;
 
   return (
     <section>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div
+        className={[
+          "grid gap-3 sm:grid-cols-2",
+          IS_V6 ? "lg:grid-cols-5" : "lg:grid-cols-6",
+        ].join(" ")}
+      >
         <Tile
           label="In-plan AI run-rate"
           value={
@@ -52,7 +62,11 @@ export function ProjectsKpiStrip({
               ? "—"
               : formatUsdCompact(kpis.fullScaleRunRateUsd, { decimals: 2 })
           }
-          subtitle="At full scale, all projects ramped"
+          subtitle={
+            IS_V6
+              ? "At full scale, every solution ramped"
+              : "At full scale, all projects ramped"
+          }
           emphasis
         />
         <Tile
@@ -60,14 +74,14 @@ export function ProjectsKpiStrip({
           value={redact ? "—" : formatUsdCompact(m24, { decimals: 2 })}
           subtitle={
             kpis.liveProjects === 0
-              ? "No projects in plan"
+              ? `No ${itemNounPlural} in plan`
               : showGap
                 ? `${formatUsdCompact(gap, { decimals: 2 })} ramps past M24`
-                : "Every project at full scale by M24"
+                : `Every ${itemNoun} at full scale by M24`
           }
         />
         <Tile
-          label="AI Projects in plan"
+          label={inPlanLabel}
           value={String(kpis.liveProjects)}
           subtitle={initiativesSubtitle}
         />
@@ -76,34 +90,39 @@ export function ProjectsKpiStrip({
           value={String(kpis.towersInScope)}
           subtitle={
             kpis.deprioritizedProjects > 0
-              ? `${kpis.deprioritizedProjects} project${kpis.deprioritizedProjects === 1 ? "" : "s"} deprioritized`
+              ? `${kpis.deprioritizedProjects} ${itemNoun}${kpis.deprioritizedProjects === 1 ? "" : "s"} deprioritized`
               : "Cross-tower coverage"
           }
         />
-        <Tile
-          label="Agents architected"
-          value={String(kpis.agentsArchitected)}
-          subtitle={
-            hasNarrative
-              ? "Across live project briefs"
-              : "Pending plan generation"
-          }
-        />
+        {!IS_V6 ? (
+          <Tile
+            label="Agents architected"
+            value={String(kpis.agentsArchitected)}
+            subtitle={
+              hasNarrative
+                ? "Across live project briefs"
+                : "Pending plan generation"
+            }
+          />
+        ) : null}
         <Tile
           label="Quadrant mix"
           value={`${kpis.quickWinCount + kpis.strategicBetCount}/${kpis.liveProjects || 0}`}
-          subtitle="High-value (QW + SB) of live projects"
+          subtitle={`High-value (QW + SB) of live ${itemNounPlural}`}
         />
       </div>
 
       {stubProjectCount > 0 ? (
         <p className="mt-2 text-[11px] text-forge-subtle">
           <span className="font-mono text-accent-amber">
-            {stubProjectCount} project{stubProjectCount === 1 ? "" : "s"}
+            {stubProjectCount} {itemNoun}
+            {stubProjectCount === 1 ? "" : "s"}
           </span>{" "}
-          pending generation — model authoring failed and the cards are showing
-          deterministic placeholders. Use the per-card Retry CTA on the
-          Projects tab to author them individually.
+          pending generation — model authoring failed and the cards are
+          showing deterministic placeholders.{" "}
+          {IS_V6
+            ? "Open the AI Solutions tab and click Regenerate to retry."
+            : "Use the per-card Retry CTA on the Projects tab to author them individually."}
         </p>
       ) : null}
     </section>

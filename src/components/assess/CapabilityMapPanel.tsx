@@ -1,7 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Eye, Users } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Maximize2,
+  MoveHorizontal,
+  Users,
+} from "lucide-react";
 import type { L3WorkforceRow } from "@/data/assess/types";
 import type {
   CapabilityMapViewModel,
@@ -57,6 +65,21 @@ type Props = {
  * Tier colours ride a purple-intensity gradient — red/amber/teal/green
  * are reserved for priority and savings semantics elsewhere in the app,
  * so we don't repurpose them for hierarchy.
+ *
+ * Layout modes (toggle in the panel header):
+ *
+ *   - "scroll" (default) — L3 columns are fixed at 200 px wide; rows that
+ *     don't fit the viewport scroll horizontally with chevron + edge-fade
+ *     indicators (see `ScrollableTier`).
+ *   - "fit" — L3 columns share the visible width via `flex-1 basis-0`,
+ *     so the entire map fits on one screen. To compensate for narrower
+ *     columns, every box at a given tier (L3 / L4 / L5) gets a uniform
+ *     fixed height (taller than scroll mode), the label font drops one
+ *     notch, and labels wrap inside the fixed box with `line-clamp` —
+ *     overflow text ellipses, full label remains in the `title` tooltip.
+ *     Per-row inline headcount chips are suppressed in this mode (no
+ *     room); L1 and L2 banner totals stay visible, and per-L4 numbers
+ *     remain on hover.
  *
  * Source of truth: rows always when present; the predefined map only
  * when `isPreview === true` (no rows yet).
@@ -173,6 +196,14 @@ export function CapabilityMapPanel({
   const allActive = active.size > 0 && active.size === allL4Ids.length;
   const anyActive = active.size > 0;
 
+  // Layout mode — `false` (default) is the fixed-200px-column scroll
+  // mode; `true` is fit-to-one-page mode where L3 columns share the
+  // viewport width and every per-tier box gets a uniform fixed height.
+  const [fitMode, setFitMode] = React.useState(false);
+  const toggleFitMode = React.useCallback(() => {
+    setFitMode((prev) => !prev);
+  }, []);
+
   const toggleL4 = React.useCallback((id: string) => {
     setActive((prev) => {
       const next = new Set(prev);
@@ -187,52 +218,88 @@ export function CapabilityMapPanel({
 
   return (
     <div className="space-y-3">
-      {/* Top line: total L5 Activity count and master toggle. */}
+      {/* Top line: total L5 Activity count, fit-mode toggle, master L5 toggle. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-[11px] tabular-nums text-forge-hint">
             {totalL5} L5 Activities
           </span>
         </div>
-        {allL4Ids.length > 0 ? (
-          <button
-            type="button"
-            onClick={masterToggle}
-            aria-pressed={allActive}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/40",
-              anyActive
-                ? "border-accent-purple/60 bg-accent-purple/15 text-forge-ink"
-                : "border-forge-border bg-forge-surface text-forge-body hover:border-accent-purple/40 hover:text-forge-ink",
-            )}
-          >
-            <ChevronDown
+        <div className="flex flex-wrap items-center gap-2">
+          {view.l2.length > 0 ? (
+            <button
+              type="button"
+              onClick={toggleFitMode}
+              aria-pressed={fitMode}
+              title={
+                fitMode
+                  ? "Restore 200px columns and horizontal scrolling."
+                  : "Shrink columns to fit the entire map on one screen."
+              }
               className={cn(
-                "h-3 w-3 transition-transform",
-                anyActive ? "rotate-180 text-accent-purple" : "",
+                "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/40",
+                fitMode
+                  ? "border-accent-purple/60 bg-accent-purple/15 text-forge-ink"
+                  : "border-forge-border bg-forge-surface text-forge-body hover:border-accent-purple/40 hover:text-forge-ink",
               )}
-              aria-hidden
-            />
-            {anyActive ? "Hide all L5 Activities" : "Show all L5 Activities"}
-          </button>
-        ) : null}
+            >
+              {fitMode ? (
+                <MoveHorizontal className="h-3 w-3 text-accent-purple" aria-hidden />
+              ) : (
+                <Maximize2 className="h-3 w-3" aria-hidden />
+              )}
+              {fitMode ? "Allow horizontal scroll" : "Fit to one page"}
+            </button>
+          ) : null}
+          {allL4Ids.length > 0 ? (
+            <button
+              type="button"
+              onClick={masterToggle}
+              aria-pressed={allActive}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/40",
+                anyActive
+                  ? "border-accent-purple/60 bg-accent-purple/15 text-forge-ink"
+                  : "border-forge-border bg-forge-surface text-forge-body hover:border-accent-purple/40 hover:text-forge-ink",
+              )}
+            >
+              <ChevronDown
+                className={cn(
+                  "h-3 w-3 transition-transform",
+                  anyActive ? "rotate-180 text-accent-purple" : "",
+                )}
+                aria-hidden
+              />
+              {anyActive ? "Hide all L5 Activities" : "Show all L5 Activities"}
+            </button>
+          ) : null}
+        </div>
       </div>
+
+      {/* Fit-mode caption — explains that per-Activity-Group inline
+          headcount chips are suppressed (no room in a narrow box) so
+          users don't think the data disappeared. */}
+      {fitMode && view.l2.length > 0 ? (
+        <p className="text-[11px] leading-snug text-forge-hint">
+          Per-Activity-Group headcount hidden in fit mode — hover any box for the value.
+        </p>
+      ) : null}
 
       {isPreview ? <PreviewBanner totalL5={totalL5} /> : null}
 
       {/* L1 banner — full width, deepest purple wash. */}
-      <L1Banner name={view.l1Name} hc={towerHeadcount} />
+      <L1Banner name={view.l1Name} hc={towerHeadcount} fitMode={fitMode} />
 
       {/* Single horizontal tier — all L2 groups sit on one row. Each
           group owns its L2 header bar and the L3 columns directly below
-          it. L3 columns are fixed-width so L2 header widths scale
-          naturally with the number of L3s under them, and the whole
-          tier scrolls horizontally as one unit on narrow viewports.
-          ScrollableTier surfaces edge fades + chevron buttons when the
-          content overflows the viewport so users see (and can act on)
-          the cut-off edges. */}
-      <ScrollableTier>
+          it. In scroll mode L3 columns are fixed-width and the tier
+          scrolls horizontally with chevron + edge-fade indicators when
+          it overflows. In fit mode columns share the viewport width via
+          `flex-1 basis-0`, the scroll wrapper turns inert, and box
+          heights grow uniformly to absorb wrapped labels. */}
+      <ScrollableTier fitMode={fitMode}>
         <div className="flex items-stretch gap-5">
           {view.l2.map((l2) => (
             <L2Group
@@ -243,6 +310,7 @@ export function CapabilityMapPanel({
               onToggleL4={toggleL4}
               l3HeadcountFn={l3Headcount}
               l4HeadcountFn={l4Headcount}
+              fitMode={fitMode}
             />
           ))}
         </div>
@@ -265,8 +333,19 @@ export function CapabilityMapPanel({
  * accurate after L4 toggles (which may add the L5 band and shift
  * heights / widths). When content fits, both indicators stay hidden
  * and the wrapper is visually inert.
+ *
+ * In fit mode the panel guarantees the content fits the viewport (L3
+ * columns share width via `flex-1 basis-0`), so this wrapper renders a
+ * plain `div` with no `overflow-x-auto` and no indicators — sub-pixel
+ * rounding can otherwise trigger a phantom scrollbar.
  */
-function ScrollableTier({ children }: { children: React.ReactNode }) {
+function ScrollableTier({
+  children,
+  fitMode,
+}: {
+  children: React.ReactNode;
+  fitMode: boolean;
+}) {
   const ref = React.useRef<HTMLDivElement | null>(null);
   const [canLeft, setCanLeft] = React.useState(false);
   const [canRight, setCanRight] = React.useState(false);
@@ -280,6 +359,12 @@ function ScrollableTier({ children }: { children: React.ReactNode }) {
   }, []);
 
   React.useEffect(() => {
+    if (fitMode) {
+      // Indicators are dormant in fit mode; nothing to wire up.
+      setCanLeft(false);
+      setCanRight(false);
+      return;
+    }
     const el = ref.current;
     if (!el) return;
     update();
@@ -297,13 +382,17 @@ function ScrollableTier({ children }: { children: React.ReactNode }) {
       ro?.disconnect();
       window.removeEventListener("resize", update);
     };
-  }, [update]);
+  }, [update, fitMode]);
 
   const scrollByDir = React.useCallback((dir: -1 | 1) => {
     const el = ref.current;
     if (!el) return;
     el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: "smooth" });
   }, []);
+
+  if (fitMode) {
+    return <div className="pb-1">{children}</div>;
+  }
 
   return (
     <div className="relative">
@@ -427,11 +516,22 @@ function PreviewBanner({ totalL5 }: { totalL5: number }) {
   );
 }
 
-function L1Banner({ name, hc }: { name: string; hc: number | null }) {
+function L1Banner({
+  name,
+  hc,
+  fitMode,
+}: {
+  name: string;
+  hc: number | null;
+  fitMode: boolean;
+}) {
   return (
     <div
       data-l1
-      className="flex items-center justify-between gap-3 rounded-lg border border-accent-purple/50 bg-accent-purple/20 px-4 py-2"
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-lg border border-accent-purple/50 bg-accent-purple/20 px-4",
+        fitMode ? "h-12 py-0" : "py-2",
+      )}
     >
       <div className="flex min-w-0 items-center gap-2">
         <TierBadge tier="l1" />
@@ -457,6 +557,7 @@ function L2Group({
   onToggleL4,
   l3HeadcountFn,
   l4HeadcountFn,
+  fitMode,
 }: {
   l2: MapViewL2;
   hc: number | null;
@@ -464,6 +565,7 @@ function L2Group({
   onToggleL4: (id: string) => void;
   l3HeadcountFn: (l3: MapViewL3) => number | null;
   l4HeadcountFn: (l4: MapViewL4) => number | null;
+  fitMode: boolean;
 }) {
   const anyL4ActiveInL2 = React.useMemo(
     () => l2.l3.some((l3) => l3.l4.some((l4) => active.has(l4.id))),
@@ -471,11 +573,24 @@ function L2Group({
   );
 
   return (
-    <div data-l2-group={l2.name} className="flex shrink-0 flex-col gap-2">
-      <L2HeaderBar name={l2.name} hc={hc} />
+    <div
+      data-l2-group={l2.name}
+      className={cn(
+        "flex flex-col gap-2",
+        // Scroll mode: each L2 group is sized by its content (L3 row
+        // natural width). Fit mode: each L2 group claims a share of the
+        // tier's total width proportional to its L3 count via flex-grow,
+        // so its child L3 columns inherit equal width across every L2.
+        fitMode ? "min-w-0 flex-grow basis-0" : "shrink-0",
+      )}
+      style={fitMode ? { flexGrow: l2.l3.length } : undefined}
+    >
+      <L2HeaderBar name={l2.name} hc={hc} fitMode={fitMode} />
 
-      {/* L3 row: fixed-width columns laid out horizontally. The L2
-          header above naturally spans the full width of this row. */}
+      {/* L3 row: columns laid out horizontally. In scroll mode columns
+          are fixed 200px wide; in fit mode they share width via
+          `flex-1 basis-0`. The L2 header above naturally spans the
+          full width of this row in both modes. */}
       <div className="flex items-stretch gap-3">
         {l2.l3.map((l3) => (
           <L3Column
@@ -485,6 +600,7 @@ function L2Group({
             active={active}
             onToggleL4={onToggleL4}
             l4HeadcountFn={l4HeadcountFn}
+            fitMode={fitMode}
           />
         ))}
       </div>
@@ -501,6 +617,7 @@ function L2Group({
                 key={l3.name}
                 l3={l3}
                 active={active}
+                fitMode={fitMode}
               />
             ))}
           </div>
@@ -510,15 +627,33 @@ function L2Group({
   );
 }
 
-function L2HeaderBar({ name, hc }: { name: string; hc: number | null }) {
+function L2HeaderBar({
+  name,
+  hc,
+  fitMode,
+}: {
+  name: string;
+  hc: number | null;
+  fitMode: boolean;
+}) {
   return (
     <div
       data-l2
-      className="flex items-center justify-between gap-3 rounded-md border border-accent-purple/40 bg-accent-purple/12 px-3 py-1.5"
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-md border border-accent-purple/40 bg-accent-purple/12 px-3",
+        fitMode ? "h-11 py-0" : "h-9 py-0",
+      )}
     >
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         <TierBadge tier="l2" />
-        <span className="truncate font-display text-[13px] font-semibold tracking-wide text-forge-ink">
+        <span
+          className={cn(
+            "min-w-0 flex-1 font-display font-semibold tracking-wide text-forge-ink",
+            fitMode
+              ? "overflow-hidden text-[12px] leading-tight line-clamp-2 break-words"
+              : "truncate text-[13px]",
+          )}
+        >
           {name}
         </span>
       </div>
@@ -539,24 +674,36 @@ function L3Column({
   active,
   onToggleL4,
   l4HeadcountFn,
+  fitMode,
 }: {
   l3: MapViewL3;
   hc: number | null;
   active: Set<string>;
   onToggleL4: (id: string) => void;
   l4HeadcountFn: (l4: MapViewL4) => number | null;
+  fitMode: boolean;
 }) {
   return (
     <div
       data-l3-col={l3.name}
-      className="flex w-[200px] shrink-0 flex-col gap-1.5"
+      className={cn(
+        "flex flex-col gap-1.5",
+        fitMode
+          ? "min-w-0 flex-1 basis-0"
+          : "w-[200px] shrink-0",
+      )}
     >
       <Box
         tier="l3"
         name={l3.name}
         hc={hc}
-        title={l3.name}
+        title={
+          hc != null
+            ? `${l3.name} — ${hc.toLocaleString()} headcount`
+            : l3.name
+        }
         data-l3={l3.name}
+        fitMode={fitMode}
         ariaLabel={
           hc != null
             ? `L3 ${l3.name}, ${hc.toLocaleString()} headcount`
@@ -572,10 +719,15 @@ function L3Column({
             tier="l4"
             name={l4.name}
             hc={l4Hc}
-            title={l4.name}
+            title={
+              l4Hc != null
+                ? `${l4.name} — ${l4Hc.toLocaleString()} headcount`
+                : l4.name
+            }
             isActive={isActive}
             onClick={() => onToggleL4(l4.id)}
             data-l4={l4.id}
+            fitMode={fitMode}
             ariaLabel={
               l4Hc != null
                 ? `L4 ${l4.name}, ${l4Hc.toLocaleString()} headcount${isActive ? ", expanded" : ""}`
@@ -604,9 +756,11 @@ function BandDivider() {
 function L5BandColumnForL3({
   l3,
   active,
+  fitMode,
 }: {
   l3: MapViewL3;
   active: Set<string>;
+  fitMode: boolean;
 }) {
   // Walk every L4 in this L3; render only those whose id is in the active
   // set. Each active L4 contributes a ghost caption + its L5 chips (or an
@@ -616,26 +770,35 @@ function L5BandColumnForL3({
   return (
     <div
       data-l5-col={l3.name}
-      className="flex w-[200px] shrink-0 flex-col gap-1.5"
+      className={cn(
+        "flex flex-col gap-1.5",
+        fitMode
+          ? "min-w-0 flex-1 basis-0"
+          : "w-[200px] shrink-0",
+      )}
     >
       {activeL4s.length === 0 ? (
         <div
           aria-hidden
-          className="h-8 rounded-md border border-dashed border-forge-border/50 bg-forge-page/30"
+          className={cn(
+            "rounded-md border border-dashed border-forge-border/50 bg-forge-page/30",
+            fitMode ? "h-10" : "h-8",
+          )}
         />
       ) : (
         activeL4s.map((l4) => (
           <React.Fragment key={l4.id}>
-            <GhostL4Caption name={l4.name} />
+            <GhostL4Caption name={l4.name} fitMode={fitMode} />
             {l4.l5.length === 0 ? (
               <Box
                 tier="l5-empty"
                 name="No L5 Activities yet — Generate above."
                 hc={null}
                 title="No L5 Activities recorded for this L4 Activity Group. Use Generate L5 Activities above to create them."
+                fitMode={fitMode}
               />
             ) : (
-              l4.l5.map((l5) => <L5Chip key={l5.id} l5={l5} />)
+              l4.l5.map((l5) => <L5Chip key={l5.id} l5={l5} fitMode={fitMode} />)
             )}
           </React.Fragment>
         ))
@@ -644,7 +807,7 @@ function L5BandColumnForL3({
   );
 }
 
-function L5Chip({ l5 }: { l5: MapViewL5 }) {
+function L5Chip({ l5, fitMode }: { l5: MapViewL5; fitMode: boolean }) {
   return (
     <Box
       tier="l5"
@@ -652,19 +815,36 @@ function L5Chip({ l5 }: { l5: MapViewL5 }) {
       hc={null}
       title={l5.name}
       data-l5={l5.id}
+      fitMode={fitMode}
       ariaLabel={`L5 ${l5.name}`}
     />
   );
 }
 
-function GhostL4Caption({ name }: { name: string }) {
+function GhostL4Caption({
+  name,
+  fitMode,
+}: {
+  name: string;
+  fitMode: boolean;
+}) {
   return (
     <div
-      className="flex h-8 w-full items-center gap-1.5 rounded-md border border-dashed border-accent-purple/35 bg-accent-purple/5 px-2"
+      className={cn(
+        "flex w-full items-center gap-1.5 rounded-md border border-dashed border-accent-purple/35 bg-accent-purple/5 px-2",
+        fitMode ? "h-10" : "h-8",
+      )}
       title={name}
     >
       <TierBadge tier="l4" muted />
-      <span className="truncate text-[11px] font-medium leading-none text-accent-purple">
+      <span
+        className={cn(
+          "min-w-0 flex-1 font-medium text-accent-purple",
+          fitMode
+            ? "overflow-hidden text-[10px] leading-tight line-clamp-2 break-words"
+            : "truncate text-[11px] leading-none",
+        )}
+      >
         {name}
       </span>
     </div>
@@ -715,6 +895,7 @@ type BoxBaseProps = {
   ariaLabel?: string;
   ariaPressed?: boolean;
   onClick?: () => void;
+  fitMode: boolean;
   /** Stable dataset markers for future selectors (crawler / tests). */
   "data-l3"?: string;
   "data-l4"?: string;
@@ -723,12 +904,20 @@ type BoxBaseProps = {
 
 /**
  * Single equal-size box used for L3 column header / L4 button / L5 chip.
- * Same height (~32 px) and column width across all tiers; styling differs
- * by tier on the purple-intensity gradient. L4 is the only clickable
- * rung in the main band (the dial-bearing Activity Group); the L3
- * column header is display-only; L5 chips in the bottom band are
- * display-only leaves. Names render on a single line with a `title`
- * attribute carrying the full text.
+ * Every box at a given tier shares the same fixed width (= column width)
+ * AND the same fixed height per mode, so the map reads as a uniform
+ * grid even when labels differ in length. Styling differs by tier on
+ * the purple-intensity gradient. L4 is the only clickable rung in the
+ * main band (the dial-bearing Activity Group); the L3 column header is
+ * display-only; L5 chips in the bottom band are display-only leaves.
+ *
+ * Scroll mode: 32 px tall, single line, `truncate`.
+ * Fit mode: taller boxes (40 / 56 / 48 px for L3 / L4 / L5), label
+ * wraps with `line-clamp` inside the fixed box; overflow text ellipses
+ * and the full label remains accessible via the `title` tooltip. Inline
+ * per-row headcount chips are suppressed in fit mode to free up the
+ * narrow box's text area; per-L4 numbers stay accessible via the
+ * `title` tooltip ("X. {name} — Y headcount") on the L4 button.
  */
 function Box(props: BoxBaseProps) {
   const {
@@ -740,11 +929,22 @@ function Box(props: BoxBaseProps) {
     ariaLabel,
     ariaPressed,
     onClick,
+    fitMode,
     ...rest
   } = props;
 
+  // Fixed heights per tier per mode. `min-h` is intentionally NOT used —
+  // boxes must be the SAME height across the entire view.
+  const heightClass =
+    tier === "l3"
+      ? fitMode ? "h-10" : "h-8"
+      : tier === "l4"
+        ? fitMode ? "h-14" : "h-8"
+        : /* l5 / l5-empty */ fitMode ? "h-12" : "h-8";
+
   const className = cn(
-    "flex h-8 w-full items-center gap-1.5 rounded-md border px-2 text-left transition",
+    "flex w-full items-center gap-1.5 rounded-md border px-2 text-left transition",
+    heightClass,
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/40",
     tier === "l3" &&
       "border-accent-purple/35 bg-accent-purple/12 text-forge-ink",
@@ -758,12 +958,30 @@ function Box(props: BoxBaseProps) {
       "border-dashed border-forge-border bg-forge-page/40 text-forge-hint",
   );
 
+  // Font sizes drop one notch in fit mode; labels wrap with line-clamp
+  // inside the fixed box. Scroll mode keeps the original single-line
+  // truncate behavior.
   const nameClass = cn(
-    "min-w-0 flex-1 truncate leading-none",
-    tier === "l3" && "font-display text-[12px] font-semibold",
-    tier === "l4" && "text-[11px] font-medium",
-    tier === "l5" && "text-[10px] italic-none",
-    tier === "l5-empty" && "text-[11px]",
+    "min-w-0 flex-1",
+    fitMode
+      ? "overflow-hidden break-words leading-tight"
+      : "truncate leading-none",
+    tier === "l3" &&
+      (fitMode
+        ? "font-display text-[11px] font-semibold line-clamp-2"
+        : "font-display text-[12px] font-semibold"),
+    tier === "l4" &&
+      (fitMode
+        ? "text-[10px] font-medium line-clamp-3"
+        : "text-[11px] font-medium"),
+    tier === "l5" &&
+      (fitMode
+        ? "text-[9px] line-clamp-2"
+        : "text-[10px] italic-none"),
+    tier === "l5-empty" &&
+      (fitMode
+        ? "text-[10px] line-clamp-2"
+        : "text-[11px]"),
   );
 
   // L5-empty placeholder doesn't show a badge — keeps the dashed empty state quiet.
@@ -773,12 +991,18 @@ function Box(props: BoxBaseProps) {
         : tier === "l5" ? "l5"
           : null;
 
+  // Per-row inline headcount chip is suppressed in fit mode — the chip
+  // would steal the box's text area at narrow column widths and break
+  // the line-clamp budget. The L1 / L2 banner totals stay visible, and
+  // the per-L4 number remains in the `title` tooltip on hover.
+  const showInlineHc = hc != null && !fitMode;
+
   const inner = (
     <>
       {badgeTier ? <TierBadge tier={badgeTier} /> : null}
       <span className={nameClass}>{name}</span>
-      {hc != null ? (
-        <HeadcountCluster hc={hc} variant="chip" title={CHIP_HC_TITLE} />
+      {showInlineHc ? (
+        <HeadcountCluster hc={hc as number} variant="chip" title={CHIP_HC_TITLE} />
       ) : null}
     </>
   );

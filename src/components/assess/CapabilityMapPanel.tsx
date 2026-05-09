@@ -74,12 +74,12 @@ type Props = {
  *   - "fit" — L3 columns share the visible width via `flex-1 basis-0`,
  *     so the entire map fits on one screen. To compensate for narrower
  *     columns, every box at a given tier (L3 / L4 / L5) gets a uniform
- *     fixed height (taller than scroll mode), the label font drops one
- *     notch, and labels wrap inside the fixed box with `line-clamp` —
- *     overflow text ellipses, full label remains in the `title` tooltip.
- *     Per-row inline headcount chips are suppressed in this mode (no
- *     room); L1 and L2 banner totals stay visible, and per-L4 numbers
- *     remain on hover.
+ *     fixed height (taller than scroll mode), label fonts drop, and
+ *     labels wrap inside the fixed box with `line-clamp` — overflow
+ *     ellipses, full label remains in the `title` tooltip. Every tier
+ *     badge (L1-L5) and every FTE / headcount display is suppressed
+ *     for a clean executive grid; the L1 / L2 banners and each box
+ *     carry a `title` tooltip with the count so hover surfaces it.
  *
  * Source of truth: rows always when present; the predefined map only
  * when `isPreview === true` (no rows yet).
@@ -278,12 +278,13 @@ export function CapabilityMapPanel({
         </div>
       </div>
 
-      {/* Fit-mode caption — explains that per-Activity-Group inline
-          headcount chips are suppressed (no room in a narrow box) so
-          users don't think the data disappeared. */}
+      {/* Fit-mode caption — explains that tier badges (L1-L5) and every
+          headcount display are suppressed (no room in a narrow box) so
+          users don't think the data disappeared. Every banner / box
+          carries a `title` tooltip with the count so hover reveals it. */}
       {fitMode && view.l2.length > 0 ? (
         <p className="text-[11px] leading-snug text-forge-hint">
-          Per-Activity-Group headcount hidden in fit mode — hover any box for the value.
+          Tier badges and headcount hidden in fit mode — hover any box for the value.
         </p>
       ) : null}
 
@@ -300,7 +301,12 @@ export function CapabilityMapPanel({
           `flex-1 basis-0`, the scroll wrapper turns inert, and box
           heights grow uniformly to absorb wrapped labels. */}
       <ScrollableTier fitMode={fitMode}>
-        <div className="flex items-stretch gap-5">
+        <div
+          className={cn(
+            "flex items-stretch",
+            fitMode ? "gap-2" : "gap-5",
+          )}
+        >
           {view.l2.map((l2) => (
             <L2Group
               key={l2.name}
@@ -525,21 +531,35 @@ function L1Banner({
   hc: number | null;
   fitMode: boolean;
 }) {
+  // In fit mode the L1 badge and inline FTE cluster are hidden, so the
+  // cluster's own `title` hover goes with them. Move the headcount info
+  // onto the banner root so users can still hover the tower name to see
+  // the total — the panel caption explicitly tells them they can.
+  const hoverTitle =
+    fitMode && hc != null
+      ? `${name} — total headcount across this tower: ${hc.toLocaleString()} (FTE + contractor, onshore + offshore)`
+      : undefined;
   return (
     <div
       data-l1
+      title={hoverTitle}
       className={cn(
-        "flex items-center justify-between gap-3 rounded-lg border border-accent-purple/50 bg-accent-purple/20 px-4",
-        fitMode ? "h-12 py-0" : "py-2",
+        "flex items-center justify-between gap-3 rounded-lg border border-accent-purple/50 bg-accent-purple/20",
+        fitMode ? "h-9 px-2 py-0" : "px-4 py-2",
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <TierBadge tier="l1" />
-        <span className="truncate font-display text-sm font-semibold tracking-wide text-forge-ink">
+        {fitMode ? null : <TierBadge tier="l1" />}
+        <span
+          className={cn(
+            "truncate font-display font-semibold tracking-wide text-forge-ink",
+            fitMode ? "text-[11px]" : "text-sm",
+          )}
+        >
           {name}
         </span>
       </div>
-      {hc != null ? (
+      {!fitMode && hc != null ? (
         <HeadcountCluster
           hc={hc}
           variant="banner"
@@ -576,7 +596,8 @@ function L2Group({
     <div
       data-l2-group={l2.name}
       className={cn(
-        "flex flex-col gap-2",
+        "flex flex-col",
+        fitMode ? "gap-1" : "gap-2",
         // Scroll mode: each L2 group is sized by its content (L3 row
         // natural width). Fit mode: each L2 group claims a share of the
         // tier's total width proportional to its L3 count via flex-grow,
@@ -591,7 +612,12 @@ function L2Group({
           are fixed 200px wide; in fit mode they share width via
           `flex-1 basis-0`. The L2 header above naturally spans the
           full width of this row in both modes. */}
-      <div className="flex items-stretch gap-3">
+      <div
+        className={cn(
+          "flex items-stretch",
+          fitMode ? "gap-1" : "gap-3",
+        )}
+      >
         {l2.l3.map((l3) => (
           <L3Column
             key={l3.name}
@@ -611,7 +637,12 @@ function L2Group({
       {anyL4ActiveInL2 ? (
         <>
           <BandDivider />
-          <div className="flex items-start gap-3">
+          <div
+            className={cn(
+              "flex items-start",
+              fitMode ? "gap-1" : "gap-3",
+            )}
+          >
             {l2.l3.map((l3) => (
               <L5BandColumnForL3
                 key={l3.name}
@@ -636,28 +667,36 @@ function L2HeaderBar({
   hc: number | null;
   fitMode: boolean;
 }) {
+  // Mirror L1Banner: in fit mode the L2 badge + inline FTE cluster are
+  // hidden, so we promote the headcount info onto the bar's parent
+  // title so hover still surfaces the value.
+  const hoverTitle =
+    fitMode && hc != null
+      ? `${name} — total headcount across this Job Grouping: ${hc.toLocaleString()} (FTE + contractor, onshore + offshore)`
+      : undefined;
   return (
     <div
       data-l2
+      title={hoverTitle}
       className={cn(
-        "flex items-center justify-between gap-3 rounded-md border border-accent-purple/40 bg-accent-purple/12 px-3",
-        fitMode ? "h-11 py-0" : "h-9 py-0",
+        "flex items-center justify-between gap-3 rounded-md border border-accent-purple/40 bg-accent-purple/12",
+        fitMode ? "h-8 px-1.5 py-0" : "h-9 px-3 py-0",
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <TierBadge tier="l2" />
+        {fitMode ? null : <TierBadge tier="l2" />}
         <span
           className={cn(
             "min-w-0 flex-1 font-display font-semibold tracking-wide text-forge-ink",
             fitMode
-              ? "overflow-hidden text-[12px] leading-tight line-clamp-2 break-words"
+              ? "overflow-hidden text-[10px] leading-tight line-clamp-2 break-words"
               : "truncate text-[13px]",
           )}
         >
           {name}
         </span>
       </div>
-      {hc != null ? (
+      {!fitMode && hc != null ? (
         <HeadcountCluster
           hc={hc}
           variant="section"
@@ -687,7 +726,8 @@ function L3Column({
     <div
       data-l3-col={l3.name}
       className={cn(
-        "flex flex-col gap-1.5",
+        "flex flex-col",
+        fitMode ? "gap-0.5" : "gap-1.5",
         fitMode
           ? "min-w-0 flex-1 basis-0"
           : "w-[200px] shrink-0",
@@ -771,7 +811,8 @@ function L5BandColumnForL3({
     <div
       data-l5-col={l3.name}
       className={cn(
-        "flex flex-col gap-1.5",
+        "flex flex-col",
+        fitMode ? "gap-0.5" : "gap-1.5",
         fitMode
           ? "min-w-0 flex-1 basis-0"
           : "w-[200px] shrink-0",
@@ -780,10 +821,7 @@ function L5BandColumnForL3({
       {activeL4s.length === 0 ? (
         <div
           aria-hidden
-          className={cn(
-            "rounded-md border border-dashed border-forge-border/50 bg-forge-page/30",
-            fitMode ? "h-10" : "h-8",
-          )}
+          className="h-8 rounded-md border border-dashed border-forge-border/50 bg-forge-page/30"
         />
       ) : (
         activeL4s.map((l4) => (
@@ -831,17 +869,17 @@ function GhostL4Caption({
   return (
     <div
       className={cn(
-        "flex w-full items-center gap-1.5 rounded-md border border-dashed border-accent-purple/35 bg-accent-purple/5 px-2",
-        fitMode ? "h-10" : "h-8",
+        "flex w-full items-center rounded-md border border-dashed border-accent-purple/35 bg-accent-purple/5",
+        fitMode ? "h-8 gap-0 px-1" : "h-8 gap-1.5 px-2",
       )}
       title={name}
     >
-      <TierBadge tier="l4" muted />
+      {fitMode ? null : <TierBadge tier="l4" muted />}
       <span
         className={cn(
           "min-w-0 flex-1 font-medium text-accent-purple",
           fitMode
-            ? "overflow-hidden text-[10px] leading-tight line-clamp-2 break-words"
+            ? "overflow-hidden text-[8px] leading-tight line-clamp-2 break-words"
             : "truncate text-[11px] leading-none",
         )}
       >
@@ -942,9 +980,13 @@ function Box(props: BoxBaseProps) {
         ? fitMode ? "h-14" : "h-8"
         : /* l5 / l5-empty */ fitMode ? "h-12" : "h-8";
 
+  // Padding + internal gap shrink hard in fit mode — every saved pixel
+  // is a character that fits on a line in narrow columns. Badge is
+  // hidden so the inner flex has only the name span; gap-0 is fine.
   const className = cn(
-    "flex w-full items-center gap-1.5 rounded-md border px-2 text-left transition",
+    "flex w-full items-center rounded-md border text-left transition",
     heightClass,
+    fitMode ? "gap-0 px-1" : "gap-1.5 px-2",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/40",
     tier === "l3" &&
       "border-accent-purple/35 bg-accent-purple/12 text-forge-ink",
@@ -958,9 +1000,10 @@ function Box(props: BoxBaseProps) {
       "border-dashed border-forge-border bg-forge-page/40 text-forge-hint",
   );
 
-  // Font sizes drop one notch in fit mode; labels wrap with line-clamp
-  // inside the fixed box. Scroll mode keeps the original single-line
-  // truncate behavior.
+  // Font sizes drop further in fit mode and `line-clamp` allows
+  // additional lines to absorb wrapped labels (text-[8px] with
+  // leading-tight ~10px line-height fits 4 lines comfortably in h-14).
+  // Scroll mode keeps the original single-line truncate.
   const nameClass = cn(
     "min-w-0 flex-1",
     fitMode
@@ -968,25 +1011,28 @@ function Box(props: BoxBaseProps) {
       : "truncate leading-none",
     tier === "l3" &&
       (fitMode
-        ? "font-display text-[11px] font-semibold line-clamp-2"
+        ? "font-display text-[9px] font-semibold line-clamp-2"
         : "font-display text-[12px] font-semibold"),
     tier === "l4" &&
       (fitMode
-        ? "text-[10px] font-medium line-clamp-3"
+        ? "text-[8px] font-medium line-clamp-4"
         : "text-[11px] font-medium"),
     tier === "l5" &&
       (fitMode
-        ? "text-[9px] line-clamp-2"
+        ? "text-[8px] line-clamp-3"
         : "text-[10px] italic-none"),
     tier === "l5-empty" &&
       (fitMode
-        ? "text-[10px] line-clamp-2"
+        ? "text-[8px] line-clamp-2"
         : "text-[11px]"),
   );
 
-  // L5-empty placeholder doesn't show a badge — keeps the dashed empty state quiet.
-  const badgeTier: TierKey | null =
-    tier === "l3" ? "l3"
+  // Tier badges are hidden in fit mode (less visual clutter at narrow
+  // box widths). L5-empty never carries a badge anyway. In scroll mode
+  // the badge keeps the tier signal that the gradient alone doesn't.
+  const badgeTier: TierKey | null = fitMode
+    ? null
+    : tier === "l3" ? "l3"
       : tier === "l4" ? "l4"
         : tier === "l5" ? "l5"
           : null;

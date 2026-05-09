@@ -425,8 +425,24 @@ async function callOpenAi(args: {
 
 const FORBIDDEN_NUMERIC_RE = /[\$%]|\d{2,}/;
 
+/**
+ * Reject fabricated dollar/percent/FTE figures the engine should own. The
+ * prompt explicitly asks for some structural digits — `P1/P2/P3` phase
+ * keys, `24-month` durations, `M24` milestone refs, `13 towers` — so we
+ * strip those before testing for forbidden numerics.
+ */
 function containsForbiddenNumeric(s: string): boolean {
-  const stripped = s.replace(/\bP[123]\b/g, "");
+  const stripped = s
+    .replace(/\bP[123]\b/g, "")
+    .replace(/\bM\d+\b/g, "")
+    .replace(
+      /\b\d+(?:[-–\s]?\d+)?[-\s](?:month|months|week|weeks|year|years|day|days|hour|hours|minute|minutes)\b/gi,
+      "",
+    )
+    .replace(
+      /\b\d+\s+(?:towers?|functions?|entities?|brands?|networks?|workshops?|leads?)\b/gi,
+      "",
+    );
   return FORBIDDEN_NUMERIC_RE.test(stripped);
 }
 

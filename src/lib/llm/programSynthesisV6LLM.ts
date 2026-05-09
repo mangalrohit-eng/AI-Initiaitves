@@ -354,9 +354,32 @@ function sanitizeStringArray(v: unknown): string[] {
   return out;
 }
 
+/**
+ * Guard against the LLM authoring fabricated metrics the engine should own
+ * (dollar figures, percentages, FTE counts, savings claims). The prompt
+ * explicitly asks for some structural digits in places — `24-month`,
+ * `13 towers`, milestone identifiers like `M24`, phase keys `P1/P2/P3` —
+ * so we strip those before checking for forbidden numerics.
+ */
 function passesDeterminismGuard(s: string): boolean {
   if (s.includes("$") || s.includes("%")) return false;
-  if (/\d{2,}/.test(s)) return false;
+  // Strip known-safe structural patterns before the multi-digit check.
+  const stripped = s
+    // Phase tier keys (P1, P2, P3)
+    .replace(/\bP[123]\b/g, "")
+    // Milestone identifiers (M1, M24, etc.)
+    .replace(/\bM\d+\b/g, "")
+    // Duration ranges/phrases: "24-month", "12 months", "two-year", etc.
+    .replace(
+      /\b\d+(?:[-–\s]?\d+)?[-\s](?:month|months|week|weeks|year|years|day|days|hour|hours|minute|minutes)\b/gi,
+      "",
+    )
+    // Versant org-scale references: "13 towers", "7 entities", "4 brands"
+    .replace(
+      /\b\d+\s+(?:towers?|functions?|entities?|brands?|networks?|workshops?|leads?)\b/gi,
+      "",
+    );
+  if (/\d{2,}/.test(stripped)) return false;
   const lower = s.toLowerCase();
   for (const phrase of HEDGE_PHRASES) {
     if (lower.includes(phrase.toLowerCase())) return false;

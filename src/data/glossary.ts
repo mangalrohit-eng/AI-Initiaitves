@@ -115,9 +115,9 @@ export const glossary: GlossaryEntry[] = [
   {
     id: "feasibility",
     category: "Prioritisation & delivery",
-    term: "Feasibility (Ship-ready / Investigate)",
-    short: "Per-L5 Activity ship-readiness signal — set on each tower's Step 4.",
-    long: "Binary signal on every AI-eligible L5 Activity. Ship-ready = leverages a proven Versant platform or pattern (BlackLine, Eightfold, Amagi, Workday, etc.) and can land in the first half-year. Investigate = needs new platform stand-up, deeper integration, or heavier change management. Feasibility is a tower-level signal only — it never sets program priority.",
+    term: "Feasibility (Proven pattern / New build)",
+    short: "Per-L5 Activity feasibility signal — set on each tower's Step 4.",
+    long: "Binary signal on every AI-eligible L5 Activity. Proven pattern = leverages an existing Versant platform or vendor pattern (BlackLine, Eightfold, Amagi, Workday, etc.); estimated first-half-year landing once funded. New build = no existing pattern at Versant; needs platform stand-up, deeper integration, or heavier change management. Feasibility is a tower-level signal only — it never sets program priority on its own.",
   },
   {
     id: "priority-tier",

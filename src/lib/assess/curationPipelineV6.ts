@@ -188,10 +188,12 @@ export async function runForL3Rows(
           tagline: p.tagline,
           aiRationale: p.aiRationale,
           feasibility: p.feasibility,
+          ...(p.iconKey ? { iconKey: p.iconKey } : {}),
           ...(p.primaryVendor ? { primaryVendor: p.primaryVendor } : {}),
           ...(p.coversL4RowIds && p.coversL4RowIds.length > 0
             ? { coversL4RowIds: p.coversL4RowIds }
             : {}),
+          ...(p.promptVersion ? { promptVersion: p.promptVersion } : {}),
           source: itemSource,
           generatedAt,
         }));

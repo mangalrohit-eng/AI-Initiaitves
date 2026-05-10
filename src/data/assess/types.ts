@@ -68,8 +68,17 @@ export type GeneratedProcessCache = {
   process: Process;
   generatedAt: string;
   source: "llm" | "fallback";
-  /** Present when `source === "llm"`: which model and API path the server used. */
-  inference?: { model: string; mode: "responses" | "chat" };
+  /**
+   * Present when `source === "llm"`: which model and API path the server
+   * used. `promptVersion` lets the UI detect cache authored under an
+   * older prompt (e.g. before the descriptive-naming + iconKey upgrade)
+   * and surface a "regenerate to apply" hint without erasing the cache.
+   */
+  inference?: {
+    model: string;
+    mode: "responses" | "chat";
+    promptVersion?: string;
+  };
 };
 
 /**
@@ -327,11 +336,15 @@ export type L3Initiative = {
   /** Stable id — hash of `(towerId + l3RowId + slugified solutionName)`. */
   id: string;
   /**
-   * Specific AI Solution name. MUST be a product/solution Versant could
-   * build or buy ("Agentic AI Financial Close Co-Pilot"). MUST NOT be an
-   * activity name ("Bank Reconciliations"). The post-LLM linter rejects
-   * names containing common activity verbs (Reconciliation, Drafting,
-   * Recognition, Matching, etc.) and forces a regen.
+   * Specific AI Solution name. MUST be self-explanatory: 5-10 words,
+   * descriptive, leading with the user-visible action / object the
+   * solution acts on, drawn from the L3 Job Family's own domain
+   * vocabulary (recruiting / sourcing for HR; clearance / windowing for
+   * Rights; pacing / yield for Ad Sales; close / consolidation for
+   * Finance; copy-edit / fact-check for Editorial; etc.). The post-LLM
+   * validator enforces structural rules (length, action+object pairing,
+   * no "Versant", no AI marketing fluff) but does NOT hard-code a verb
+   * whitelist — different towers use very different action words.
    */
   solutionName: string;
   /** 1-line description shown under the solution name on the L3 card. */
@@ -342,6 +355,18 @@ export type L3Initiative = {
   feasibility: Feasibility;
   /** Named primary vendor or short stack ("BlackLine + HighRadius"). */
   primaryVendor?: string;
+  /**
+   * Lucide icon key picked by the curator LLM from the curated allowlist
+   * in `src/lib/initiatives/solutionIconAllowlist.ts`. Renders as the
+   * card glyph in `SolutionCardV2`. Optional for back-compat: legacy
+   * initiatives authored before the icon upgrade fall back to a per-
+   * tower-domain bucket pick (so Finance cards show Calculator / Receipt
+   * / Banknote / Vault rather than all rendering Rocket), then to a
+   * feasibility-based default (Rocket for Proven pattern, Compass for
+   * New build). Validator silently coerces off-allowlist values to
+   * undefined so the renderer applies the same fallback.
+   */
+  iconKey?: string;
   /**
    * Subset of child L4 Activity Group ids this solution addresses. Empty
    * (or undefined) means "covers the whole L3" (every child L4). UI
@@ -358,6 +383,13 @@ export type L3Initiative = {
   generatedProcess?: GeneratedProcessCache;
   /** Provenance. */
   source: "llm" | "fallback" | "manual";
+  /**
+   * Prompt version the initiative was authored under. Lets the UI flag
+   * legacy cache (e.g. brand-codename naming, no iconKey) and offer a
+   * one-click regenerate without erasing the existing entry. Absent on
+   * pre-upgrade snapshots (treated as legacy).
+   */
+  promptVersion?: string;
   /** ISO timestamp the initiative was generated (or last regenerated). */
   generatedAt: string;
 };

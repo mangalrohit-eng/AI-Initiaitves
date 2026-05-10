@@ -48,9 +48,10 @@ export type V6InitiativeCard = {
   /** Stable id from `L3Initiative.id` (or synthesized for placeholder cards). */
   id: string;
   /**
-   * Specific AI Solution name — the product Versant could build or buy
-   * (e.g. "Agentic AI News Production Co-Pilot"). Never an activity
-   * label; the LLM and the validator enforce this.
+   * Specific AI Solution name — descriptive, self-explanatory product
+   * label (e.g. "Intercompany Close Reconciliation Co-Pilot"). The
+   * curator LLM + validator enforce that the name reads like a clear
+   * 5-10 word title (not an opaque codename).
    */
   solutionName: string;
   /** One-sentence elevator pitch. Always present on real initiatives. */
@@ -61,6 +62,13 @@ export type V6InitiativeCard = {
   feasibility?: Feasibility;
   /** Named vendor when one is anchored (e.g. "Descript"). */
   primaryVendor?: string;
+  /**
+   * Lucide icon key picked by the curator LLM from the curated allowlist
+   * in `src/lib/initiatives/solutionIconAllowlist.ts`. Optional — the
+   * `SolutionIcon` component falls back to a feasibility-based default
+   * (Rocket / Compass) when missing or off-allowlist.
+   */
+  iconKey?: string;
   /**
    * L4 row ids this initiative spans inside its parent L3 (context).
    * Empty array means "covers the whole L3" — every child L4. UI
@@ -77,6 +85,13 @@ export type V6InitiativeCard = {
    * placeholders.
    */
   initiativeHref?: string;
+  /**
+   * Prompt version the initiative was authored under. Used by the
+   * "AI naming was upgraded" hint on `RegenerateAiGuidanceToolbar` so
+   * legacy cache (no `promptVersion` or an older one) can be flagged
+   * for refresh without erasing the existing entry.
+   */
+  promptVersion?: string;
 };
 
 export type V6L3Row = {
@@ -256,9 +271,11 @@ function buildCardFromInitiative(
     aiRationale: init.aiRationale,
     feasibility: init.feasibility,
     primaryVendor: init.primaryVendor,
+    iconKey: init.iconKey,
     coversL4RowIds: init.coversL4RowIds ?? [],
     isPlaceholder: false,
     initiativeHref: `/tower/${towerId}/initiative/${encodeURIComponent(l3RowId)}/${encodeURIComponent(init.id)}`,
+    promptVersion: init.promptVersion,
   };
 }
 

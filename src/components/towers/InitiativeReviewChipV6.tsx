@@ -3,9 +3,9 @@
 import * as React from "react";
 import { Archive, CheckCircle2 } from "lucide-react";
 import type { Tower } from "@/data/types";
-import { useInitiativeReviews } from "@/lib/initiatives/useInitiativeReviews";
+import { useInitiativeReviewsV6 } from "@/lib/initiatives/useInitiativeReviewsV6";
+import { RejectedInitiativesDrawer } from "@/components/operatingModel/RejectedInitiativesDrawer";
 import { cn } from "@/lib/utils";
-import { RejectedInitiativesDrawer } from "./RejectedInitiativesDrawer";
 
 type Props = {
   tower: Tower;
@@ -13,15 +13,22 @@ type Props = {
 };
 
 /**
- * Section-header chip for the AI Initiatives surfaces.
+ * V6 sibling of `<InitiativeReviewChip>` used on the per-tower AI
+ * Initiatives page (`/tower/[slug]`). Reads the v6 review hook so the
+ * tally reflects the AI Solutions cards actually rendered in
+ * `<SolutionsGallery>` — clicking validate / reject in the gallery
+ * footer updates this chip in real time via the shared `assessProgram`
+ * subscription.
  *
- * Always-visible tally of `N validated · N rejected · N pending` so the
- * review state is permanent program telemetry — never hidden behind an
- * empty-zero collapse. Clicking the rejected segment opens the
- * `RejectedInitiativesDrawer` so a Tower Lead can review and restore.
+ * The "rejected" segment opens the schema-agnostic
+ * `<RejectedInitiativesDrawer>` so the lead can restore an idea.
+ *
+ * The Postgres-synced `initiativeReviews` map is shared between v5
+ * (L4-id keyed) and v6 (V6 initiative-id keyed) decisions; this chip
+ * counts only the v6 keys reachable from the current tower's gallery.
  */
-export function InitiativeReviewChip({ tower, className }: Props) {
-  const { counts, rejectedItems, actions } = useInitiativeReviews(tower);
+export function InitiativeReviewChipV6({ tower, className }: Props) {
+  const { counts, rejectedItems, actions } = useInitiativeReviewsV6(tower);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
 
   return (
@@ -31,7 +38,7 @@ export function InitiativeReviewChip({ tower, className }: Props) {
           "inline-flex flex-wrap items-center gap-1.5 rounded-full border border-forge-border bg-forge-surface px-2 py-1 text-[11px] shadow-sm",
           className,
         )}
-        title="Tower-lead review status across every AI initiative on this tower"
+        title="Tower-lead validate / reject status across every AI Solution card on this tower"
       >
         <span className="inline-flex items-center gap-1 rounded-full bg-accent-teal/10 px-2 py-0.5 text-emerald-900">
           <CheckCircle2 className="h-3 w-3" aria-hidden />
@@ -42,7 +49,7 @@ export function InitiativeReviewChip({ tower, className }: Props) {
           type="button"
           onClick={() => setDrawerOpen(true)}
           className="inline-flex items-center gap-1 rounded-full bg-accent-red/10 px-2 py-0.5 text-red-900 transition hover:bg-accent-red/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-red/40"
-          title="Review and restore rejected ideas"
+          title="Review and restore rejected AI Solutions"
         >
           <Archive className="h-3 w-3" aria-hidden />
           <span className="font-mono tabular-nums">{counts.rejected}</span>
@@ -58,7 +65,7 @@ export function InitiativeReviewChip({ tower, className }: Props) {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         rejectedItems={rejectedItems.map((it) => ({
-          id: it.l4Id,
+          id: it.initId,
           review: it.review,
         }))}
         onRestore={actions.restore}

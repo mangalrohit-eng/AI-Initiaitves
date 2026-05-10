@@ -21,8 +21,8 @@ import { useRedactDollars } from "@/lib/clientMode";
  * Step 4 deliberately does NOT show P1/P2/P3 priority chips. Program
  * priority is owned by the cross-tower 2x2 (feasibility × business
  * impact) and lives on the Cross-Tower AI Plan page. Here we surface
- * the binary feasibility signal so a tower lead can scan ship-ready
- * bets vs. those that need more investigation.
+ * the binary feasibility signal so a tower lead can scan Proven
+ * pattern bets vs. those that need a New build.
  *
  * Under v6 the roster is cards-per-AI-Solution, not per-L5-Activity —
  * each card carries the specific solution name + its parent L3 Job
@@ -103,18 +103,18 @@ export function AiRoadmapV6({ tower }: { tower: Tower }) {
   const columns: FeasibilityColumn[] = [
     {
       key: "High",
-      title: "Ship-ready",
+      title: "Proven pattern",
       subtitle:
-        "High feasibility — proven Versant platform / pattern; first-half-year ship.",
+        "Leverages a proven Versant platform or pattern; estimated first-half-year landing once funded.",
       items: grouped.High,
       iconBg: "from-accent-teal to-emerald-500",
       Icon: Rocket,
     },
     {
       key: "Low",
-      title: "Investigate",
+      title: "New build",
       subtitle:
-        "Lower feasibility — needs platform stand-up, deeper integration, or change management.",
+        "No existing pattern at Versant — needs platform stand-up, deeper integration, or change management.",
       items: grouped.Low,
       iconBg: "from-slate-500 to-slate-700",
       Icon: Compass,

@@ -187,7 +187,7 @@ function buildSnapshot(l4: InitiativeL4, l3: InitiativeL3): InitiativeReviewSnap
   };
   if (l4.aiRationale) snap.aiRationale = l4.aiRationale;
   // Capture binary feasibility on the snapshot so the rejected drawer can
-  // show "ship-ready / investigate" without echoing the deprecated P-tier.
+  // show "Proven pattern / New build" without echoing the deprecated P-tier.
   if (l4.feasibility) snap.feasibility = l4.feasibility;
   return snap;
 }

@@ -50,6 +50,15 @@ export type Tower = {
   // P1 — ISO date string of the last content-meaningful update. Used by RSS
   // feed, /changelog page, and "Updated since your last visit" badges.
   lastUpdated?: string;
+  /**
+   * Per-tower iconographic motif. Resolved through the same curated
+   * Lucide allowlist as per-solution icons (`solutionIconAllowlist.ts`).
+   * Used in `TowerHeroV2` next to the `>` chevron and in the
+   * `TowerSwitcher` row entries so the 13 towers feel visually distinct.
+   * Optional for back-compat — towers without it render with a
+   * neutral chevron-only header.
+   */
+  iconKey?: string;
 };
 
 export type TopOpportunity = {

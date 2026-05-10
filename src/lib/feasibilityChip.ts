@@ -25,26 +25,33 @@ export type FeasibilityChipStyle = {
  * High feasibility — leverages an existing platform / pattern (BlackLine,
  * Eightfold, Amagi, Workday, etc.) and ships in the first half-year. Maps
  * to the HF axis of the cross-tower 2x2.
+ *
+ * Display label is "Proven pattern" — calling out the *evidence* (the
+ * Versant platform / vendor pattern already exists) rather than over-
+ * promising "Ship-ready" delivery readiness.
  */
 const HIGH: FeasibilityChipStyle = {
   badge: "border-accent-teal/40 bg-accent-teal/10 text-emerald-900",
   dot: "bg-accent-teal",
-  label: "Ship-ready",
+  label: "Proven pattern",
   tooltip:
-    "High feasibility — leverages a proven Versant platform or pattern; suitable for a first-half-year ship. Final program priority is set by the cross-tower 2x2.",
+    "Leverages a proven Versant platform or pattern (BlackLine, Eightfold, Amagi, Workday). The build pattern exists — estimated first-half-year landing once funded. Final program priority is set on the Cross-Tower AI Plan.",
 };
 
 /**
  * Low feasibility — needs new platform stand-up, multi-system integration, or
  * heavier change management. Maps to the LF axis of the 2x2 (P3 if the parent
  * L3 carries high impact, Deprioritized otherwise).
+ *
+ * Display label is "New build" — honest about the absence of an
+ * existing pattern at Versant.
  */
 const LOW: FeasibilityChipStyle = {
   badge: "border-slate-300 bg-slate-100 text-slate-700",
   dot: "bg-slate-500",
-  label: "Investigate",
+  label: "New build",
   tooltip:
-    "Low feasibility — likely needs new platform, deeper integration, or heavier change management. Held for the cross-tower 2x2 to decide priority (Strategic Build vs. Deprioritized).",
+    "No existing platform pattern at Versant — needs new platform stand-up, deeper integration, or heavier change management. Held for the cross-tower 2x2 to weigh against business impact.",
 };
 
 const UNKNOWN: FeasibilityChipStyle = {

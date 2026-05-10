@@ -51,6 +51,7 @@ import {
 import { ProcessMetrics } from "@/components/processes/ProcessMetrics";
 import { BusinessCase } from "@/components/processes/BusinessCase";
 import { ProcessExperience } from "@/components/processes/ProcessExperience";
+import { SolutionIcon } from "@/components/towers/SolutionIcon";
 import { feasibilityChip } from "@/lib/feasibilityChip";
 import type {
   AssessProgramV2,
@@ -316,22 +317,32 @@ export default function V6InitiativePage() {
         <header className="mt-6 space-y-4">
           <div className="rounded-2xl border border-forge-border bg-forge-surface p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-forge-hint">
-                  <span>{row.l2}</span>
-                  <span className="text-forge-subtle">›</span>
-                  <span>{row.l3}</span>
+              <div className="flex min-w-0 items-start gap-4">
+                <SolutionIcon
+                  iconKey={initiative.iconKey}
+                  feasibility={initiative.feasibility}
+                  size="xl"
+                  className="mt-1 shrink-0"
+                  towerIconKey={tower?.iconKey}
+                  seed={initiative.id}
+                />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-forge-hint">
+                    <span>{row.l2}</span>
+                    <span className="text-forge-subtle">›</span>
+                    <span>{row.l3}</span>
+                  </div>
+                  <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">
+                    {resolvedProcess ? (
+                      <>&gt; {resolvedProcess.name}</>
+                    ) : (
+                      <>&gt; {initiative.solutionName}</>
+                    )}
+                  </h1>
+                  <p className="mt-2 max-w-4xl text-sm leading-relaxed text-forge-body">
+                    {headerSubtitle}
+                  </p>
                 </div>
-                <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">
-                  {resolvedProcess ? (
-                    <>&gt; {resolvedProcess.name}</>
-                  ) : (
-                    <>&gt; {initiative.solutionName}</>
-                  )}
-                </h1>
-                <p className="mt-2 max-w-4xl text-sm leading-relaxed text-forge-body">
-                  {headerSubtitle}
-                </p>
               </div>
               <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
                 {feas ? (

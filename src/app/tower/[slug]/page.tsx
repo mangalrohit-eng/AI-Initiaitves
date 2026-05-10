@@ -1,40 +1,66 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Map } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { TowerAiLeadToolbar } from "@/components/towers/TowerAiLeadToolbar";
 import { PageShell } from "@/components/PageShell";
-import { AiInitiativesTabs } from "@/components/operatingModel/AiInitiativesTabs";
-import { InitiativeReviewChip } from "@/components/operatingModel/InitiativeReviewChip";
-import { TowerHeader } from "@/components/towers/TowerHeader";
+import { InitiativeReviewChipV6 } from "@/components/towers/InitiativeReviewChipV6";
+import { TowerHeroV2 } from "@/components/towers/TowerHeroV2";
+import { TowerKpiStrip } from "@/components/towers/TowerKpiStrip";
+import { SolutionsGallery } from "@/components/towers/SolutionsGallery";
+import { TowerSwitcher } from "@/components/towers/TowerSwitcher";
+import { WorkshopToolsDrawer } from "@/components/towers/WorkshopToolsDrawer";
+import { TowerStep4TopChrome } from "@/components/towers/TowerStep4TopChrome";
 import { TowerAiJourneyGuidance } from "@/components/towers/TowerAiJourneyGuidance";
-import { TowerDataExports } from "@/components/assess/TowerDataExports";
 import { ShareBar } from "@/components/ui/ShareBar";
 import { ViewTracker } from "@/components/collab/ViewTracker";
 import { towers } from "@/data/towers";
 import { getTowerBySlug } from "@/lib/utils";
-import { getTowerHref } from "@/lib/towerHref";
 import type { TowerId } from "@/data/assess/types";
 
 export function generateStaticParams() {
   return towers.map((t) => ({ slug: t.id }));
 }
 
+/**
+ * Step 4 — AI Initiatives — per-tower page.
+ *
+ * Page order matches Capability Map (Step 1) and Impact Levers (Step 2):
+ *
+ *   1. Utility row — Breadcrumbs + tower switcher + share controls.
+ *   2. Tower-lead chrome — journey stepper + Mark reviewed sign-off bar.
+ *   3. Coaching — `TowerAiJourneyGuidance` (what to do on this tab).
+ *   4. Hero — motif icon, name, narrative, current state, leads.
+ *   5. KPI strip — 4 numbers from the V6 selector.
+ *   6. Workshop tools drawer — collapsed; data exports, intake import,
+ *      regenerate AI guidance, plus the StaleCurationBanner header.
+ *   7. AI solutions gallery — a right-aligned validation status chip
+ *      sits above a single filterable card grid (no heading, no
+ *      explanatory paragraph, no tabs, no group-by toggle, no marquee,
+ *      no value-effort matrix). The cards ARE the content; the hero +
+ *      KPIs above already told the story so a workshop attendee scrolls
+ *      straight from "what is this tower" into "what could we build."
+ *
+ * Every "what to do next" affordance is above the fold; the gallery
+ * is the page's headline content.
+ */
 export default function TowerPage({ params }: { params: { slug: string } }) {
   const tower = getTowerBySlug(params.slug);
   if (!tower) notFound();
+
+  const towerId = tower.id as TowerId;
 
   return (
     <PageShell>
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Breadcrumbs
-            items={[
-              { label: "Program home", href: "/" },
-              { label: "AI Initiatives", href: "/towers" },
-              { label: tower.name },
-            ]}
-          />
+          <div className="flex flex-wrap items-center gap-3">
+            <Breadcrumbs
+              items={[
+                { label: "Program home", href: "/" },
+                { label: "AI Initiatives", href: "/towers" },
+                { label: tower.name },
+              ]}
+            />
+            <TowerSwitcher active={tower} />
+          </div>
           <ShareBar
             title={tower.name}
             pin={{
@@ -52,53 +78,29 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
           title={tower.name}
         />
 
-        <TowerAiLeadToolbar towerId={tower.id as TowerId} towerName={tower.name} />
-
-        <TowerDataExports tower={tower} className="mt-3" />
+        <div className="mt-3">
+          <TowerStep4TopChrome towerId={towerId} towerName={tower.name} />
+        </div>
 
         <TowerAiJourneyGuidance tower={tower} />
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <Link
-            href="/towers"
-            className="inline-flex items-center gap-1 text-forge-subtle hover:text-forge-ink"
-          >
-            <ArrowLeft className="h-3 w-3" />
-            All towers
-          </Link>
-          <Link
-            href={getTowerHref(tower.id as TowerId, "capability-map")}
-            className="inline-flex items-center gap-1.5 rounded-full border border-forge-border bg-forge-surface px-2.5 py-1 text-xs text-forge-body hover:border-accent-purple/40 hover:text-forge-ink"
-            title="Update the capability map and offshore / AI dials for this tower"
-          >
-            <Map className="h-3 w-3 text-accent-purple-dark" />
-            Update capability map
-          </Link>
+        <div className="mt-6">
+          <TowerHeroV2 tower={tower} />
         </div>
 
         <div className="mt-6">
-          <TowerHeader tower={tower} />
+          <TowerKpiStrip tower={tower} />
         </div>
 
-        <section className="mt-14 space-y-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="font-display text-xl font-semibold text-forge-ink">
-                AI initiatives
-              </h2>
-              <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
-                Explore this tower&apos;s AI program by Job Family (L2 Job
-                Grouping → L3 Job Family → specific AI Solutions) or grouped
-                into a feasibility roster (Ship-ready vs. Investigate). Final
-                program priority (P1 / P2 / P3) is set on the Cross-Tower AI
-                Plan via the deterministic 2x2 over feasibility × Job Family
-                business impact. Use the tabs to switch views — your
-                selections are preserved.
-              </p>
-            </div>
-            <InitiativeReviewChip tower={tower} />
+        <div className="mt-6">
+          <WorkshopToolsDrawer tower={tower} />
+        </div>
+
+        <section className="mt-10 space-y-3" aria-label="AI solutions for this tower">
+          <div className="flex justify-end">
+            <InitiativeReviewChipV6 tower={tower} />
           </div>
-          <AiInitiativesTabs tower={tower} />
+          <SolutionsGallery tower={tower} />
         </section>
       </div>
     </PageShell>

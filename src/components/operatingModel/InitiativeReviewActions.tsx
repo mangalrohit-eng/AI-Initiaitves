@@ -132,22 +132,25 @@ export function InitiativeReviewActions({
 }
 
 /**
- * Render-only "Restore" button used inside the rejected-ideas drawer. Kept
- * here so all review-decision UI lives in one place.
+ * Render-only "Restore" button used inside the rejected-ideas drawer.
+ * Schema-agnostic: the drawer is shared between v5 (L4-id keyed) and v6
+ * (V6 initiative-id keyed) review systems, so this button takes only an
+ * opaque id + a `onRestore` callback rather than the full v5 actions
+ * bundle. Kept here so all review-decision UI lives in one place.
  */
 export function InitiativeReviewRestoreButton({
-  l4Id,
-  actions,
+  id,
+  onRestore,
   className,
 }: {
-  l4Id: string;
-  actions: UseInitiativeReviewsResult["actions"];
+  id: string;
+  onRestore: (id: string) => void;
   className?: string;
 }) {
   return (
     <button
       type="button"
-      onClick={() => actions.restore(l4Id)}
+      onClick={() => onRestore(id)}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border border-forge-border bg-forge-surface px-2.5 py-1 text-xs font-medium text-forge-body transition hover:border-accent-purple/50 hover:text-accent-purple-dark",
         className,

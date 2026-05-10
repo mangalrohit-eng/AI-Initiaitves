@@ -515,7 +515,7 @@ function PreviewBanner({ totalL5 }: { totalL5: number }) {
         capability map &amp; headcount to replace it — your map then drives the
         assessment and downstream impact.
         {totalL5 > 0
-          ? " Feasibility (Ship-ready / Investigate) and AI eligibility tags on L5 Activity chips show after you load a footprint and run Refresh AI guidance (AI Initiatives)."
+          ? " Feasibility (Proven pattern / New build) and AI eligibility tags on L5 Activity chips show after you load a footprint and run Refresh AI guidance (AI Initiatives)."
           : null}
       </span>
     </div>

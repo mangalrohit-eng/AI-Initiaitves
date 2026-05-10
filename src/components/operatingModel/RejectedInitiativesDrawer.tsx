@@ -3,17 +3,33 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Archive, X } from "lucide-react";
-import type { UseInitiativeReviewsResult } from "@/lib/initiatives/useInitiativeReviews";
+import type { InitiativeReview } from "@/data/assess/types";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { cn } from "@/lib/utils";
 import { feasibilityChip } from "@/lib/feasibilityChip";
 import { InitiativeReviewRestoreButton } from "./InitiativeReviewActions";
 
+/**
+ * Schema-agnostic rejected-item row. The drawer only ever needs an
+ * opaque id (used as React key + restore arg) and the snapshot stored
+ * with the decision, so callers from both v5 (L4 id) and v6 (V6
+ * initiative id) pass the same shape.
+ */
+export type RejectedDrawerItem = {
+  id: string;
+  review: InitiativeReview;
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
-  rejectedItems: UseInitiativeReviewsResult["rejectedItems"];
-  actions: UseInitiativeReviewsResult["actions"];
+  rejectedItems: ReadonlyArray<RejectedDrawerItem>;
+  /**
+   * Bring an idea back to "pending". Implementations call
+   * `clearInitiativeReview(towerId, id)` under the hood; the drawer
+   * doesn't need to know the id space (v5 L4 vs v6 initiative).
+   */
+  onRestore: (id: string) => void;
 };
 
 /**
@@ -29,7 +45,7 @@ export function RejectedInitiativesDrawer({
   open,
   onClose,
   rejectedItems,
-  actions,
+  onRestore,
 }: Props) {
   const trapRef = useFocusTrap<HTMLDivElement>(open);
 
@@ -108,12 +124,12 @@ export function RejectedInitiativesDrawer({
                 <EmptyState />
               ) : (
                 <ul className="space-y-3">
-                  {rejectedItems.map(({ l4Id, review }) => (
+                  {rejectedItems.map(({ id, review }) => (
                     <RejectedRow
-                      key={l4Id}
-                      l4Id={l4Id}
+                      key={id}
+                      id={id}
                       review={review}
-                      actions={actions}
+                      onRestore={onRestore}
                     />
                   ))}
                 </ul>
@@ -122,8 +138,9 @@ export function RejectedInitiativesDrawer({
 
             <footer className="border-t border-forge-border bg-forge-well/40 px-5 py-3 text-[11px] text-forge-subtle sm:px-6">
               Decisions persist across sessions and sync to the program
-              database. Rejecting hides the idea from the roadmap; per-L4
-              Activity Group impact stays driven by Step 2 dials.
+              database. Rejecting hides the idea from the AI Solutions
+              gallery; the row&rsquo;s modeled financial impact stays
+              driven by Step 2 dials.
             </footer>
           </motion.aside>
         </motion.div>
@@ -133,18 +150,18 @@ export function RejectedInitiativesDrawer({
 }
 
 function RejectedRow({
-  l4Id,
+  id,
   review,
-  actions,
+  onRestore,
 }: {
-  l4Id: string;
-  review: UseInitiativeReviewsResult["rejectedItems"][number]["review"];
-  actions: UseInitiativeReviewsResult["actions"];
+  id: string;
+  review: InitiativeReview;
+  onRestore: (id: string) => void;
 }) {
   // Per-tower views never surface a priority chip — the cross-tower 2x2 owns
   // priority. We show the captured feasibility (when present on the snapshot)
-  // so the lead remembers whether this idea was a ship-ready bet or a
-  // longer-investigation bet at the time they rejected it.
+  // so the lead remembers whether this idea was a Proven pattern bet or a
+  // New build bet at the time they rejected it.
   const feas = review.snapshot.feasibility
     ? feasibilityChip(review.snapshot.feasibility)
     : null;
@@ -184,7 +201,7 @@ function RejectedRow({
           Rejected {formatDecidedAt(review.decidedAt)}
           {review.decidedBy ? ` · ${review.decidedBy}` : ""}
         </div>
-        <InitiativeReviewRestoreButton l4Id={l4Id} actions={actions} />
+        <InitiativeReviewRestoreButton id={id} onRestore={onRestore} />
       </div>
     </li>
   );

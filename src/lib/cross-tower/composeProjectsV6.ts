@@ -183,7 +183,7 @@ function buildEffortRationale(
   if (bucket === "Low") {
     return row.primaryVendor
       ? `High-feasibility AI Solution; ${row.primaryVendor} is a proven anchor for this pattern.`
-      : "High-feasibility AI Solution: the curator marked this as ship-ready against the program's tooling baseline.";
+      : "High-feasibility AI Solution: the curator marked this as a proven pattern against the program's tooling baseline.";
   }
   return row.primaryVendor
     ? `Lower-feasibility build (${row.primaryVendor} integration / change management lift); plan accordingly.`

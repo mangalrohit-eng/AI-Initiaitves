@@ -287,8 +287,8 @@ export function StaleCurationBanner({
             {missingL4ForRefresh
               ? "Some queued Activity Groups have no L5 Activities yet. Generate L5 Activities on Step 1 first, then come back to refresh AI guidance."
               : useV6
-                ? "Refresh runs the Versant-grounded LLM at the L3 Job Family grain — one stream, one pass through every queued row. If the LLM is unavailable, each row falls back to a deterministic Versant stub. Until you refresh, AI Solutions and feasibility (Ship-ready / Investigate) stay out of date for the queued rows. Dollars and headcount on Steps 2 and 3 are unaffected."
-                : "Refresh runs the Versant-grounded LLM. If the LLM is unavailable, it falls back to the deterministic verdict composer + overlay rubric. Until you refresh, feasibility (Ship-ready / Investigate) and eligibility tags on the capability map stay out of date for the queued rows — and the cross-tower 2x2 will tier them off the older signal. Dollars and headcount on Steps 2 and 3 are unaffected."}
+                ? "Refresh runs the Versant-grounded LLM at the L3 Job Family grain — one stream, one pass through every queued row. If the LLM is unavailable, each row falls back to a deterministic Versant stub. Until you refresh, AI Solutions and feasibility (Proven pattern / New build) stay out of date for the queued rows. Dollars and headcount on Steps 2 and 3 are unaffected."
+                : "Refresh runs the Versant-grounded LLM. If the LLM is unavailable, it falls back to the deterministic verdict composer + overlay rubric. Until you refresh, feasibility (Proven pattern / New build) and eligibility tags on the capability map stay out of date for the queued rows — and the cross-tower 2x2 will tier them off the older signal. Dollars and headcount on Steps 2 and 3 are unaffected."}
           </p>
         </div>
         {missingL4ForRefresh ? (

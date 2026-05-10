@@ -2,8 +2,9 @@
  * Server-only OpenAI helper for v6 L3-grain AI Solution curation.
  *
  * One LLM call per L3 Job Family — returns 1-3 specific AI Solution
- * products (e.g. "Agentic AI Financial Close Co-Pilot") with binary
- * feasibility, Versant-grounded rationale, and a primary vendor. The
+ * products (e.g. "Intercompany Close Reconciliation Co-Pilot") with
+ * binary feasibility, Versant-grounded rationale, primary vendor, and a
+ * representative icon picked from the curated Lucide allowlist. The
  * caller stamps the result onto `L3WorkforceRowV6.l3Initiatives` so the
  * Step 4 view-model reads straight from the cache.
  *
@@ -16,23 +17,37 @@
  *   product names — never activity names.
  *
  * Naming discipline (the heart of the prompt):
- *   - solutionName MUST read like a real enterprise software product Versant
- *     could buy (Microsoft Copilot, Workday Adaptive, Stripe Radar) — short
- *     (2-5 words), branded, noun-phrased.
- *   - solutionName MUST NOT contain the word "Versant" (Versant is the
- *     customer, not part of the product name).
- *   - solutionName MUST NOT default to the prefix "Agentic AI ..." for
- *     every initiative. Vary across the suffix vocabulary (Co-Pilot,
- *     Workbench, Studio, Suite, Assistant, Agent, IQ, Intelligence,
- *     Insights, Hub) and brand-like nouns (Ledgerline, Spendsight, etc.).
- *   - solutionName MUST NOT echo any L4 / L5 activity verb verbatim
- *     (Reconciliation, Drafting, Matching, Recognition, Routing, etc.).
- *   - tagline MUST name what the solution DOES + the savings target.
+ *   - solutionName MUST be SELF-EXPLANATORY: 5-10 words, descriptive,
+ *     leading with the user-visible action / object the solution acts
+ *     on. A workshop attendee should grok what it does without reading
+ *     the tagline.
+ *   - solutionName MUST use the L3 Job Family's own domain-native
+ *     vocabulary — recruiting / sourcing / onboarding for HR;
+ *     clearance / windowing / royalty for Rights; pacing / yield for
+ *     Ad Sales; close / consolidation for Finance; copy-edit /
+ *     fact-check for Editorial; threat / detection / response for
+ *     Cybersecurity. The validator does NOT hard-code a verb whitelist
+ *     — different towers use very different action words.
+ *   - solutionName MAY end in pattern words ("Co-Pilot", "Workbench",
+ *     "Studio", "Hub", "IQ", "Console") only when they ADD meaning, not
+ *     as a brand.
+ *   - solutionName MUST NOT contain "Versant" (the customer is the user)
+ *     or generic AI marketing ("AI-Powered…", "Next-Gen…",
+ *     "Transformative…").
+ *   - solutionName MUST NOT be a brand-only codename ("Ledgerline",
+ *     "Pacelane") — descriptive titles only.
+ *   - tagline MUST lead with what changes for the user / process, then
+ *     the concrete saving target. Plain English, no hedge phrases.
  *
- * Server-side post-LLM validators reject names that fail these rules and
- * fall back to a deterministic "<l3> Co-Pilot" stub so the card never
- * goes blank — but the post-validator's existence forces the model to
- * comply on first attempt for the vast majority of calls.
+ * iconKey discipline:
+ *   - Picked from `solutionIconAllowlist.ts` (curated ~80 Lucide names).
+ *   - Validator silently drops off-allowlist values; the renderer falls
+ *     back deterministically based on feasibility (Rocket / Compass).
+ *
+ * Server-side post-LLM validators sanitize names that fail structural
+ * rules and fall back to a deterministic "<l3> Co-Pilot" stub so the
+ * card never goes blank — but the post-validator's existence pushes the
+ * model to comply on first attempt for the vast majority of calls.
  *
  * Routes through `versantPromptKit` for identity / per-tower context /
  * vendor allow-list / voice rules / Chat-vs-Responses-API call shape so
@@ -54,11 +69,29 @@ import {
   isLLMConfigured as kitIsLLMConfigured,
 } from "@/lib/llm/prompts/versantPromptKit";
 import type { CurateL3InitiativePayload } from "@/lib/assess/curateL3InitiativesStreamProtocol";
+import {
+  buildIconAllowlistKeyCsv,
+  buildIconAllowlistPromptBlock,
+  isAllowedIconKey,
+} from "@/lib/initiatives/solutionIconAllowlist";
 
 const DEFAULT_TIMEOUT_MS = 90_000;
 const MIN_INITIATIVES_PER_L3 = 1;
 const MAX_INITIATIVES_PER_L3 = 3;
 const VENDOR_TBD = "TBD — subject to discovery";
+
+/**
+ * Prompt version. Bump when the prompt or validator contract changes
+ * (e.g. naming rules, iconKey introduction). Cached initiatives carry
+ * this in `L3Initiative.promptVersion` so the UI can detect legacy
+ * cache and surface a one-click "refresh to apply" affordance without
+ * erasing the existing entry.
+ *
+ * `2026-05-descriptive` = descriptive 5-10 word naming + iconKey
+ * (replaces the brand-codename rules from `2026-04-codename` and prior
+ * unversioned snapshots).
+ */
+export const CURATE_L3_PROMPT_VERSION = "2026-05-descriptive";
 
 /** Bounded concurrency for the per-row fan-out in `curateL3InitiativesPerRow`. */
 export const MAX_CONCURRENT_L3_CALLS = 4;
@@ -240,28 +273,56 @@ function buildSystemPrompt(
     "===========================================================================",
     "AI SOLUTION NAMING (the `solutionName` field) — STRICT RULES",
     "===========================================================================",
-    "solutionName MUST read like a real enterprise software product — the kind of name a vendor would put on a logo or a Versant team would put on an internal platform. Short (2-5 words), brand-feeling, noun-phrased.",
+    "solutionName MUST be SELF-EXPLANATORY: a workshop attendee should grok what the solution does WITHOUT reading the tagline.",
     "",
-    "Acceptable name shapes (mix and match across the batch — DO NOT default to one shape):",
-    "  A. <Domain> <Suffix>      → 'Close Co-Pilot', 'Payables Workbench', 'Cash Forecast Studio', 'Vendor Risk Suite', 'Newsroom Intelligence', 'Rights Hub'",
-    "  B. <Domain> <AI/Agent>    → 'Close AI', 'Spend Agent', 'Forecast IQ', 'Royalty Insights'",
-    "  C. <Brand-like noun>      → 'Ledgerline', 'Spendsight', 'Royaltyflow', 'Pacelane' (only when the tagline carries a clear domain hook)",
-    "  D. Copilot for <Domain>   → 'Copilot for Close', 'Copilot for Ad Sales Operations', 'Copilot for Newsroom Standards' (Microsoft-style)",
+    "Mandatory shape:",
+    "  - 5 to 10 words.",
+    "  - Leads with the user-visible action / object the solution acts on.",
+    "  - Plain English, declarative, no hedge phrases, no marketing voice.",
+    "  - Uses the L3 Job Family's OWN domain-native vocabulary — the verbs and nouns the practitioners in THAT L3 use day-to-day. Different towers use very different action words; do NOT bias toward any one tower's flavor:",
+    "      • HR / Talent      → recruiting, sourcing, onboarding, retention, talent",
+    "      • Rights / Legal   → clearance, windowing, royalty, contract, compliance",
+    "      • Ad Sales         → pacing, yield, inventory, audience, campaign",
+    "      • Content Ops      → tagging, clipping, metadata, captioning, packaging",
+    "      • Cybersecurity    → threat, detection, response, anomaly, monitoring",
+    "      • Finance          → close, consolidation, forecasting, payables, treasury",
+    "      • Editorial / News → copy-edit, fact-check, standards, brand-voice, drafting",
+    "      • Production       → playout, scheduling, asset, rundown, broadcast",
+    "      • Service          → triage, routing, intent, NPS, response",
+    "      • Tech / Eng       → orchestration, observability, deployment, SRE",
+    "    The validator does NOT hard-code a verb whitelist — pick the words that match THIS row's L3 Job Family.",
+    "  - May end in pattern words (`Co-Pilot`, `Workbench`, `Studio`, `Hub`, `IQ`, `Console`, `Operator`, `Suite`, `Monitor`, `Forecaster`, `Routing`) ONLY when they ADD meaning, not as a brand wrapper. The pattern word is optional — the descriptive action+object pairing is what makes the title self-explanatory.",
     "",
     "STRICT prohibitions on solutionName:",
-    "  1. MUST NOT contain the word 'Versant'. Versant is the customer; it is not part of the product brand. Examples to avoid: 'Agentic AI Versant Payables Workbench', 'Versant Close Co-Pilot'. Replace with 'Payables Workbench' or 'Close Co-Pilot'.",
-    "  2. MUST NOT begin with 'Agentic AI ...' on every initiative. Across the 1-3 initiatives you return for this L3, AT MOST ONE may use the 'Agentic AI <domain> <suffix>' shape. The others MUST use shapes A, B, C, or D above. The cross-row diversity matters too — don't make every L3 in the tower lead with 'Agentic AI'.",
-    "  3. MUST NOT echo an L4 / L5 activity verb verbatim. Forbidden verb-fragments at word boundaries: Reconciliation, Reconcile, Drafting, Matching, Tagging, Extract, Extraction, Authoring, Sourcing, Tracking, Dispatching, Scheduling. (Domain nouns like 'Forecast', 'Planning', 'Treasury', 'Close', 'Payables' are fine.)",
-    "  4. MUST NOT be a generic activity rephrased — it names the PRODUCT, not the work. The L4 / L5 list below describes the work; your solution name describes the product that automates it.",
-    "  5. MUST NOT be 'AI for <thing>' or 'Agentic <thing> Tool' (too generic).",
+    "  1. MUST NOT contain the word 'Versant'. Versant is the customer.",
+    "  2. MUST NOT be a brand-only codename (e.g. 'Ledgerline', 'Spendsight', 'Pacelane', 'Royaltyflow'). These read as marketing names; we want descriptive titles.",
+    "  3. MUST NOT use generic AI marketing language: 'AI-Powered…', 'Next-Gen…', 'Transformative…', 'Smart…', 'Intelligent…', 'Revolutionary…'.",
+    "  4. MUST NOT begin with 'Agentic AI ...'. Lead with the action / object.",
+    "  5. MUST NOT be a single-word or 2-word codename — the title must carry enough words (5-10) to convey what it does.",
     "",
-    "Good examples (Versant-grounded but no 'Versant' word in the name):",
-    "  - 'Close Co-Pilot' (tagline references Anand Kini's BB- close calendar)",
-    "  - 'Payables Workbench' (tagline references multi-brand AP load across CNBC, GolfNow, Fandango)",
-    "  - 'Newsroom Intelligence' (tagline references MS NOW progressive positioning + Brian Carovillano standards)",
-    "  - 'Rights Hub' (tagline references split rights with NBCU/Hulu, Kardashians example)",
+    "Good examples — note the verb / noun set shifts with the tower:",
+    "  Finance        → 'Intercompany Close Reconciliation Co-Pilot'",
+    "  Finance        → 'Multi-Brand Payables Auto-Triage Workbench'",
+    "  Editorial/News → 'MS NOW Newsroom Brand-Voice Guardrail Monitor'",
+    "  Rights         → 'Split-Rights Windowing & Royalty Routing Hub'",
+    "  Treasury       → 'Covenant & Liquidity Early-Warning Forecaster'",
+    "  HR             → 'Producer & Anchor Talent Sourcing Co-Pilot'",
+    "  Ad Sales       → 'Cross-Brand Linear+CTV Pacing & Yield Console'",
+    "  Content Ops    → 'Episode Metadata, Clipping & Compliance Workbench'",
+    "  Cybersecurity  → 'Insider-Threat Detection & Response Operator'",
+    "  Service        → 'Multi-Brand Customer Triage & Routing Suite'",
     "",
-    "tagline (1 short sentence, <=20 words) MUST describe what the solution does AND the concrete saving target. Example: 'Auto-resolves intercompany breaks across 7+ Versant entities, compresses close from 12-18 days to 5-7.'",
+    "tagline (1 short sentence, <=25 words) MUST lead with what changes for the user / process, then the concrete saving target. Plain English; no hedge phrases. Example: 'Auto-resolves intercompany breaks across 7+ Versant entities and compresses month-end close from 12-18 days to 5-7.'",
+    "",
+    "===========================================================================",
+    "AI SOLUTION ICON (the `iconKey` field) — pick from the curated allowlist",
+    "===========================================================================",
+    "Pick ONE icon key from the allowlist below that visually represents what THIS solution does. The keys are PascalCase Lucide names; echo one verbatim. The model output is treated as an enum.",
+    "",
+    "ALLOWED ICON KEYS (one per line — `Key — usage hint`):",
+    buildIconAllowlistPromptBlock(),
+    "",
+    `Echo exactly ONE key from the list. If no icon clearly fits (rare), choose the closest match — the validator will silently fall back to a feasibility default if you return anything outside the list. Comma-separated key set: ${buildIconAllowlistKeyCsv()}`,
     "",
     "===========================================================================",
     "FEASIBILITY (the binary `feasibility` field)",
@@ -293,10 +354,11 @@ function buildSystemPrompt(
     '  "rowId": "<echo input rowId>",',
     '  "initiatives": [',
     '    {',
-    '      "solutionName": "<2-5 word product name; NEVER contains the word \'Versant\'; AT MOST ONE per L3 may start with \'Agentic AI\'>",',
-    '      "tagline": "<=20 words; what it does + concrete saving target",',
+    '      "solutionName": "<5-10 word descriptive title leading with action+object; NEVER contains \'Versant\'>",',
+    '      "tagline": "<=25 words; lead with user-visible change, then the concrete saving target",',
     '      "aiRationale": "2-4 sentences, Versant-specific",',
     '      "feasibility": "High" | "Low",',
+    '      "iconKey": "<one PascalCase key from the allowlist>",',
     '      "primaryVendor": "<allow-list value or TBD>" | null,',
     '      "coversL4RowIds": ["<l4 row id>", ...]',
     '    }',
@@ -344,7 +406,7 @@ function buildUserPrompt(row: CurateL3LLMRowInput): string {
   });
   lines.push("");
   lines.push(
-    `Curate ${MIN_INITIATIVES_PER_L3}-${MAX_INITIATIVES_PER_L3} specific AI Solution products that target the work performed across this L3 Job Family. solutionName MUST be a short (2-5 word) product-style name. NEVER include the word "Versant" in solutionName. AT MOST ONE of the ${MAX_INITIATIVES_PER_L3} initiatives may start with "Agentic AI"; the rest MUST use shapes like "<Domain> Co-Pilot", "<Domain> Workbench", "<Domain> Studio", "<Domain> Suite", "<Domain> IQ", "<Domain> Intelligence", "<Domain> Hub", or a brand-like noun. NEVER echo an L4 or L5 activity verb. Echo \`rowId\` verbatim and ground every rationale in Versant brands / people / constraints.`,
+    `Curate ${MIN_INITIATIVES_PER_L3}-${MAX_INITIATIVES_PER_L3} specific AI Solution products that target the work performed across this L3 Job Family. solutionName MUST be a 5-10 word DESCRIPTIVE title that leads with the action and object the solution acts on, drawn from this L3's own domain-native vocabulary (a workshop attendee should grok what it does without reading the tagline). NEVER include the word "Versant" in solutionName. NEVER use brand-only codenames (Ledgerline, Pacelane). NEVER use generic AI marketing language (AI-Powered, Next-Gen, Smart, Intelligent, Transformative). NEVER lead with "Agentic AI". Pick exactly ONE iconKey from the allowlist that represents what this solution does. Echo \`rowId\` verbatim and ground every rationale in Versant brands / people / constraints.`,
   );
   return lines.join("\n");
 }
@@ -356,120 +418,62 @@ function buildUserPrompt(row: CurateL3LLMRowInput): string {
 const VENDOR_ALLOW_LOWER = new Set(ALLOWED_VENDORS.map((v) => v.toLowerCase()));
 
 /**
- * Forbidden activity-verb fragments at solutionName word boundaries.
- * Drawn from the L4 / L5 vocabulary that surfaces most often as LLM
- * shortcuts. The validator rejects any solutionName that contains one of
- * these as a standalone word — solution names should be product nouns,
- * not the work being automated.
+ * Generic AI-marketing fluff fragments — the post-validator strips
+ * names that lead with these because they convey nothing about what
+ * the solution does. Independent of the L3 domain, so safe to lock
+ * across all towers (HR / Rights / Finance / Editorial / Cyber / etc.
+ * all benefit from rejecting "AI-Powered…" / "Smart…" / "Next-Gen…").
  *
- * Note: words that ARE legitimate domain nouns ("Forecast", "Planning",
- * "Treasury") are NOT in this list — only the verb-derived activity
- * names that the LLM tends to shortcut to ("Reconciliation", "Drafting").
+ * Notable absence: NO domain verb whitelist or blacklist. The
+ * descriptive-naming contract instructs the LLM to draw verbs / nouns
+ * from the L3's own domain vocabulary, which differs sharply across
+ * towers — hard-coding a verb list here would force every tower into
+ * one tower's flavor.
  */
-const FORBIDDEN_NAME_FRAGMENTS = [
-  "reconciliation",
-  "reconcile",
-  "drafting",
-  "matching",
-  "tagging",
-  "extract",
-  "extraction",
-  "authoring",
-  "sourcing",
-  "tracking",
-  "dispatching",
-  "scheduling",
+const FLUFF_PREFIXES = [
+  "ai-powered",
+  "ai powered",
+  "next-gen",
+  "next gen",
+  "transformative",
+  "revolutionary",
+  "smart",
+  "intelligent",
+  "agentic ai",
 ];
 
 /**
- * Recognized product-suffix vocabulary. A solution name passes the
- * "feels like a product" check when it ends in (or contains) one of
- * these tokens, OR when it carries an explicit AI / Agent / Copilot
- * cue. This keeps the validator broad enough to accept brand-like
- * nouns like "Ledgerline" (no suffix needed if there's an AI/Agent
- * token in the name) while still rejecting bare activity phrases.
- */
-const PRODUCT_SUFFIX_TOKENS = [
-  "co-pilot",
-  "copilot",
-  "workbench",
-  "studio",
-  "suite",
-  "assistant",
-  "hub",
-  "intelligence",
-  "insights",
-  "iq",
-  "platform",
-  "console",
-  "agent",
-  "ai",
-  "agentic",
-];
-
-/**
- * Domain hint tokens that confer "real product" credibility on a short
- * brand-like name (e.g., "Ledgerline", "Spendsight"). When a name
- * contains one of these as a substring, the validator treats it as a
- * legitimate product noun even without an AI/Agent suffix.
- */
-const BRAND_DOMAIN_HINTS = [
-  "ledger",
-  "spend",
-  "pace",
-  "flow",
-  "sight",
-  "stream",
-  "wave",
-  "lane",
-  "loop",
-  "core",
-  "edge",
-  "link",
-  "vault",
-  "scope",
-  "pulse",
-];
-
-/**
- * Reasons a solution name fails validation. Returned alongside the
- * boolean so the orchestrator / fallback can log WHY a name was
- * rewritten — useful when iterating on the prompt.
+ * Reasons a solution name fails validation. The validator now enforces
+ * structural rules only — descriptiveness, length, no Versant, no
+ * marketing fluff, no codename — and never blacklists domain verbs.
  */
 type NameInvalidReason =
   | "too_short"
   | "too_few_words"
+  | "too_many_words"
   | "contains_versant"
-  | "starts_with_agentic_ai_versant"
-  | "echoes_activity_verb"
-  | "missing_product_or_ai_token";
+  | "starts_with_fluff"
+  | "single_word_codename";
+
+const MIN_NAME_WORDS = 4;
+const MAX_NAME_WORDS = 12;
 
 function checkSolutionName(name: string): NameInvalidReason | null {
-  if (!name || name.trim().length < 5) return "too_short";
+  if (!name || name.trim().length < 8) return "too_short";
   const trimmed = name.trim();
   const lower = trimmed.toLowerCase();
-  const wordCount = trimmed.split(/\s+/).length;
-  if (wordCount < 2) return "too_few_words";
-  if (/\bversant\b/i.test(trimmed)) {
-    if (/^agentic\s+ai\s+versant\b/i.test(trimmed)) {
-      return "starts_with_agentic_ai_versant";
-    }
-    return "contains_versant";
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
+  if (wordCount < MIN_NAME_WORDS) {
+    if (wordCount <= 2) return "single_word_codename";
+    return "too_few_words";
   }
-  for (const frag of FORBIDDEN_NAME_FRAGMENTS) {
-    const re = new RegExp(`\\b${frag}\\b`, "i");
-    if (re.test(trimmed)) return "echoes_activity_verb";
+  if (wordCount > MAX_NAME_WORDS) return "too_many_words";
+  if (/\bversant\b/i.test(trimmed)) return "contains_versant";
+  for (const prefix of FLUFF_PREFIXES) {
+    if (lower.startsWith(prefix)) return "starts_with_fluff";
   }
-  const hasProductCue = PRODUCT_SUFFIX_TOKENS.some((tok) => {
-    const re = new RegExp(`\\b${tok}\\b`, "i");
-    return re.test(lower);
-  });
-  if (hasProductCue) return null;
-  const hasBrandDomainHint = BRAND_DOMAIN_HINTS.some((hint) =>
-    lower.includes(hint),
-  );
-  if (hasBrandDomainHint) return null;
-  return "missing_product_or_ai_token";
+  return null;
 }
 
 function isInvalidSolutionName(name: string): boolean {
@@ -478,14 +482,32 @@ function isInvalidSolutionName(name: string): boolean {
 
 function sanitizeSolutionName(raw: unknown, l3: string): string {
   const str = typeof raw === "string" ? raw.trim() : "";
-  if (!isInvalidSolutionName(str)) return str;
-  // Deterministic fallback when the LLM-produced name fails validation.
-  // Picks a sensible product-style stub so the card is never blank; the
-  // tower lead can edit it via Refine + regenerate. We strip Versant from
-  // the L3 label defensively so a Job Family name like "Versant Payables"
-  // doesn't sneak the brand back into the fallback.
+  if (!isInvalidSolutionName(str)) {
+    // Strip a leading "Agentic AI " if it slipped past the LLM — this is
+    // a soft trim to preserve the rest of an otherwise-descriptive name
+    // rather than fall all the way back to the deterministic stub.
+    return str.replace(/^agentic\s+ai\s+/i, "").trim();
+  }
+  // Deterministic fallback when the LLM-produced name fails the
+  // structural rules. Builds a descriptive stub from the L3 label so
+  // the card is never blank; the tower lead can refresh on demand. We
+  // strip "Versant" from the L3 label defensively so a Job Family name
+  // like "Versant Payables" doesn't sneak the brand back into the
+  // fallback.
   const cleanedL3 = l3.replace(/\bversant\b\s*/gi, "").trim() || l3;
-  return `${cleanedL3} Co-Pilot`;
+  return `${cleanedL3} Workflow Automation Co-Pilot`;
+}
+
+/**
+ * Validate the LLM-returned iconKey against the curated allowlist.
+ * Off-allowlist or missing values return `undefined` so the renderer
+ * falls back deterministically based on feasibility.
+ */
+function sanitizeIconKey(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  return isAllowedIconKey(trimmed) ? trimmed : undefined;
 }
 
 function sanitizeFeasibility(raw: unknown): Feasibility {
@@ -605,6 +627,7 @@ function parseAndValidate(
         : `Targets the recurring rules-based work across ${input.l3} at Versant Media Group; rationale to be expanded on refresh.`;
     const feasibility = sanitizeFeasibility(r.feasibility);
     const primaryVendor = sanitizeVendor(r.primaryVendor);
+    const iconKey = sanitizeIconKey(r.iconKey);
     const coversL4RowIds = sanitizeCoversL4RowIds(r.coversL4RowIds, validIds);
     const id = buildL3InitiativeId(
       // The validator can't know the towerId without threading it
@@ -621,8 +644,10 @@ function parseAndValidate(
       tagline,
       aiRationale,
       feasibility,
+      ...(iconKey ? { iconKey } : {}),
       ...(primaryVendor ? { primaryVendor } : {}),
       ...(coversL4RowIds.length > 0 ? { coversL4RowIds } : {}),
+      promptVersion: CURATE_L3_PROMPT_VERSION,
     });
   }
   if (out.length < MIN_INITIATIVES_PER_L3) {
@@ -635,18 +660,22 @@ function parseAndValidate(
 }
 
 /**
- * Deterministic fallback: produce one generic but valid `<l3> Co-Pilot`
+ * Deterministic fallback: produce one generic but valid descriptive
  * initiative when the LLM is unreachable / the call fails for a row.
  * Drawn so the card never goes blank; the tower lead can refresh once
  * the LLM is back. Strips any "Versant" prefix from the L3 label so the
  * fallback name doesn't reintroduce the brand into the product name.
+ *
+ * The fallback intentionally carries NO `iconKey` so the renderer applies
+ * its feasibility-based default (Compass for Low) — keeps the visual
+ * language consistent with other New-build solutions.
  */
 export function fallbackL3Initiatives(
   towerId: TowerId,
   row: Pick<L3WorkforceRowV6, "id" | "l3" | "childL4RowIds">,
 ): CurateL3InitiativePayload[] {
   const cleanedL3 = row.l3.replace(/\bversant\b\s*/gi, "").trim() || row.l3;
-  const solutionName = `${cleanedL3} Co-Pilot`;
+  const solutionName = `${cleanedL3} Workflow Automation Co-Pilot`;
   return [
     {
       id: buildL3InitiativeId(towerId, row.id, solutionName),
@@ -655,6 +684,7 @@ export function fallbackL3Initiatives(
       aiRationale: `Deterministic fallback. The per-L3 LLM call could not run for ${cleanedL3} at Versant Media Group; the Refine + regenerate affordance on the L3 card will produce a Versant-grounded design once OPENAI_API_KEY is reachable.`,
       feasibility: "Low",
       coversL4RowIds: [...row.childL4RowIds],
+      promptVersion: CURATE_L3_PROMPT_VERSION,
     },
   ];
 }

@@ -4,6 +4,7 @@ import { agent, digitalCore, orchestration, processShell, role, tool, workState 
 export const hrTower: TowerSlice = {
   id: "hr",
   name: "HR & Talent",
+  iconKey: "Users",
   versantLeads: ["Jeff Massa", "Christina Noval"],
   accentureLeads: ["Irene Blecher", "Jungmin Cho"],
   description:
@@ -558,6 +559,7 @@ export const hrTower: TowerSlice = {
 export const researchTower: TowerSlice = {
   id: "research-analytics",
   name: "Research & Analytics",
+  iconKey: "BarChart3",
   versantLeads: ["Ashley Matts"],
   accentureLeads: ["Jeff Puzenski"],
   description: "Audience research, content performance analytics, competitive intelligence, and market insights across all Versant brands.",
@@ -1042,6 +1044,7 @@ export const researchTower: TowerSlice = {
 export const legalTower: TowerSlice = {
   id: "legal",
   name: "Legal & Business Affairs",
+  iconKey: "Scale",
   versantLeads: ["Jonathan Gottlieb"],
   accentureLeads: ["Lisa Bloomberg"],
   description:
@@ -1534,6 +1537,7 @@ export const legalTower: TowerSlice = {
 export const corpTower: TowerSlice = {
   id: "corp-services",
   name: "Corporate Services",
+  iconKey: "Building2",
   versantLeads: ["Rina Patel", "Mike Lukan"],
   accentureLeads: ["Rob Aitken"],
   description:
@@ -1912,6 +1916,7 @@ export const corpTower: TowerSlice = {
 export const techTower: TowerSlice = {
   id: "tech-engineering",
   name: "Technology & Engineering",
+  iconKey: "Cpu",
   versantLeads: ["Mike Cagnazzi", "Steve McElwee", "Deep Bagchee"],
   accentureLeads: ["Rajeev Kaul"],
   description:
@@ -2399,6 +2404,7 @@ export const techTower: TowerSlice = {
 export const opsTower: TowerSlice = {
   id: "operations-technology",
   name: "Operations & Technology",
+  iconKey: "Workflow",
   versantLeads: ["Nate Balogh"],
   accentureLeads: ["Sandhya Parameshwara"],
   description:
@@ -2718,6 +2724,7 @@ export const opsTower: TowerSlice = {
 export const salesTower: TowerSlice = {
   id: "sales",
   name: "Sales",
+  iconKey: "Target",
   versantLeads: ["Tom Winlarald", "Becky Mason"],
   accentureLeads: ["Rob Aitken"],
   description:
@@ -3069,6 +3076,7 @@ export const salesTower: TowerSlice = {
 export const marketingTower: TowerSlice = {
   id: "marketing-comms",
   name: "Marketing & Communications",
+  iconKey: "Megaphone",
   versantLeads: ["Frank Tanki", "Tom Clendenin", "Amanda Norvell", "Claire Ripsteen"],
   accentureLeads: ["Lisa Schwartz"],
   description:
@@ -3474,6 +3482,7 @@ export const marketingTower: TowerSlice = {
 export const serviceTower: TowerSlice = {
   id: "service",
   name: "Service",
+  iconKey: "Headphones",
   versantLeads: ["Todd Triplett"],
   accentureLeads: ["Rob Aitken"],
   description:
@@ -3710,6 +3719,7 @@ export const serviceTower: TowerSlice = {
 export const editorialTower: TowerSlice = {
   id: "editorial-news",
   name: "Editorial & News",
+  iconKey: "Newspaper",
   versantLeads: ["Brian Carovillano (MS NOW)", "Brad Quick (CNBC)"],
   accentureLeads: ["Noor Chawla"],
   description:
@@ -4186,6 +4196,7 @@ export const editorialTower: TowerSlice = {
 export const productionTower: TowerSlice = {
   id: "production",
   name: "Production",
+  iconKey: "Camera",
   versantLeads: ["Jeff Behnke", "Janice Ferrell", "Brad Wall"],
   accentureLeads: ["Allan Cook"],
   description:
@@ -4516,6 +4527,7 @@ export const productionTower: TowerSlice = {
 export const programmingTower: TowerSlice = {
   id: "programming-dev",
   name: "Programming & Development",
+  iconKey: "MonitorPlay",
   versantLeads: ["Rebecca Vazquez-Rhodes", "Cort Abraham", "Janice Ferrell"],
   accentureLeads: ["Rob Aitken"],
   description:

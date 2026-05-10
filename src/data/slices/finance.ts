@@ -888,6 +888,7 @@ const finProcurement = processShell("fin-5", "Procurement Optimization & Vendor 
 export const financeTower: TowerSlice = {
   id: "finance",
   name: "Finance",
+  iconKey: "Calculator",
   versantLeads: ["Greg Wright", "Andre Hale"],
   accentureLeads: ["Jim Murphy", "Alex Chitticks"],
   description:

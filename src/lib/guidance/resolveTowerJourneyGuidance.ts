@@ -134,10 +134,12 @@ export function resolveAiInitiativesGuidance(
   if (!stepFourValidated) {
     return {
       tier: 2,
-      title: `Mark Step 4 reviewed for ${towerName} when the AI roadmap and agent architectures are workshop-ready.`,
+      title: `Skim every ${towerName} AI solution below — confirm the title, tagline, vendor, and Proven pattern / New build chip match how this tower will run, then mark reviewed above.`,
       staleKind: null,
-      actionHref: "#tower-lead-signoff",
-      actionLabel: "Jump to sign-off",
+      // No action button: the sign-off bar (with `Mark reviewed`) is rendered
+      // immediately above this guidance line, so a "Jump to sign-off" anchor
+      // would just scroll to a control already in view. Coach the user on
+      // what to validate before signing off instead.
     };
   }
   return {
@@ -237,7 +239,7 @@ export function towersPageLine(
   }
   return {
     tier: 2,
-    title: "Select a tower to read its feasibility roster (Ship-ready vs. Investigate), agent graph, and 4-lens (work, workforce, workbench, digital core) for every named L4 initiative. Final P1 / P2 / P3 sequencing is set on the Cross-Tower AI Plan.",
+    title: "Select a tower to read its feasibility roster (Proven pattern vs. New build), agent graph, and 4-lens (work, workforce, workbench, digital core) for every named L4 initiative. Final P1 / P2 / P3 sequencing is set on the Cross-Tower AI Plan.",
     staleKind: null,
   };
 }

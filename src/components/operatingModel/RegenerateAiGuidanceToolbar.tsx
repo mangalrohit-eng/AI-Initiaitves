@@ -24,11 +24,38 @@ import {
   chunkRowsForCurationApi,
   regenerableRowsForStep4,
 } from "@/lib/assess/curationRegenerateBatch";
-import type { AssessProgramV2, TowerId } from "@/data/assess/types";
+import { CURATE_L3_PROMPT_VERSION } from "@/lib/assess/curateL3InitiativesLLM";
+import type {
+  AssessProgramV2,
+  L3WorkforceRowV6,
+  TowerId,
+} from "@/data/assess/types";
 import { getTowerHref } from "@/lib/towerHref";
 import { cn } from "@/lib/utils";
 import { curationProgressLine, llmLoadingCopy } from "@/lib/llm/loadingCopy";
 import { IS_V6 } from "@/lib/schemaFlag";
+
+/**
+ * Count L3 rows in this tower whose cached AI Solutions were authored
+ * under an older prompt version than the current `CURATE_L3_PROMPT_VERSION`.
+ * Used to surface a "AI naming was upgraded — refresh to apply" hint
+ * directly on the Regenerate button so legacy cache (e.g. the old
+ * brand-codename naming, or initiatives missing `iconKey`) doesn't
+ * persist silently.
+ */
+function legacyPromptVersionRowCount(
+  rows: ReadonlyArray<L3WorkforceRowV6>,
+): number {
+  let count = 0;
+  for (const row of rows) {
+    if (!row.l3Initiatives || row.l3Initiatives.length === 0) continue;
+    const stale = row.l3Initiatives.some(
+      (init) => init.promptVersion !== CURATE_L3_PROMPT_VERSION,
+    );
+    if (stale) count += 1;
+  }
+  return count;
+}
 
 function applyRegenerateToast(toast: ReturnType<typeof useToast>, summary: RunSummary) {
   const sourceLabel =
@@ -119,6 +146,11 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
 
   const rowIds = useV6 ? v6RegenerableRowIds : v5RowIds;
   const grainNoun = useV6 ? "Job Family" : "Activity Group";
+
+  const legacyCount = React.useMemo(
+    () => (useV6 ? legacyPromptVersionRowCount(v6L3Rows) : 0),
+    [useV6, v6L3Rows],
+  );
 
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [running, setRunning] = React.useState(false);
@@ -318,6 +350,24 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
               : "Regenerate AI guidance"}
           </button>
         </div>
+        {!running && legacyCount > 0 ? (
+          <div
+            className="flex max-w-md items-start gap-2 rounded-lg border border-accent-amber/40 bg-accent-amber/5 px-3 py-2 text-[11px] leading-relaxed text-forge-body"
+            role="note"
+          >
+            <span className="mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-accent-amber/60 bg-accent-amber/20 font-mono text-[9px] font-bold text-accent-amber">
+              i
+            </span>
+            <span className="min-w-0">
+              <span className="font-semibold text-forge-ink">
+                AI naming was upgraded.
+              </span>{" "}
+              {legacyCount} Job Famil{legacyCount === 1 ? "y" : "ies"} still
+              hold AI Solutions written under the older prompt — refresh to
+              apply the new descriptive titles and visual icons.
+            </span>
+          </div>
+        ) : null}
         {running ? (
           <div
             className="flex max-w-md items-start gap-2 rounded-lg border border-accent-purple/30 bg-near-black/40 px-3 py-2 text-[11px] leading-relaxed text-forge-body"

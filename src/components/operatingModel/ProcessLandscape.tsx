@@ -237,8 +237,8 @@ function L3Subsection({
  * One curated (or placeholder) L5 Activity row inside an L4 Activity
  * Group's expanded panel.
  *
- * Renders the Versant-specific rationale, feasibility (ship-ready vs.
- * investigate), frequency, criticality, and maturity for an AI-eligible
+ * Renders the Versant-specific rationale, feasibility (Proven pattern vs.
+ * New build), frequency, criticality, and maturity for an AI-eligible
  * L5 Activity, then offers click-through to the brief or full 4-lens
  * initiative when one is attached. Per-tower views deliberately do NOT
  * surface a priority chip — program priority is owned by the cross-tower
@@ -810,9 +810,9 @@ function L4ActivityGroupCard({
 }) {
   const redact = useRedactDollars();
   // Surface the strongest feasibility signal under this Activity Group —
-  // if any L5 is ship-ready, the L4 carries a "Ship-ready" badge so leads
-  // can scan for Activity Groups ready to move now. Final program priority
-  // lives on the cross-tower 2x2.
+  // if any L5 is high-feasibility, the L4 carries a "Proven pattern"
+  // badge so leads can scan for Activity Groups ready to move now.
+  // Final program priority lives on the cross-tower 2x2.
   const headlineFeasibility = React.useMemo<"High" | "Low" | null>(() => {
     let sawLow = false;
     for (const l5 of row.l4s) {
@@ -931,7 +931,7 @@ function L4ActivityGroupCard({
                   <div className="col-span-1">Maturity</div>
                   <div
                     className="col-span-1 text-right"
-                    title="Ship-ready vs. Investigate. Final program priority is set on the Cross-Tower AI Plan via the feasibility × business-impact 2x2."
+                    title="Proven pattern vs. New build. Final program priority is set on the Cross-Tower AI Plan via the feasibility × business-impact 2x2."
                   >
                     Feasibility
                   </div>
@@ -1044,7 +1044,7 @@ export function ProcessLandscape({
           <p className="max-w-3xl text-xs text-forge-subtle">
             The{" "}
             <span className="font-medium text-forge-body">Feasibility roster</span>{" "}
-            tab groups ship-ready vs. investigate ideas for this tower; this view
+            tab groups Proven pattern vs. New build ideas for this tower; this view
             is the full scoped set. Expand an L4 Activity Group card for its L5
             Activities. Final program priority (P1/P2/P3) is set on the
             Cross-Tower AI Plan via the feasibility × business-impact 2x2.

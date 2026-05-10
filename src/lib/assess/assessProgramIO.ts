@@ -1,6 +1,5 @@
 import type {
   AssessProgramV2,
-  GlobalAssessAssumptions,
   L3WorkforceRowV6,
   L4WorkforceRow,
   TowerId,
@@ -9,20 +8,27 @@ import type {
 import { mergeLeadDeadlines, parseLeadDeadlines } from "@/lib/program/leadDeadlines";
 import {
   buildDefaultProgramLeadDeadlines,
-  defaultGlobalAssessAssumptions,
   defaultTowerBaseline,
   defaultTowerRates,
   defaultTowerState,
-  LEGACY_PROGRAM_GLOBAL_DEFAULTS,
 } from "@/data/assess/types";
-import { getTowerFunctionName } from "@/data/towerFunctionNames";
 import { towers } from "@/data/towers";
-import { coerceInitiativeReviews, groupL4RowsToL3RowsForImport } from "@/lib/localStore";
+import { coerceInitiativeReviews } from "@/lib/localStore";
 import { parseAiReadinessIntakeFromUnknown } from "@/lib/assess/towerReadinessIntake";
 import { deriveL3Rows } from "@/lib/assess/deriveL3Rows";
 
-export const ASSESS_PROGRAM_FILE_FORMAT = "forge-assess-program-v5" as const;
-const SUPPORTED_PROGRAM_VERSIONS: ReadonlyArray<number> = [2, 3, 4, 5, 6];
+/**
+ * Envelope label for newly written backups. We accept reading older labels
+ * (`-v5`, `-v3`, `-v2`) since legitimate v6 program backups exist with the
+ * older `-v5` envelope label from before the v5 schema retirement, but the
+ * inner `program.version` MUST be 6.
+ */
+export const ASSESS_PROGRAM_FILE_FORMAT = "forge-assess-program-v6" as const;
+const SUPPORTED_PROGRAM_VERSIONS: ReadonlyArray<number> = [6];
+const ACCEPTED_ENVELOPE_LABELS: ReadonlySet<string> = new Set([
+  "forge-assess-program-v6",
+  "forge-assess-program-v5",
+]);
 
 export type AssessProgramFileEnvelope = {
   format: typeof ASSESS_PROGRAM_FILE_FORMAT;
@@ -57,21 +63,15 @@ function slugify(s: string): string {
   );
 }
 
-function asL4Row(x: unknown, towerId: TowerId): L4WorkforceRow | null {
+function asL4Row(x: unknown): L4WorkforceRow | null {
   if (!isRecord(x)) return null;
   const id = x.id;
-  // V5 input: rows already carry `l2` (Job Grouping) + `l3` (Job Family) +
-  // `l4` (Activity Group). V4 input: rows have `l2` (old Pillar) + `l3`
-  // (old Capability) only — we shift those one level deeper (file's `l2` →
-  // new `l3`, file's `l3` → new `l4`) and stamp the new `l2` Job Grouping
-  // with the tower's L1 Function name.
-  const fileL2 = typeof x.l2 === "string" ? x.l2 : "";
-  const fileL3 = typeof x.l3 === "string" ? x.l3 : "";
-  const fileL4 = typeof x.l4 === "string" ? x.l4 : "";
-  const isV5 = !!fileL4.trim();
-  const l2 = isV5 ? fileL2 : getTowerFunctionName(towerId);
-  const l3 = isV5 ? fileL3 : fileL2;
-  const l4 = isV5 ? fileL4 : fileL3;
+  // v6 input: rows carry `l2` (Job Grouping), `l3` (Job Family), and `l4`
+  // (Activity Group) explicitly. Rows missing l3 or l4 are malformed and
+  // dropped.
+  const l2 = typeof x.l2 === "string" ? x.l2 : "";
+  const l3 = typeof x.l3 === "string" ? x.l3 : "";
+  const l4 = typeof x.l4 === "string" ? x.l4 : "";
   if (!l3.trim() || !l4.trim()) return null;
   const clamp01 = (v: number) => Math.min(100, Math.max(0, v));
   const out: L4WorkforceRow = {
@@ -103,8 +103,9 @@ function asL4Row(x: unknown, towerId: TowerId): L4WorkforceRow | null {
     return Number.isFinite(n) ? clamp01(n) : undefined;
   })();
   if (ai != null) out.aiImpactAssessmentPct = ai;
-  // V5 prefers `l5Activities`; V4 wrote `l4Activities`. Accept either so
-  // older Postgres rows + JSON exports still hydrate cleanly.
+  // v6 writes `l5Activities`. Older Postgres rows / JSON exports may carry
+  // `l4Activities` from the v4 migration window — accept either so the
+  // hierarchy renders cleanly during cutover.
   const rawActivities = Array.isArray(x.l5Activities)
     ? x.l5Activities
     : Array.isArray(x.l4Activities)
@@ -189,23 +190,6 @@ function parseRates(x: unknown, towerId: TowerId): TowerRates {
   };
 }
 
-/**
- * @deprecated Per-tower rates replaced the program-level global. Retained
- * only for back-compat reads of legacy `program.global` blobs — the parsed
- * values are then carried onto each tower's `rates` once via
- * `migrateAssessProgram`.
- */
-function parseGlobal(x: unknown): GlobalAssessAssumptions {
-  if (!isRecord(x)) return { ...defaultGlobalAssessAssumptions };
-  const d = defaultGlobalAssessAssumptions;
-  return {
-    blendedFteOnshore: coalesceNumber(x.blendedFteOnshore, d.blendedFteOnshore),
-    blendedFteOffshore: coalesceNumber(x.blendedFteOffshore, d.blendedFteOffshore),
-    blendedContractorOnshore: coalesceNumber(x.blendedContractorOnshore, d.blendedContractorOnshore),
-    blendedContractorOffshore: coalesceNumber(x.blendedContractorOffshore, d.blendedContractorOffshore),
-  };
-}
-
 /** Parses and normalizes; returns an error string on failure. */
 export function importAssessProgramFromJsonText(
   text: string,
@@ -224,17 +208,17 @@ export function importAssessProgramFromJsonText(
   }
 
   let programRaw: unknown;
-  if (
-    raw.format === ASSESS_PROGRAM_FILE_FORMAT ||
-    raw.format === "forge-assess-program-v3" ||
-    raw.format === "forge-assess-program-v2"
-  ) {
+  if (typeof raw.format === "string" && ACCEPTED_ENVELOPE_LABELS.has(raw.format)) {
     if (
       !isRecord(raw.program) ||
       typeof raw.program.version !== "number" ||
       !SUPPORTED_PROGRAM_VERSIONS.includes(raw.program.version)
     ) {
-      return { ok: false, error: "Invalid export: missing or wrong program.version." };
+      return {
+        ok: false,
+        error:
+          "Invalid export: program.version must be 6. Files from before the v6 schema launch are no longer supported — re-export from a current session.",
+      };
     }
     programRaw = raw.program;
   } else if (
@@ -246,7 +230,7 @@ export function importAssessProgramFromJsonText(
     return {
       ok: false,
       error:
-        "Unrecognized file: use a Forge export (.json) with program version 2, 3, 4, or 5.",
+        "Unrecognized file: use a Forge backup (.json) exported from a current v6 session.",
     };
   }
 
@@ -257,36 +241,13 @@ export function importAssessProgramFromJsonText(
     typeof programRaw.version !== "number" ||
     !SUPPORTED_PROGRAM_VERSIONS.includes(programRaw.version)
   ) {
-    return { ok: false, error: `Unsupported program version: ${String(programRaw.version)}.` };
+    return {
+      ok: false,
+      error: `Unsupported program version: ${String(programRaw.version)} — only version 6 is accepted.`,
+    };
   }
-
-  const inputVersion = programRaw.version;
-
-  // Legacy `program.global` carry-over: any field that was customized vs.
-  // the *historical* platform defaults gets copied onto every imported tower
-  // whose own `rates` blob is absent. Per-tower rates always win when
-  // present.
-  //
-  // CRITICAL: compare against LEGACY_PROGRAM_GLOBAL_DEFAULTS (the frozen
-  // historical numbers), NOT today's per-tower seeds. See the matching
-  // comment in `migrateAssessProgram` for why.
-  const legacyGlobal = parseGlobal(programRaw.global);
-  const legacyOverrides: Partial<TowerRates> = {};
-  for (const k of [
-    "blendedFteOnshore",
-    "blendedFteOffshore",
-    "blendedContractorOnshore",
-    "blendedContractorOffshore",
-  ] as const) {
-    if (legacyGlobal[k] !== LEGACY_PROGRAM_GLOBAL_DEFAULTS[k]) {
-      legacyOverrides[k] = legacyGlobal[k];
-    }
-  }
-  const hasLegacyGlobal = Object.keys(legacyOverrides).length > 0;
 
   const program: AssessProgramV2 = {
-    // Always v6: the post-derivation step below upgrades any v5 import
-    // (or any v6 import missing `l3Rows`) before returning.
     version: 6,
     towers: {},
   };
@@ -296,27 +257,10 @@ export function importAssessProgramFromJsonText(
     for (const [k, v] of Object.entries(towersObj)) {
       if (!isTowerId(k) || !isRecord(v)) continue;
       const base = defaultTowerState(k);
-      // V5 stores rows under `l4Rows`; V4 used `l3Rows`; V2/V3 used the
-      // pre-collapse `l4Rows` (per-L4-Activity granularity). All three
-      // shapes round-trip through `asL4Row` / `groupL4RowsToL3RowsForImport`
-      // (the latter is the legacy regrouper, which now emits L4 rows
-      // stamped with the tower's L1 Function name as the new L2).
-      let l4Rows: L4WorkforceRow[];
-      if (inputVersion >= 5 && Array.isArray(v.l4Rows)) {
-        l4Rows = v.l4Rows
-          .map((r) => asL4Row(r, k))
-          .filter(Boolean) as L4WorkforceRow[];
-      } else if (inputVersion >= 4 && Array.isArray(v.l3Rows)) {
-        l4Rows = v.l3Rows
-          .map((r) => asL4Row(r, k))
-          .filter(Boolean) as L4WorkforceRow[];
-      } else if (Array.isArray(v.l4Rows)) {
-        // Legacy V2/V3 shape: per-L4 rows that need regrouping. The grouper
-        // emits L4WorkforceRow with the L1 Function name stamped into l2.
-        l4Rows = groupL4RowsToL3RowsForImport(v.l4Rows as unknown[], k);
-      } else {
-        l4Rows = base.l4Rows;
-      }
+      // v6: rows live under `l4Rows`, carrying explicit l2/l3/l4 names.
+      const l4Rows: L4WorkforceRow[] = Array.isArray(v.l4Rows)
+        ? (v.l4Rows.map(asL4Row).filter(Boolean) as L4WorkforceRow[])
+        : base.l4Rows;
       const bRaw = isRecord(v.baseline) ? { ...defaultTowerBaseline, ...v.baseline } : defaultTowerBaseline;
       const st = v.status;
       const status = st === "empty" || st === "data" || st === "complete" ? st : base.status;
@@ -328,16 +272,14 @@ export function importAssessProgramFromJsonText(
       const aiReadinessIntake = parseAiReadinessIntakeFromUnknown(v.aiReadinessIntake);
 
       // Per-tower rates: prefer the snapshot's own `rates` blob; otherwise
-      // start from seeded defaults and overlay any one-shot legacy
-      // `program.global` carry-over.
-      const ratesFromSnapshot = isRecord(v.rates) ? parseRates(v.rates, k) : null;
-      const rates: TowerRates =
-        ratesFromSnapshot ??
-        (hasLegacyGlobal ? { ...defaultTowerRates(k), ...legacyOverrides } : defaultTowerRates(k));
+      // fall back to the tower's seeded defaults.
+      const rates: TowerRates = isRecord(v.rates)
+        ? parseRates(v.rates, k)
+        : defaultTowerRates(k);
 
-      // V6: preserve persisted L3 rows verbatim from a v6 import. The
-      // post-derivation step (below the towers loop) derives them when
-      // the import is v5 (or `l3Rows` is missing for any reason).
+      // Preserve persisted L3 rows verbatim from a v6 import. The defensive
+      // post-derivation step (below the towers loop) re-derives them when a
+      // tower has L4 rows but is missing `l3Rows` (malformed backup).
       const persistedL3Rows: L3WorkforceRowV6[] | undefined = Array.isArray(
         v.l3Rows,
       )
@@ -411,18 +353,19 @@ export function importAssessProgramFromJsonText(
     program.leadDeadlines = mergedDeadlines;
   }
 
-  // V6 post-derivation: derive `l3Rows` for any tower that lacks them
-  // (i.e. legacy v5 imports). Strips v5 dial fields from each L4 context
-  // row when freshly migrating — under v6 Step 2 reads `l3Rows`, so the
-  // L4 dials are vestigial and would surface stale numbers in any code
-  // path that still reads `l4Rows[*].offshoreAssessmentPct`.
-  let touchedV6 = false;
+  // Defensive post-derivation: if a tower has L4 rows but no `l3Rows` (a
+  // malformed v6 backup, which shouldn't happen in practice), re-derive
+  // them so Step 2 / Step 4 don't render blank. Strips dial fields from
+  // each L4 context row since dials live on `l3Rows` under v6 — leaving
+  // stale L4 dial values would surface wrong numbers in any code path
+  // that still reads `l4Rows[*].offshoreAssessmentPct`.
+  let touchedDerivation = false;
   const towersOut: AssessProgramV2["towers"] = {};
   for (const [k, t] of Object.entries(program.towers)) {
     if (!t) continue;
     const towerId = k as TowerId;
     const needsFreshDerivation = !t.l3Rows || t.l3Rows.length === 0;
-    if (needsFreshDerivation) {
+    if (needsFreshDerivation && t.l4Rows.length > 0) {
       const cleanedL4Rows = t.l4Rows.map((r) => {
         const next: typeof r = {
           id: r.id,
@@ -442,12 +385,12 @@ export function importAssessProgramFromJsonText(
       });
       const l3Rows = deriveL3Rows(cleanedL4Rows, towerId);
       towersOut[towerId] = { ...t, l4Rows: cleanedL4Rows, l3Rows };
-      touchedV6 = true;
+      touchedDerivation = true;
     } else {
       towersOut[towerId] = t;
     }
   }
-  if (touchedV6) {
+  if (touchedDerivation) {
     program.towers = towersOut;
   }
 

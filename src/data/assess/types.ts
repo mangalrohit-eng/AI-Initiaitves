@@ -800,18 +800,17 @@ export const DEFAULT_OFFSHORE_ASSUMPTIONS: OffshoreAssumptions = {
 /**
  * V6 program shape — current production schema.
  *
- * V6 moves the unit of analysis from L4 (Activity Group, dials + L5-grain
- * AI initiatives) up to L3 (Job Family, dials + 1-N AI Solution products
- * per L3). L4 rows remain on `TowerAssessState.l4Rows` as read-only LLM
+ * V6 unit of analysis is L3 Job Family: dials + 1-N AI Solution products
+ * per L3. L4 rows remain on `TowerAssessState.l4Rows` as read-only LLM
  * context; the `l3Rows` array is the dial-bearing primary entity.
  *
- * The `version` field accepts both 5 and 6 so legacy v5 export files
- * (e.g. JSON downloads from a previous deployment) still parse through
- * `assessProgramIO.importAssessProgramFromJsonText`, which derives the
- * `l3Rows` and stamps `version: 6` before they reach the read path. The
- * in-memory shape is always v6.
+ * The `version` field is always `6`. The parser
+ * (`assessProgramIO.importAssessProgramFromJsonText`) hard-rejects any
+ * other version with a clear error message. Older program shapes (v2-v5)
+ * are no longer supported on import; admins with pre-v6 backups must
+ * recover from a v6-era backup or re-export from a current session.
  *
- * V5 background (kept for migration context):
+ * V5 background (kept for migration context only):
  *   V5 inserted a new L2 Job Grouping layer between the L1 Function and
  *   the Job Family (was L2 Pillar). The math grain was per-L4 Activity
  *   Group rows; AI initiatives attached to L5 Activities. V6 collapses
@@ -819,11 +818,10 @@ export const DEFAULT_OFFSHORE_ASSUMPTIONS: OffshoreAssumptions = {
  */
 export type AssessProgramV6 = {
   /**
-   * Schema version of the persisted blob. The app writes `6`; legacy v5
-   * export files may carry `5` and are translated to `6` by
-   * `assessProgramIO.importAssessProgramFromJsonText`.
+   * Schema version of the persisted blob. Always `6`; the parser
+   * hard-rejects any other value.
    */
-  version: 5 | 6;
+  version: 6;
   towers: Partial<Record<TowerId, TowerAssessState>>;
   /**
    * @deprecated Removed in the per-tower rates migration. Each

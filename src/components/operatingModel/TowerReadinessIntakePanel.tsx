@@ -17,7 +17,23 @@ import {
 } from "@/lib/assess/towerReadinessIntake";
 import { cn } from "@/lib/utils";
 
-export function TowerReadinessIntakePanel({ tower }: { tower: Tower }) {
+/**
+ * Tower-scoped AI readiness questionnaire import.
+ *
+ * `compact` (default `false`) suppresses the inner h3 + intro paragraph
+ * so the component can sit cleanly under an outer step shell (the
+ * facilitator drawer on Step 4) without duplicating the heading. The
+ * file picker, "View imported answers" expander, and import timestamp
+ * stay visible regardless. The standalone caller in
+ * `OperatingModelSection` keeps the default and renders the full panel.
+ */
+export function TowerReadinessIntakePanel({
+  tower,
+  compact = false,
+}: {
+  tower: Tower;
+  compact?: boolean;
+}) {
   const toast = useToast();
   const fileRef = React.useRef<HTMLInputElement>(null);
   const [expanded, setExpanded] = React.useState(false);
@@ -84,18 +100,31 @@ export function TowerReadinessIntakePanel({ tower }: { tower: Tower }) {
   const hasSubstance = intakeHasMinimumSubstance(intake);
 
   return (
-    <section className="rounded-2xl border border-forge-border bg-forge-surface/80 p-4">
+    <section
+      className={cn(
+        compact
+          ? ""
+          : "rounded-2xl border border-forge-border bg-forge-surface/80 p-4",
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="font-display text-sm font-semibold text-forge-ink">
-            Tower AI readiness intake
-          </h3>
-          <p className="mt-0.5 max-w-2xl text-xs text-forge-subtle">
-            Import the Forge Excel questionnaire for{" "}
-            <span className="text-forge-ink">{tower.name}</span>. Parsed answers
-            persist with the workshop and inform AI guidance after you refresh.
-          </p>
-        </div>
+        {compact ? (
+          <span className="text-[11px] text-forge-subtle">
+            Forge Excel questionnaire for{" "}
+            <span className="text-forge-body">{tower.name}</span>.
+          </span>
+        ) : (
+          <div>
+            <h3 className="font-display text-sm font-semibold text-forge-ink">
+              Tower AI readiness intake
+            </h3>
+            <p className="mt-0.5 max-w-2xl text-xs text-forge-subtle">
+              Import the Forge Excel questionnaire for{" "}
+              <span className="text-forge-ink">{tower.name}</span>. Parsed answers
+              persist with the workshop and inform AI guidance after you refresh.
+            </p>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <input
             ref={fileRef}
@@ -116,7 +145,12 @@ export function TowerReadinessIntakePanel({ tower }: { tower: Tower }) {
       </div>
 
       {intake ? (
-        <div className="mt-4 border-t border-forge-border pt-3">
+        <div
+          className={cn(
+            "mt-4 pt-3",
+            compact ? "border-t border-forge-border/60" : "border-t border-forge-border",
+          )}
+        >
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}

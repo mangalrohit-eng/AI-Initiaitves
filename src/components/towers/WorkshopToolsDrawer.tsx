@@ -5,7 +5,6 @@ import { ChevronDown, Settings2, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Tower } from "@/data/types";
 import type { TowerId } from "@/data/assess/types";
-import { TowerDataExports } from "@/components/assess/TowerDataExports";
 import { TowerReadinessIntakePanel } from "@/components/operatingModel/TowerReadinessIntakePanel";
 import { RegenerateAiGuidanceToolbar } from "@/components/operatingModel/RegenerateAiGuidanceToolbar";
 import { StaleCurationBanner } from "@/components/operatingModel/StaleCurationBanner";
@@ -27,19 +26,31 @@ const AUTO_OPEN_KEY_PREFIX = "workshop-tools-drawer-autoopen-v1::";
 /**
  * Collapsible "facilitator-only" controls drawer for Step 4.
  *
- * Hosts the workshop-power-user tools — data exports, AI readiness
- * intake import, manual regenerate AI guidance — out of the way of
- * the page's headline content (hero, KPIs, gallery), so a tower lead
- * doesn't have to scroll past them on every visit.
+ * Hosts the workshop-power-user AI-curation pipeline organised as a
+ * three-step sequence so the run order is unmistakable:
  *
- * The journey stepper and the tower-lead sign-off explicitly do NOT
- * live here — those moved to the top of the page (next to the hero)
- * to match the chrome ordering on Capability Map and Impact Levers.
+ *   1. Import tower AI readiness intake — Versant questionnaire context
+ *      that conditions the LLM on the next step.
+ *   2. Regenerate AI guidance — re-runs the L3 Job Family scoring to
+ *      produce the AI Solutions list.
+ *   3. Generate AI Solution briefs — fills the per-Solution six-section
+ *      narratives shown on the detail page.
  *
- * The `StaleCurationBanner` is mounted INSIDE the drawer header
- * (always visible, ignoring open/close) so the "your map is out of
- * date" prompt stays loud — it auto-opens the drawer in that state
- * via `forceOpen`-style coupling.
+ * Tower data exports (the Step 4 / Step 1 / Step 2 CSV download) do NOT
+ * live here — they sit at the top of the page next to the journey
+ * stepper to match the inline placement on Capability Map and Impact
+ * Levers, where exports are an always-available affordance rather than
+ * a workshop-mode tool.
+ *
+ * The journey stepper and the tower-lead sign-off also live above the
+ * drawer (next to the hero) for the same chrome-consistency reason.
+ *
+ * The `StaleCurationBanner` is mounted inside the drawer header (always
+ * visible, ignoring open/close) so the "your map is out of date" prompt
+ * stays loud — it auto-opens the drawer in that state via the
+ * one-shot auto-open flag below. It targets only the queued (stale)
+ * Job Families; Step 2's "Regenerate AI guidance" rebuilds every
+ * eligible row and is meant for a clean redo after an intake change.
  *
  * Drawer open/close state is persisted per session in `localStorage`.
  */
@@ -134,8 +145,7 @@ export function WorkshopToolsDrawer({
               ) : null}
             </div>
             <div className="text-[11px] text-forge-subtle">
-              Bulk generate AI Solution briefs, exports, intake import, and
-              regenerate AI guidance — for facilitators only.
+              Facilitator-only. Intake &rsaquo; Regenerate AI guidance &rsaquo; Generate briefs.
             </div>
           </div>
         </div>
@@ -159,17 +169,76 @@ export function WorkshopToolsDrawer({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="space-y-4 px-4 py-4">
-              <BulkGenerateBriefsToolbar towerId={towerId} />
-              <TowerDataExports tower={tower} />
-              <TowerReadinessIntakePanel tower={tower} />
-              <div className="flex justify-end">
+            <ol className="space-y-3 px-4 py-4">
+              <DrawerStep
+                index={1}
+                title="Import tower AI readiness intake"
+                helper="Optional. Tower questionnaire context for the next step."
+              >
+                <TowerReadinessIntakePanel tower={tower} compact />
+              </DrawerStep>
+              <DrawerStep
+                index={2}
+                title="Regenerate AI guidance"
+                helper="Rebuilds AI Solutions for every eligible L3 Job Family. Use the amber banner above for a queued-only refresh after a capability-map edit."
+              >
                 <RegenerateAiGuidanceToolbar towerId={towerId} />
-              </div>
-            </div>
+              </DrawerStep>
+              <DrawerStep
+                index={3}
+                title="Generate AI Solution briefs"
+                helper="Fills the six-section narrative for each AI Solution. Runs sequentially, 30–90s per brief."
+              >
+                <BulkGenerateBriefsToolbar towerId={towerId} compact />
+              </DrawerStep>
+            </ol>
           </motion.div>
         ) : null}
       </AnimatePresence>
     </section>
+  );
+}
+
+/**
+ * Numbered step shell for the AI-curation pipeline inside the drawer.
+ *
+ * Renders a JetBrains-mono `1 / 2 / 3` chip on the left (neutral border
+ * + accent-purple — the priority palette of red/amber/teal is reserved
+ * for P1/P2/P3 and must not be reused here), a one-line title, a single
+ * helper sentence, and the supplied tool below. The shell is the ONLY
+ * place the heading is rendered — child tools render in their `compact`
+ * mode (where applicable) so the heading isn't duplicated.
+ */
+function DrawerStep({
+  index,
+  title,
+  helper,
+  children,
+}: {
+  index: number;
+  title: string;
+  helper: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="rounded-xl border border-forge-border bg-near-black/30 p-3">
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-accent-purple/40 bg-accent-purple/10 font-mono text-xs font-semibold text-accent-purple-light"
+        >
+          {index}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="font-display text-sm font-semibold text-forge-ink">
+            {title}
+          </div>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-forge-subtle">
+            {helper}
+          </p>
+          <div className="mt-3">{children}</div>
+        </div>
+      </div>
+    </li>
   );
 }

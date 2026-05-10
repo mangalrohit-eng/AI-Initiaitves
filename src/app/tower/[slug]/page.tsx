@@ -6,6 +6,7 @@ import { TowerHeroV2 } from "@/components/towers/TowerHeroV2";
 import { TowerKpiStrip } from "@/components/towers/TowerKpiStrip";
 import { SolutionsGallery } from "@/components/towers/SolutionsGallery";
 import { TowerSwitcher } from "@/components/towers/TowerSwitcher";
+import { TowerDataExports } from "@/components/assess/TowerDataExports";
 import { WorkshopToolsDrawer } from "@/components/towers/WorkshopToolsDrawer";
 import { TowerStep4TopChrome } from "@/components/towers/TowerStep4TopChrome";
 import { TowerAiJourneyGuidance } from "@/components/towers/TowerAiJourneyGuidance";
@@ -26,12 +27,16 @@ export function generateStaticParams() {
  *
  *   1. Utility row — Breadcrumbs + tower switcher + share controls.
  *   2. Tower-lead chrome — journey stepper + Mark reviewed sign-off bar.
- *   3. Coaching — `TowerAiJourneyGuidance` (what to do on this tab).
- *   4. Hero — motif icon, name, narrative, current state, leads.
- *   5. KPI strip — 4 numbers from the V6 selector.
- *   6. Workshop tools drawer — collapsed; data exports, intake import,
- *      regenerate AI guidance, plus the StaleCurationBanner header.
- *   7. AI solutions gallery — a right-aligned validation status chip
+ *   3. Tower data exports — same inline placement as Steps 1 and 2 so
+ *      the CSV download affordance lives in a consistent slot across
+ *      every per-tower page (instead of being buried in the drawer).
+ *   4. Coaching — `TowerAiJourneyGuidance` (what to do on this tab).
+ *   5. Hero — motif icon, name, narrative, current state, leads.
+ *   6. KPI strip — 4 numbers from the V6 selector.
+ *   7. Workshop tools drawer — collapsed; numbered AI-curation pipeline
+ *      (intake → regenerate guidance → bulk briefs) plus the
+ *      `StaleCurationBanner` always-visible alert in the header.
+ *   8. AI solutions gallery — a right-aligned validation status chip
  *      sits above a single filterable card grid (no heading, no
  *      explanatory paragraph, no tabs, no group-by toggle, no marquee,
  *      no value-effort matrix). The cards ARE the content; the hero +
@@ -81,6 +86,8 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
         <div className="mt-3">
           <TowerStep4TopChrome towerId={towerId} towerName={tower.name} />
         </div>
+
+        <TowerDataExports tower={tower} className="mt-3" />
 
         <TowerAiJourneyGuidance tower={tower} />
 

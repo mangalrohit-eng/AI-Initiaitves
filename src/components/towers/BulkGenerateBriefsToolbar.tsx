@@ -50,9 +50,12 @@ import { cn } from "@/lib/utils";
 export function BulkGenerateBriefsToolbar({
   towerId,
   /**
-   * When true, render only the most condensed presentation — used by
-   * `WorkshopToolsDrawer` so the bulk generator sits flush with the
-   * "Regenerate AI guidance" button beneath it.
+   * When true, render the most condensed presentation: drop the outer
+   * card chrome, hide the inner "Generate AI Solution briefs in bulk"
+   * title block (since the outer step shell already names this step),
+   * and stack the action row directly under the summary line. The
+   * action buttons, summary chip, progress strip, and confirm dialog
+   * stay identical to the standalone presentation.
    */
   compact = false,
 }: {
@@ -227,47 +230,78 @@ export function BulkGenerateBriefsToolbar({
     <>
       <div
         className={cn(
-          "flex flex-col gap-2 rounded-xl border border-forge-border bg-near-black/30 p-3",
-          compact ? "" : "sm:flex-row sm:items-center sm:justify-between",
+          "flex flex-col gap-2",
+          compact
+            ? ""
+            : "rounded-xl border border-forge-border bg-near-black/30 p-3 sm:flex-row sm:items-center sm:justify-between",
         )}
       >
-        <div className="flex items-start gap-2.5 min-w-0">
-          <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-accent-purple/40 bg-accent-purple/10 text-accent-purple-light">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden />
-          </span>
-          <div className="min-w-0">
-            <div className="font-display text-sm font-semibold text-forge-ink">
-              Generate AI Solution briefs in bulk
-            </div>
-            <div className="mt-0.5 text-[11px] leading-relaxed text-forge-subtle">
-              {summary.missingCount > 0 ? (
-                <>
-                  <span className="font-mono text-forge-body">
-                    {summary.missingCount}
-                  </span>{" "}
-                  missing
-                </>
-              ) : (
-                <span className="text-forge-hint">All briefs cached</span>
-              )}
-              {summary.staleCount > 0 ? (
-                <>
-                  {" · "}
-                  <span className="font-mono text-forge-body">
-                    {summary.staleCount}
-                  </span>{" "}
-                  stale
-                </>
-              ) : null}
-              {" · "}
-              <span className="font-mono text-forge-body">
-                {summary.totalInitiatives}
-              </span>{" "}
-              total
+        {compact ? (
+          <div className="text-[11px] leading-relaxed text-forge-subtle">
+            {summary.missingCount > 0 ? (
+              <>
+                <span className="font-mono text-forge-body">
+                  {summary.missingCount}
+                </span>{" "}
+                missing
+              </>
+            ) : (
+              <span className="text-forge-hint">All briefs cached</span>
+            )}
+            {summary.staleCount > 0 ? (
+              <>
+                {" · "}
+                <span className="font-mono text-forge-body">
+                  {summary.staleCount}
+                </span>{" "}
+                stale
+              </>
+            ) : null}
+            {" · "}
+            <span className="font-mono text-forge-body">
+              {summary.totalInitiatives}
+            </span>{" "}
+            total
+          </div>
+        ) : (
+          <div className="flex items-start gap-2.5 min-w-0">
+            <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-accent-purple/40 bg-accent-purple/10 text-accent-purple-light">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <div className="font-display text-sm font-semibold text-forge-ink">
+                Generate AI Solution briefs in bulk
+              </div>
+              <div className="mt-0.5 text-[11px] leading-relaxed text-forge-subtle">
+                {summary.missingCount > 0 ? (
+                  <>
+                    <span className="font-mono text-forge-body">
+                      {summary.missingCount}
+                    </span>{" "}
+                    missing
+                  </>
+                ) : (
+                  <span className="text-forge-hint">All briefs cached</span>
+                )}
+                {summary.staleCount > 0 ? (
+                  <>
+                    {" · "}
+                    <span className="font-mono text-forge-body">
+                      {summary.staleCount}
+                    </span>{" "}
+                    stale
+                  </>
+                ) : null}
+                {" · "}
+                <span className="font-mono text-forge-body">
+                  {summary.totalInitiatives}
+                </span>{" "}
+                total
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        )}
+        <div className={cn("flex flex-wrap items-center gap-2", compact ? "justify-start" : "justify-end")}>
           <button
             type="button"
             onClick={() => setConfirmIntent("missing")}

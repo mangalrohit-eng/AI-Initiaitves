@@ -1,26 +1,24 @@
 "use client";
 
 import { AlertTriangle, ShieldCheck, Sparkles } from "lucide-react";
-import type { ProgramSynthesisLLM } from "@/lib/cross-tower/aiProjects";
-import { IS_V6 } from "@/lib/schemaFlag";
+import type { ProgramSynthesisLLMV6 } from "@/lib/cross-tower/composeProjectsV6";
 
 /**
- * Cross-Tower AI Plan v3 — program-level risks panel.
+ * Cross-Tower AI Plan — program-level risks panel.
  *
- * Renders the LLM-authored risk catalog from `ProgramSynthesisLLM.risks`.
+ * Renders the LLM-authored risk catalog from `ProgramSynthesisLLMV6.risks`.
  * Each risk has `title`, `description`, `mitigation` — all authored
  * directly by GPT-5.5, grounded in the Versant context block (TSA, BB-,
  * editorial integrity, broadcast resilience, multi-entity structure).
  *
- * No fixed catalog — the legacy `PROGRAM_RISK_CATALOG` was deliberately
- * removed in v3 because risks should reflect the actual project mix in
- * the plan, not a generic boilerplate.
+ * No fixed catalog — risks reflect the actual AI Solution mix in the
+ * plan, not generic boilerplate.
  */
 export function ProgramRisksPanel({
   synthesis,
   bare,
 }: {
-  synthesis: ProgramSynthesisLLM | null;
+  synthesis: ProgramSynthesisLLMV6 | null;
   bare?: boolean;
 }) {
   const Header = (
@@ -31,7 +29,7 @@ export function ProgramRisksPanel({
           Program risks
         </h2>
         <p className="mt-1 max-w-2xl text-sm text-forge-subtle">
-          Risks specific to this {IS_V6 ? "AI Solution" : "AI Project"} mix —
+          Risks specific to this AI Solution mix —
           no generic boilerplate. Mitigations name the Versant towers,
           executives, and structural constraints (TSA, BB- credit, editorial
           floor, on-air resilience) that bear the weight.

@@ -19,9 +19,7 @@ import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { TabGroup, type TabItem } from "@/components/ui/TabGroup";
 import type { TowerId } from "@/data/assess/types";
 import { towers as allTowers } from "@/data/towers";
-import { useProgramInitiatives } from "@/lib/initiatives/useProgramInitiatives";
 import { useProgramInitiativesV6 } from "@/lib/initiatives/useProgramInitiativesV6";
-import { useCrossTowerPlan } from "@/lib/llm/useCrossTowerPlan";
 import { useCrossTowerPlanV6 } from "@/lib/llm/useCrossTowerPlanV6";
 import {
   buildProjectsBuildScale,
@@ -31,7 +29,6 @@ import {
   CROSS_TOWER_VIEW_PHASES,
   crossTowerViewFiltersActive,
   filterProjectsByView,
-  sliceProgramForView,
   sliceProgramV6ForView,
   type CrossTowerViewPhaseId,
 } from "@/lib/cross-tower/filterCrossTowerView";
@@ -57,13 +54,8 @@ import { exportProjectsToExcel } from "@/lib/cross-tower/exportProjectsExcel";
 import { useRedactDollars } from "@/lib/clientMode";
 import { getAssessProgram, subscribe } from "@/lib/localStore";
 import { latestTowerIntakeImportedAtIso } from "@/lib/assess/towerReadinessIntake";
-import { IS_V6 } from "@/lib/schemaFlag";
-import type { SelectProgramResult } from "@/lib/initiatives/selectProgram";
 import type { SelectProgramResultV6 } from "@/lib/initiatives/selectV6Program";
-import type {
-  AIProjectResolved,
-  ProgramSynthesisLLM,
-} from "@/lib/cross-tower/aiProjects";
+import type { AIProjectResolved } from "@/lib/cross-tower/aiProjects";
 
 /**
  * Cross-Tower AI Plan v3 — page-level shell.
@@ -102,27 +94,14 @@ export function CrossTowerAiPlanClient() {
   //   Assumptions + program substrate
   // ---------------------------------------------------------------------
   const { assumptions, update, reset, hydrating } = useCrossTowerAssumptions();
-  // V6 path runs the L3-grain selector + a single program-synthesis hook
-  // (`useCrossTowerPlanV6`). V5 path stays on the per-cohort hook so the
-  // legacy schema keeps rendering until v6 is the only flag setting.
-  const v5Program = useProgramInitiatives(IS_V6 ? 0 : assumptions.planThresholdUsd);
-  const v6Program = useProgramInitiativesV6(IS_V6 ? assumptions.planThresholdUsd : 0);
-  const v5Hook = useCrossTowerPlan({
-    program: v5Program,
-    assumptions,
-  });
-  const v6Hook = useCrossTowerPlanV6({
-    program: v6Program,
-    assumptions,
-  });
-  const program: SelectProgramResult | SelectProgramResultV6 = IS_V6
-    ? v6Program
-    : v5Program;
-  const state = IS_V6
-    ? adaptV6State(v6Hook.state)
-    : v5Hook.state;
-  const regenerate = IS_V6 ? v6Hook.regenerate : v5Hook.regenerate;
-  const retryCohort = IS_V6 ? undefined : v5Hook.retryCohort;
+  // L3-grain program selector + program-synthesis hook. The plan threads
+  // L3 AI Initiatives directly; there is no per-cohort fan-out under v6.
+  const program: SelectProgramResultV6 = useProgramInitiativesV6(
+    assumptions.planThresholdUsd,
+  );
+  const planHook = useCrossTowerPlanV6({ program, assumptions });
+  const state = planHook.state;
+  const regenerate = planHook.regenerate;
   const [exportError, setExportError] = React.useState<string | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = React.useState(false);
   const exportMenuRef = React.useRef<HTMLDivElement>(null);
@@ -217,20 +196,10 @@ export function CrossTowerAiPlanClient() {
     [state.projects, selectedTowerIds, selectedPhases],
   );
 
-  const filteredProgram = React.useMemo(() => {
-    if (IS_V6) {
-      return sliceProgramV6ForView(
-        program as SelectProgramResultV6,
-        selectedTowerIds,
-        selectedPhases,
-      ) as unknown as SelectProgramResult;
-    }
-    return sliceProgramForView(
-      program as SelectProgramResult,
-      selectedTowerIds,
-      selectedPhases,
-    );
-  }, [program, selectedTowerIds, selectedPhases]);
+  const filteredProgram = React.useMemo(
+    () => sliceProgramV6ForView(program, selectedTowerIds, selectedPhases),
+    [program, selectedTowerIds, selectedPhases],
+  );
 
   const filteredKpis = React.useMemo(
     () => summarizeProjects(filteredProjects),
@@ -269,11 +238,9 @@ export function CrossTowerAiPlanClient() {
     );
   }, []);
 
-  // Under v6 the cross-tower view never opens an inline drawer — every card
-  // links straight to `/tower/.../initiative/.../...`. Under v5, opening a
-  // project drawer is no longer supported either (the drawer was removed
-  // when the per-cohort brief moved into the deep-dive flow); the matrix
-  // and roadmap surfaces simply navigate to the deep-dive too.
+  // Cross-tower view never opens an inline drawer — every card links
+  // straight to `/tower/.../initiative/.../...`. Matrix and roadmap
+  // surfaces also navigate to the deep-dive instead of opening a drawer.
   const openProject = React.useCallback((p: AIProjectResolved) => {
     if (p.deepDiveHref && typeof window !== "undefined") {
       router.push(p.deepDiveHref);
@@ -290,14 +257,10 @@ export function CrossTowerAiPlanClient() {
       synthesis: state.synthesis,
       generatedAt: state.generatedAt,
       assumptionsForFootnote: state.appliedAssumptions ?? assumptions,
-      // The deck payload reader still consumes the v5 program shape. v6
-      // initiatives are flat (no nested L4/L3 view-models), so we pass
-      // an empty initiative roster but keep the inputHash + threshold
-      // metadata so the deck footer renders correctly. The slide bodies
-      // read from `state.projects` which carry the v6 fields directly.
-      program: IS_V6
-        ? ({ ...(program as SelectProgramResultV6), initiatives: [] } as unknown as SelectProgramResult)
-        : (program as SelectProgramResult),
+      // Deck payload reader stamps the inputHash + threshold metadata
+      // for the deck footer; the slide bodies read from `state.projects`
+      // which carry the v6 fields directly.
+      program,
       redactDollars,
       isFirstRunForCopy: isFirstRun,
     });
@@ -437,14 +400,9 @@ export function CrossTowerAiPlanClient() {
       },
       {
         id: "projects",
-        label: `${IS_V6 ? "AI Solutions" : "AI Projects"}${filteredProjects.length > 0 ? ` (${filteredProjects.length})` : ""}`,
+        label: `AI Solutions${filteredProjects.length > 0 ? ` (${filteredProjects.length})` : ""}`,
         content: (
-          <AIProjectsModule
-            projects={filteredProjects}
-            bare
-            onRetryCohort={retryCohort}
-            retryDisabled={isLoading || debouncing}
-          />
+          <AIProjectsModule projects={filteredProjects} bare />
         ),
       },
       {
@@ -524,7 +482,6 @@ export function CrossTowerAiPlanClient() {
       isStale,
       openProject,
       program,
-      retryCohort,
       state.synthesis,
       update,
       reset,
@@ -820,7 +777,6 @@ export function CrossTowerAiPlanClient() {
             kpis={filteredKpis}
             buildup={filteredBuildup}
             stubProjectCount={filteredKpis.stubProjects}
-            hasNarrative={state.synthesis !== null}
           />
         </div>
 
@@ -854,51 +810,7 @@ export function CrossTowerAiPlanClient() {
 // ---------------------------------------------------------------------------
 
 import type { CrossTowerAssumptions } from "@/lib/cross-tower/assumptions";
-import type { CrossTowerPlanState } from "@/lib/llm/useCrossTowerPlan";
 import type { CrossTowerPlanV6State } from "@/lib/llm/useCrossTowerPlanV6";
-
-/**
- * Convert the v6 state shape into the v5 shape so the downstream
- * components, banners, and the RegenerateAction button can stay shared.
- *
- * The v6 synthesis has an `architectureDelivery` field where v5 had
- * `architectureOrchestration`; we map them through here so the v5
- * narrative panels render unchanged. v6 deliberately drops `dependsOn`
- * (no inter-project edges to author when each project IS one initiative);
- * we surface an empty array.
- */
-function adaptV6State(s: CrossTowerPlanV6State): CrossTowerPlanState {
-  const v5Synthesis: ProgramSynthesisLLM | null = s.synthesis
-    ? {
-        executiveSummary: s.synthesis.executiveSummary,
-        dependsOn: [],
-        risks: s.synthesis.risks,
-        roadmapNarrative: s.synthesis.roadmapNarrative,
-        architectureOrchestration: s.synthesis.architectureDelivery,
-        architectureVendors: s.synthesis.architectureVendors,
-        architectureDataCore: s.synthesis.architectureDataCore,
-      }
-    : null;
-  return {
-    status: s.status,
-    hydratingFromDb: s.hydratingFromDb,
-    persistenceMode: s.persistenceMode,
-    projects: s.projects,
-    buildup: s.buildup,
-    kpis: s.kpis,
-    synthesis: v5Synthesis,
-    cohortStatus: [],
-    synthesisStatus: s.synthesis ? "ok" : "stub",
-    appliedInputHash: s.appliedInputHash,
-    appliedAssumptionsHash: s.appliedAssumptionsHash,
-    appliedAssumptions: s.appliedAssumptions,
-    modelId: s.modelId,
-    promptVersion: s.promptVersion,
-    generatedAt: s.generatedAt,
-    errorMessage: s.errorMessage,
-    warnings: s.warnings,
-  };
-}
 
 function ViewFilterNarrativeNotice() {
   return (
@@ -975,10 +887,10 @@ function RegenerateAction({
   isStale,
   onClick,
 }: {
-  state: ReturnType<typeof useCrossTowerPlan>["state"];
+  state: CrossTowerPlanV6State;
   isLoading: boolean;
   hydratingFromDb: boolean;
-  persistenceMode: ReturnType<typeof useCrossTowerPlan>["state"]["persistenceMode"];
+  persistenceMode: CrossTowerPlanV6State["persistenceMode"];
   isFirstRun: boolean;
   isStale: boolean;
   onClick: () => void;
@@ -1107,7 +1019,7 @@ function RegenerateAction({
 }
 
 function formatAuditLine(
-  state: ReturnType<typeof useCrossTowerPlan>["state"],
+  state: CrossTowerPlanV6State,
   hydratingFromDb: boolean,
 ): string {
   if (hydratingFromDb) return "Loading saved plan…";
@@ -1128,14 +1040,8 @@ function formatAuditLine(
 }
 
 function defaultExecutiveSummary(isFirstRun: boolean): string {
-  if (IS_V6) {
-    if (isFirstRun) {
-      return "Versant's cross-tower AI plan, sourced directly from the L3 AI Initiatives curated in each tower workshop. Click Regenerate plan to score every solution on the Value × Effort 2x2, sequence them across a 24-month roadmap, and roll up the program-level executive summary, risks, and architecture. Numerics and the value buildup curve update deterministically.";
-    }
-    return "Cross-tower AI plan, sourced directly from the L3 AI Initiatives in scope. Each solution carries its own deep-dive brief, is scored on Value × Effort, and threads into the 24-month roadmap. Click any solution to open its Work / Workforce / Workbench / Digital Core brief.";
-  }
   if (isFirstRun) {
-    return "Versant's cross-tower AI plan, structured as one AI Project per in-plan L4 Activity Group. Click Generate plan to author each project's 4-lens brief, score it on the Value × Effort 2x2, and stage the 24-month roadmap. Numerics, lineage, and the value buildup curve update deterministically.";
+    return "Versant's cross-tower AI plan, sourced directly from the L3 AI Initiatives curated in each tower workshop. Click Regenerate plan to score every solution on the Value × Effort 2x2, sequence them across a 24-month roadmap, and roll up the program-level executive summary, risks, and architecture. Numerics and the value buildup curve update deterministically.";
   }
-  return "Cross-tower AI plan, with one AI Project per L4 Activity Group. Each project ships its own 4-lens brief (Work / Workforce / Workbench / Digital Core), is scored on the Value × Effort 2x2, and threads into the 24-month roadmap. Open the AI Projects tab to drill into briefs.";
+  return "Cross-tower AI plan, sourced directly from the L3 AI Initiatives in scope. Each solution carries its own deep-dive brief, is scored on Value × Effort, and threads into the 24-month roadmap. Click any solution to open its Work / Workforce / Workbench / Digital Core brief.";
 }

@@ -26,7 +26,7 @@ export type UseOffshorePlanOptions = {
  * substrate whenever the program changes. SSR-safe — seeds with the
  * hydration snapshot so the first client render matches the static SSR
  * HTML, then swaps to the persisted program inside `useEffect`. Mirrors
- * `useProgramInitiatives` exactly so Step 4 and Step 5 stay in lockstep.
+ * `useProgramInitiativesV6` exactly so Step 4 and Step 5 stay in lockstep.
  *
  * The selector reads `program.offshoreAssumptions` directly off the
  * subscribed program, so location changes from the Assumptions tab

@@ -1,14 +1,9 @@
 /**
- * v6 Curation pipeline orchestrator — drives the per-L3 LLM streaming
- * route and writes per-row atomic patches into the local store as each
- * `row` event lands.
+ * Curation pipeline orchestrator — drives the per-L3 LLM streaming route
+ * and writes per-row atomic patches into the local store as each `row`
+ * event lands.
  *
- * Sibling to `curationPipeline.ts` (the v5 orchestrator) — kept in a
- * separate file so the v5 pipeline stays untouched through the cutover.
- * Phase 7 cleanup deletes the v5 orchestrator and folds these helpers
- * back into a single canonical file once the schema flag is retired.
- *
- * Streaming UX (matches v5):
+ * Streaming UX:
  *   - Each row flips to `running-curate` before the stream opens.
  *   - Each row transitions to `done` independently as its `row` event
  *     lands. The user sees rows fill in across the L3 view rather than
@@ -287,4 +282,21 @@ function writeRowFailure(towerId: TowerId, rowId: string, error: string): void {
         : r,
     ),
   });
+}
+
+/**
+ * Collect the L3 row ids in a tower whose `curationStage === "queued"`.
+ * Used by the StaleCurationBanner CTA to fire `runForL3Rows(towerId,
+ * queuedL3Ids)` against the L3-grain pipeline.
+ */
+export function queuedL3RowIdsForTower(
+  towerId: TowerId,
+): { rowIds: string[]; total: number } {
+  const program = getAssessProgram();
+  const t = program.towers[towerId];
+  if (!t || !t.l3Rows) return { rowIds: [], total: 0 };
+  const ids = t.l3Rows
+    .filter((r) => r.curationStage === "queued")
+    .map((r) => r.id);
+  return { rowIds: ids, total: t.l3Rows.length };
 }

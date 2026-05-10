@@ -7,7 +7,6 @@ import type {
 } from "@/data/assess/types";
 import { defaultTowerRates } from "@/data/assess/types";
 import { towers } from "@/data/towers";
-import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
  * Structural type covering both v5 `L4WorkforceRow` (= `L3WorkforceRow`)
@@ -278,19 +277,15 @@ export function towerRatesFromState(
 }
 
 /**
- * Pick the dial-bearing rows for a tower under the active schema:
- *   - v6: `l3Rows` if present (the L3-grain dials own the math).
- *   - v5: `l4Rows` (the L4-grain dials).
- *
- * v6 falls through to `l4Rows` when `l3Rows` hasn't been derived yet
- * (e.g. mid-migration first read) so the math layer never returns null
- * just because the post-processor hasn't run. Phase 7 cleanup tightens
- * this to "v6 always reads l3Rows" once the migration is permanent.
+ * Pick the dial-bearing rows for a tower. Under v6 the L3 Job Family
+ * rows own the dials. Falls through to `l4Rows` only when `l3Rows`
+ * hasn't been derived yet (e.g. legacy import in flight) so the math
+ * layer never returns null just because the post-processor hasn't run.
  */
 export function dialBearingRowsForTower(
   state: TowerAssessState,
 ): ReadonlyArray<DialBearingRow> {
-  if (IS_V6 && state.l3Rows && state.l3Rows.length > 0) {
+  if (state.l3Rows && state.l3Rows.length > 0) {
     return state.l3Rows;
   }
   return state.l4Rows;

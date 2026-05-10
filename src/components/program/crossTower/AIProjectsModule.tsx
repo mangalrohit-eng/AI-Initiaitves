@@ -6,7 +6,6 @@ import {
   Sparkles,
   Layers,
   AlertTriangle,
-  RotateCcw,
   ExternalLink,
   Building2,
 } from "lucide-react";
@@ -16,17 +15,16 @@ import type {
 } from "@/lib/cross-tower/aiProjects";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
-import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
- * AI Projects card grid for the Cross-Tower AI Plan page.
+ * AI Solutions card grid for the Cross-Tower AI Plan page.
  *
- * Under v6 each card represents one curated `L3Initiative` AI Solution
- * (one per L3 Job Family row). Cards are grouped by Value × Effort
- * quadrant (Quick Win → Strategic Bet → Fill-in → Deprioritize) so the
+ * Each card represents one curated `L3Initiative` AI Solution (one per
+ * L3 Job Family row). Cards are grouped by Value × Effort quadrant
+ * (Quick Win → Strategic Bet → Fill-in → Deprioritize) so the
  * executive's eye lands on the highest-leverage initiatives first.
  *
- * Card surfaces (deterministic, v6):
+ * Card surfaces (deterministic):
  *   - Solution name + tagline (LLM-curated upstream).
  *   - Tower chip + L3 Job Family chip.
  *   - Modeled $ chip (the row's even-split AI $).
@@ -43,14 +41,9 @@ import { IS_V6 } from "@/lib/schemaFlag";
 export function AIProjectsModule({
   projects,
   bare,
-  onRetryCohort,
-  retryDisabled,
 }: {
   projects: AIProjectResolved[];
   bare?: boolean;
-  /** v5-only: per-project retry CTA on stub cards. v6 cards never stub at this layer. */
-  onRetryCohort?: (l4RowId: string) => void;
-  retryDisabled?: boolean;
 }) {
   const sections = React.useMemo(() => groupByQuadrant(projects), [projects]);
 
@@ -59,21 +52,21 @@ export function AIProjectsModule({
       <div>
         <h2 className="font-display text-lg font-semibold text-forge-ink">
           <span className="font-mono text-accent-purple-dark">&gt;</span>{" "}
-          {IS_V6
-            ? "AI Solutions across the program"
-            : "AI Projects across the program"}
+          AI Solutions across the program
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
-          {IS_V6
-            ? "One card per curated AI Solution — sourced directly from each tower's L3 Job Family roster. Quadrant assignment, modeled $, and program tier are deterministic; the cross-tower narrative is authored by the Versant model. Click any card to open the full four-lens brief."
-            : "Each project corresponds to one in-plan L4 Activity Group. Grouping is structural; project names, briefs, and value/effort scoring are authored by the Versant model against the live context. Click any card to read the full 4-lens brief."}
+          One card per curated AI Solution — sourced directly from each
+          tower&apos;s L3 Job Family roster. Quadrant assignment, modeled $,
+          and program tier are deterministic; the cross-tower narrative is
+          authored by the Versant model. Click any card to open the full
+          four-lens brief.
         </p>
       </div>
       {projects.length > 0 ? (
         <div className="flex items-center gap-2 text-xs text-forge-subtle">
           <Layers className="h-3.5 w-3.5" aria-hidden />
           <span className="font-mono text-forge-body">{projects.length}</span>{" "}
-          {IS_V6 ? "solutions" : "projects"} ·{" "}
+          solutions ·{" "}
           <span className="font-mono text-forge-body">
             {projects.filter((p) => !p.isStub && !p.isDeprioritized).length}
           </span>{" "}
@@ -100,22 +93,13 @@ export function AIProjectsModule({
                 {section.title}
               </span>
               <span className="text-[11px] text-forge-hint">
-                {section.projects.length} {IS_V6 ? "solution" : "project"}
+                {section.projects.length} solution
                 {section.projects.length === 1 ? "" : "s"}
               </span>
             </div>
             <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
               {section.projects.map((p) => (
-                <ProjectCard
-                  key={p.id}
-                  project={p}
-                  onRetry={
-                    onRetryCohort
-                      ? () => onRetryCohort(p.parentL4ActivityGroupId)
-                      : undefined
-                  }
-                  retryDisabled={Boolean(retryDisabled)}
-                />
+                <ProjectCard key={p.id} project={p} />
               ))}
             </div>
           </section>
@@ -143,15 +127,7 @@ export function AIProjectsModule({
 //   Project card
 // ---------------------------------------------------------------------------
 
-function ProjectCard({
-  project,
-  onRetry,
-  retryDisabled,
-}: {
-  project: AIProjectResolved;
-  onRetry?: () => void;
-  retryDisabled?: boolean;
-}) {
+function ProjectCard({ project }: { project: AIProjectResolved }) {
   const redact = useRedactDollars();
   const isStub = project.isStub;
   const cardClass = isStub
@@ -165,7 +141,7 @@ function ProjectCard({
   );
 
   // Headline: prefer the LLM cross-tower narrative when available; fall back
-  // to the deterministic AI rationale (v6) or the v5 placeholder narrative.
+  // to the deterministic AI rationale.
   const headlineText = project.narrative;
   const taglineText = project.tagline;
 
@@ -211,18 +187,14 @@ function ProjectCard({
               {project.primaryTowerName}
             </span>
             <span className="truncate">
-              <span className="text-forge-hint">
-                {IS_V6 ? "Job Family ·" : "L4 ·"}
-              </span>{" "}
-              {IS_V6
-                ? project.l3FamilyName ?? project.parentL4ActivityGroupName
-                : project.parentL4ActivityGroupName}
+              <span className="text-forge-hint">Job Family ·</span>{" "}
+              {project.l3FamilyName ?? project.parentL4ActivityGroupName}
             </span>
           </div>
         </div>
       </header>
 
-      {IS_V6 && taglineText ? (
+      {taglineText ? (
         <p className="mt-2 text-xs leading-relaxed text-forge-body">
           {taglineText}
         </p>
@@ -256,57 +228,27 @@ function ProjectCard({
               {formatUsdCompact(project.attributedAiUsd)}
             </span>
           ) : null}
-          {IS_V6 ? (
-            <>
-              {project.feasibility ? (
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 font-medium ${
-                    project.feasibility === "High"
-                      ? "border-accent-green/40 bg-accent-green/5 text-accent-green"
-                      : "border-accent-amber/40 bg-accent-amber/5 text-accent-amber"
-                  }`}
-                  title="Curator-stamped binary ship-readiness"
-                >
-                  <span className="font-mono">FE</span>
-                  {project.feasibility}
-                </span>
-              ) : null}
-              {project.primaryVendor ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-well px-1.5 py-0.5">
-                  <Building2 className="h-3 w-3" aria-hidden />
-                  {project.primaryVendor}
-                </span>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <span className="inline-flex items-center gap-1">
-                <Layers className="h-3 w-3" aria-hidden />
-                {project.constituents.length} L5
-              </span>
-              {!isStub && project.brief ? (
-                <>
-                  <span className="inline-flex items-center gap-1">
-                    {project.brief.agents.length} agents
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    {project.brief.digitalCore.integrations.length} integrations
-                  </span>
-                </>
-              ) : null}
-            </>
-          )}
+          {project.feasibility ? (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 font-medium ${
+                project.feasibility === "High"
+                  ? "border-accent-green/40 bg-accent-green/5 text-accent-green"
+                  : "border-accent-amber/40 bg-accent-amber/5 text-accent-amber"
+              }`}
+              title="Curator-stamped binary ship-readiness"
+            >
+              <span className="font-mono">FE</span>
+              {project.feasibility}
+            </span>
+          ) : null}
+          {project.primaryVendor ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-well px-1.5 py-0.5">
+              <Building2 className="h-3 w-3" aria-hidden />
+              {project.primaryVendor}
+            </span>
+          ) : null}
         </div>
-        {isStub && onRetry ? (
-          <button
-            type="button"
-            onClick={onRetry}
-            disabled={retryDisabled}
-            className="inline-flex items-center gap-1 rounded-full border border-accent-amber/40 bg-accent-amber/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent-amber transition hover:bg-accent-amber/15 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <RotateCcw className="h-2.5 w-2.5" aria-hidden /> Retry
-          </button>
-        ) : hasDeepDive && project.deepDiveHref ? (
+        {hasDeepDive && project.deepDiveHref ? (
           <Link
             href={project.deepDiveHref}
             className="inline-flex items-center gap-1 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent-purple-dark transition hover:bg-accent-purple/15"
@@ -360,29 +302,15 @@ function EmptyState() {
         aria-hidden
       />
       <p className="mt-2 text-sm font-semibold text-forge-ink">
-        {IS_V6
-          ? "No AI Solutions in plan yet."
-          : "No AI Projects yet for this scenario."}
+        No AI Solutions in plan yet.
       </p>
       <p className="mt-1 text-xs text-forge-subtle">
-        {IS_V6 ? (
-          <>
-            Either no L3 Job Family rows clear the plan threshold, or no AI
-            Solutions have been curated yet. Curate AI Solutions on each tower
-            page (Step 4 of the workshop) and revisit this view; adjust the
-            threshold in{" "}
-            <span className="font-medium text-forge-body">Assumptions</span> to
-            include lower-prize Job Family rows.
-          </>
-        ) : (
-          <>
-            Either no L4 Activity Groups clear the plan threshold, or you
-            haven&apos;t clicked Regenerate yet. Adjust the threshold in
-            Assumptions or click{" "}
-            <span className="font-medium text-forge-body">Regenerate plan</span>{" "}
-            in the page header.
-          </>
-        )}
+        Either no L3 Job Family rows clear the plan threshold, or no AI
+        Solutions have been curated yet. Curate AI Solutions on each tower
+        page (Step 4 of the workshop) and revisit this view; adjust the
+        threshold in{" "}
+        <span className="font-medium text-forge-body">Assumptions</span> to
+        include lower-prize Job Family rows.
       </p>
     </div>
   );

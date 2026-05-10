@@ -1,29 +1,29 @@
 /**
- * Cross-Tower AI Plan — V6 program-level selector.
+ * Cross-Tower AI Plan — program-level selector.
  *
- * Sibling of `selectProgram.ts` (the v5 selector). Under v6, AI initiatives
- * are authored at L3 Job Family grain — there is no L4-cohort consolidation
- * step. This selector fans out `selectInitiativesV6ForTower` across every
- * tower, flattens each tower's `V6L3Row.initiatives` into a single program
- * roster, then runs:
+ * AI initiatives are authored at L3 Job Family grain — there is no
+ * L4-cohort consolidation step. This selector fans out
+ * `selectInitiativesV6ForTower` across every tower, flattens each
+ * tower's `V6L3Row.initiatives` into a single program roster, then runs:
  *
  *   - **Deterministic 2x2 program tier** via `computeProgramTiers`, where
  *     "business impact" is the L3 row's modeled $ and "feasibility" is the
  *     `L3Initiative.feasibility` flag the curator already authored.
  *   - **24-month build-scale** via `computeBuildScale` over the in-plan
- *     initiatives — same math as v5; phase windows from `programTier`.
- *   - **Threshold filter** at the L3-row $ grain (mirrors v5's L4 grain
- *     approach so a sibling-initiative pair on the same row can't be
- *     half-included by accident).
+ *     initiatives — phase windows from `programTier`.
+ *   - **Threshold filter** at the L3-row $ grain so a sibling-initiative
+ *     pair on the same row can't be half-included by accident.
  *
- * What v6 deliberately does not produce:
+ * What this selector deliberately does not produce:
  *   - `architecture` orchestration mix / agent-fleet rollups — these read
  *     from `Process.agents`/`Process.workbench`, which only exist after the
  *     deep-dive page generates a Process for an initiative on first click.
  *     Returns empty arrays; ProgramArchitecturePanel renders the LLM
  *     synthesis text and a vendor count derived from `primaryVendor` chips.
- *   - V5-only nested view-models (`InitiativeL4`, `InitiativeL3`,
- *     `briefSlug`, etc.). The v6 row is a clean, flat record.
+ *   - Deeply nested per-initiative L4/L5 view-models. The L3 row is a
+ *     clean, flat record — anyone who needs the full L3Initiative
+ *     deep-dive opens it via
+ *     `/tower/<towerId>/initiative/<l3RowId>/<id>`.
  */
 import type { ProgramTier, ImpactTier } from "@/data/types";
 import type { Feasibility } from "@/data/types";
@@ -53,7 +53,7 @@ import type {
   TowerInScope,
   ValueBuildupPoint,
   SelectProgramOptions,
-} from "@/lib/initiatives/selectProgram";
+} from "@/lib/initiatives/programTypes";
 
 // ===========================================================================
 //   View-model types (V6)
@@ -61,11 +61,8 @@ import type {
 
 /**
  * Flat program-level row — one entry per non-placeholder L3 initiative.
- *
- * The v5 sibling `ProgramInitiativeRow` carries v5-only nested view-models
- * (`InitiativeL4`, `InitiativeL3`, `briefSlug`, `initiativeId`). Under v6
- * we only need a clean, flat shape — anyone who needs the full L3Initiative
- * deep-dive opens it via `/tower/<towerId>/initiative/<l3RowId>/<id>`.
+ * Anyone who needs the full L3Initiative deep-dive opens it via
+ * `/tower/<towerId>/initiative/<l3RowId>/<id>`.
  */
 export type ProgramInitiativeRowV6 = {
   /** `L3Initiative.id` — stable across re-curations. */
@@ -105,8 +102,8 @@ export type ProgramInitiativeRowV6 = {
    */
   attributedAiUsd: number;
   /**
-   * `display tier` retained from the v5 row contract — useful for tooling
-   * that needs the legacy 3-tier label. Same value as `tier` here.
+   * `display tier` — useful for tooling that needs the legacy 3-tier
+   * label. Same value as `tier` here.
    */
   aiPriority?: string;
   /** Compatibility bridge — most surfaces only need a single string, not a Process. */
@@ -114,12 +111,9 @@ export type ProgramInitiativeRowV6 = {
 };
 
 /**
- * Cross-tower selector result for v6.
- *
- * Same outer shape as the v5 `SelectProgramResult` so the cross-tower client
- * + downstream modules can read shared fields (`inputHash`, `threshold`,
- * `programImpact`, `phases`, `buildScale`, `valueBuildup`, etc.) without
- * a giant switch on schema. The `initiatives` row type differs.
+ * Cross-tower selector result. The cross-tower client + downstream
+ * modules read shared fields (`inputHash`, `threshold`, `programImpact`,
+ * `phases`, `buildScale`, `valueBuildup`, etc.) directly off this shape.
  */
 export type SelectProgramResultV6 = {
   initiatives: ProgramInitiativeRowV6[];
@@ -146,7 +140,7 @@ export type SelectProgramResultV6 = {
   inputHash: string;
 };
 
-export type PhaseBucketV6 = Omit<PhaseBucket, "initiatives"> & {
+export type PhaseBucketV6 = PhaseBucket & {
   initiatives: ProgramInitiativeRowV6[];
 };
 
@@ -342,7 +336,7 @@ function toBuildScaleInputRow(row: ProgramInitiativeRowV6): BuildScaleInputRow {
 }
 
 // ---------------------------------------------------------------------------
-//   Phase buckets — same labels as v5 so PhaseBucketV6 stays compatible
+//   Phase buckets
 // ---------------------------------------------------------------------------
 
 function bucketByPhase(

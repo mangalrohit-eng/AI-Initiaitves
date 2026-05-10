@@ -16,10 +16,9 @@ import {
 
 import type { AIProjectResolved } from "@/lib/cross-tower/aiProjects";
 import type { ProjectKpis } from "@/lib/cross-tower/composeProjects";
-import type { SelectProgramResult } from "@/lib/initiatives/selectProgram";
+import type { SelectProgramResultV6 } from "@/lib/initiatives/selectV6Program";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
-import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
  * Cross-Tower AI Plan — Approach tab.
@@ -29,7 +28,7 @@ import { IS_V6 } from "@/lib/schemaFlag";
  */
 
 type ApproachTabProps = {
-  program: SelectProgramResult;
+  program: SelectProgramResultV6;
   projects: AIProjectResolved[];
   kpis: ProjectKpis;
   onJump: (tabId: string) => void;
@@ -63,22 +62,15 @@ export function ApproachTab({
   const redact = useRedactDollars();
 
   const towersInScopeCount = program.towersInScope.length;
-  const inPlanL4Count = React.useMemo(() => {
+  // L3 Job Family count — distinct dial-bearing rows in scope.
+  const inPlanJobFamilyCount = React.useMemo(() => {
     const seen = new Set<string>();
-    for (const row of program.initiatives as readonly unknown[]) {
-      // v5: ProgramInitiativeRow exposes nested `l3.rowId`. v6 flat:
-      // ProgramInitiativeRowV6 exposes `l3RowId` directly. Either is the
-      // dial-bearing row id we want to count uniquely here.
-      const r = row as {
-        l3?: { rowId?: string };
-        l3RowId?: string;
-      };
-      const id = r.l3RowId ?? r.l3?.rowId;
-      if (id) seen.add(id);
+    for (const row of program.initiatives) {
+      if (row.l3RowId) seen.add(row.l3RowId);
     }
     return seen.size;
   }, [program.initiatives]);
-  const inPlanL5Count = program.initiatives.length;
+  const inPlanSolutionCount = program.initiatives.length;
   const liveProjects = projects.filter((p) => !p.isStub).length;
 
   const fullScaleLabel = redact
@@ -124,11 +116,10 @@ export function ApproachTab({
         number: "02",
         railLabel: "Impact",
         icon: <Target className="h-5 w-5" aria-hidden />,
-        title: IS_V6 ? "AI impact by Job Family" : "AI impact by L4",
-        labelHint: IS_V6
-          ? "Impact tier + rationale per L3 Job Family — TSA exit, BB- covenant, split rights, SEC controls."
-          : "Impact tier + rationale per L4 — TSA exit, BB- covenant, split rights, SEC controls.",
-        detail: IS_V6 ? (
+        title: "AI impact by Job Family",
+        labelHint:
+          "Impact tier + rationale per L3 Job Family — TSA exit, BB- covenant, split rights, SEC controls.",
+        detail: (
           <>
             <DetailWhat>
               Each L3 Job Family row carries an AI impact tier (High / Medium /
@@ -143,38 +134,22 @@ export function ApproachTab({
               rationale before locking it.
             </DetailHow>
           </>
-        ) : (
-          <>
-            <DetailWhat>
-              Each L4 Activity Group carries an AI impact tier (High / Medium /
-              Low / Not yet) and a qualitative rationale grounded in the
-              dominant Versant constraint — NBCU TSA exit, BB- covenant, split
-              rights, public-company controls.
-            </DetailWhat>
-            <DetailHow>
-              Accenture scored each L4 against an AI-suitability rubric and the
-              named structural constraint, then walked the call with the
-              Versant function lead to confirm both the tier and the rationale
-              before locking it.
-            </DetailHow>
-          </>
         ),
         stat: {
-          value: String(inPlanL4Count),
-          label: IS_V6 ? "Job Families in plan" : "L4 groups in plan",
+          value: String(inPlanJobFamilyCount),
+          label: "Job Families in plan",
         },
         cta: <ExternalCta href="/program/tower-status" label="Tower status" />,
       },
       {
         id: "l5",
         number: "03",
-        railLabel: IS_V6 ? "Curate" : "L5",
+        railLabel: "Curate",
         icon: <Sparkles className="h-5 w-5" aria-hidden />,
-        title: IS_V6 ? "Curate AI Solutions" : "L5 opportunities",
-        labelHint: IS_V6
-          ? "Tower lead authors named L3 AI Solutions with feasibility, vendor, and Why-AI-now."
-          : "Feasibility-evidence tagged paths — case study, vendor, or adjacent use case.",
-        detail: IS_V6 ? (
+        title: "Curate AI Solutions",
+        labelHint:
+          "Tower lead authors named L3 AI Solutions with feasibility, vendor, and Why-AI-now.",
+        detail: (
           <>
             <DetailWhat>
               In each tower workshop, the lead authors a curated set of L3 AI
@@ -191,37 +166,22 @@ export function ApproachTab({
               carry an explicit reason.
             </DetailHow>
           </>
-        ) : (
-          <>
-            <DetailWhat>
-              Each in-plan L4 ladders down to concrete L5 automation
-              opportunities, every one tagged with feasibility evidence — peer
-              case study, named vendor offering, or adjacent use case.
-            </DetailWhat>
-            <DetailHow>
-              L5 candidates were enumerated from the L4 work items, filtered
-              against the feasibility-evidence rubric, and aligned with the
-              Versant function lead in a working review where rejected
-              candidates carry an explicit reason.
-            </DetailHow>
-          </>
         ),
         stat: {
-          value: String(inPlanL5Count),
-          label: IS_V6 ? "AI Solutions curated" : "L5 opportunities",
+          value: String(inPlanSolutionCount),
+          label: "AI Solutions curated",
         },
         cta: <JumpCta onClick={() => onJump("projects")} label="AI Solutions" />,
       },
       {
         id: "projects",
         number: "04",
-        railLabel: IS_V6 ? "Brief" : "Projects",
+        railLabel: "Brief",
         icon: <Layers className="h-5 w-5" aria-hidden />,
-        title: IS_V6 ? "AI Solution briefs" : "L4 AI Projects",
-        labelHint: IS_V6
-          ? "One GPT-5.5 four-lens brief per AI Solution — Work, Workforce, Workbench, Digital Core."
-          : "One GPT-5.5 brief per L4 — Work, Workforce, Workbench, Digital Core.",
-        detail: IS_V6 ? (
+        title: "AI Solution briefs",
+        labelHint:
+          "One GPT-5.5 four-lens brief per AI Solution — Work, Workforce, Workbench, Digital Core.",
+        detail: (
           <>
             <DetailWhat>
               Every curated AI Solution gets its own deep-dive — a process-level
@@ -238,33 +198,13 @@ export function ApproachTab({
               open and round-trip through the workshop database.
             </DetailHow>
           </>
-        ) : (
-          <>
-            <DetailWhat>
-              L5 opportunities consolidate into one AI Project per in-plan L4 —
-              a process-level agentic delivery vehicle, not an activity
-              automation. Each project gets a full 4-lens brief: Work,
-              Workforce, Workbench, Digital Core.
-            </DetailWhat>
-            <DetailHow>
-              The engine groups L5s structurally by L4 (deterministic — no LLM
-              lottery on grouping). GPT-5.5 then authors the project name,
-              narrative, and 4-lens brief against pre-curated Versant context
-              (real brands, real people, real vendors, real constraints), with
-              the response JSON-validated and brief-completeness-checked before
-              it ever reaches the page.
-            </DetailHow>
-          </>
         ),
         stat: {
           value: String(liveProjects),
-          label: IS_V6 ? "AI Solutions live" : "AI Projects live",
+          label: "AI Solutions live",
         },
         cta: (
-          <JumpCta
-            onClick={() => onJump("projects")}
-            label={IS_V6 ? "AI Solutions" : "AI Projects"}
-          />
+          <JumpCta onClick={() => onJump("projects")} label="AI Solutions" />
         ),
       },
       {
@@ -273,10 +213,9 @@ export function ApproachTab({
         railLabel: "2×2",
         icon: <Scale className="h-5 w-5" aria-hidden />,
         title: "Value × Effort",
-        labelHint: IS_V6
-          ? "Deterministic portfolio view — Quick Win, Strategic Bet, Fill-in, Deprioritize."
-          : "Median-split portfolio view — Quick Win, Strategic Bet, Fill-in, Deprioritize.",
-        detail: IS_V6 ? (
+        labelHint:
+          "Deterministic portfolio view — Quick Win, Strategic Bet, Fill-in, Deprioritize.",
+        detail: (
           <>
             <DetailWhat>
               Every AI Solution lands on a Value × Effort 2×2 — Quick Win,
@@ -289,25 +228,6 @@ export function ApproachTab({
               no hidden median split. Strategic Bet and Quick Win solutions
               also carry GPT-5.5-authored value and effort rationales for the
               executive read.
-            </DetailHow>
-          </>
-        ) : (
-          <>
-            <DetailWhat>
-              Every project lands on a Value × Effort 2×2 — Quick Win, Strategic
-              Bet, Fill-in, or Deprioritize.
-            </DetailWhat>
-            <DetailHow>
-              The effort score is computed from the project&apos;s own brief
-              signals (
-              <code className="font-mono text-[10px] text-forge-body">
-                2·complexity + integrations + agents + 0.5·platforms − 1.5 if
-                proven elsewhere
-              </code>
-              ); the value score is the modeled L4 prize. Both axes are
-              median-split across the program so the 2×2 reads as a portfolio
-              view, not an absolute scorecard. Rationales are GPT-5.5-authored
-              from the same brief signals.
             </DetailHow>
           </>
         ),
@@ -326,29 +246,13 @@ export function ApproachTab({
         title: "24-month sequence",
         labelHint:
           "Build, ramp, scale from Assumptions — Quick Wins first; Deprioritized off the build.",
-        detail: IS_V6 ? (
+        detail: (
           <>
             <DetailWhat>
               AI Solutions are sequenced into a 24-month build, ramp, and
               at-scale plan — Quick Wins first, Strategic Bets layered behind
               the platform foundations, Fill-ins deferred, Deprioritize
               excluded from the build.
-            </DetailWhat>
-            <DetailHow>
-              Build duration, value-start month, and ramp pace are computed
-              deterministically from the Assumptions tab (high-effort vs
-              low-effort build months, ramp months, fill-in offset, program
-              start). Every input is editable; nothing is hidden behind a
-              heuristic.
-            </DetailHow>
-          </>
-        ) : (
-          <>
-            <DetailWhat>
-              Projects are sequenced into a 24-month build, ramp, and at-scale
-              plan — Quick Wins first, Strategic Bets layered behind the
-              platform foundations, Fill-ins deferred, Deprioritize excluded
-              from the build.
             </DetailWhat>
             <DetailHow>
               Build duration, value-start month, and ramp pace are computed
@@ -376,8 +280,8 @@ export function ApproachTab({
     ],
     [
       towersInScopeCount,
-      inPlanL4Count,
-      inPlanL5Count,
+      inPlanJobFamilyCount,
+      inPlanSolutionCount,
       liveProjects,
       quadrantMixLabel,
       fullScaleLabel,

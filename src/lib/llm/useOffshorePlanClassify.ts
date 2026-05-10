@@ -58,10 +58,10 @@ export type UseOffshorePlanClassifyApi = {
 };
 
 /**
- * Manual-only LLM lifecycle hook for the Offshore Plan classifier. Mirrors
- * `useCrossTowerPlan` — no auto-fire on mount or on inputHash change. The
- * page surfaces a Stale chip when `isStale(currentHash)` is true and the
- * user clicks Regenerate to fire the LLM call.
+ * Manual-only LLM lifecycle hook for the Offshore Plan classifier. No
+ * auto-fire on mount or on inputHash change. The page surfaces a Stale
+ * chip when `isStale(currentHash)` is true and the user clicks Regenerate
+ * to fire the LLM call.
  *
  * Hydrates from `localStorage[STORAGE_KEY]` on mount so the page renders
  * the previous LLM result on reload without re-firing the call.

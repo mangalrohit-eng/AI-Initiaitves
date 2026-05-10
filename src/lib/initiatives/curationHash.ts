@@ -33,7 +33,6 @@ import type {
   L3WorkforceRowV6,
   TowerAssessState,
 } from "@/data/assess/types";
-import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
  * djb2 — a small, dependency-free, deterministic 32-bit hash. Cryptographic
@@ -162,7 +161,7 @@ export type DescriptionResolver = (
  * have already passed through `bootstrapHashOnRead` first.
  *
  * The hash itself is NOT stamped here. Stamping happens only after a
- * successful pipeline run (in `curationPipeline.ts`), so a failed run
+ * successful pipeline run (in `curationPipelineV6.ts`), so a failed run
  * preserves the old hash and the banner stays visible.
  *
  * `descriptionResolver` (PR3): when provided, the per-row narrative
@@ -308,11 +307,11 @@ export function markRowsQueuedOnUpload(
  *                               "queued"` (existing `hasQueuedRows`
  *                               predicate). Drives the Step 4
  *                               StaleCurationBanner.
- *   - `missingL4ForRefresh`   — at least one queued row has no L4
- *                               activities. The Step 4 banner uses this
- *                               to redirect users back to Step 1 instead
- *                               of firing a refresh that's guaranteed to
- *                               fail in `curationPipeline.ts`.
+ *   - `missingL4ForRefresh`   — legacy v5 predicate, always false under
+ *                               v6 (L3 dials don't depend on per-L4
+ *                               activity rosters). Retained on the type
+ *                               so existing call sites don't need to
+ *                               drop the field.
  */
 export type TowerStaleState = {
   l4Stale: boolean;
@@ -324,25 +323,12 @@ export type TowerStaleState = {
 export function getTowerStaleState(
   towerState: Pick<TowerAssessState, "l4Rows" | "l3Rows"> | undefined,
 ): TowerStaleState {
-  // v6 — dial-bearing rows live on `l3Rows`, and the L3 row carries the
-  // curation stage. Each L3 aggregates its child L4s, so `l4Stale`
-  // (= "queued L4 has no L5 Activities") does not apply at L3 grain.
-  if (IS_V6 && towerState?.l3Rows && towerState.l3Rows.length > 0) {
-    const l3 = towerState.l3Rows;
-    return {
-      l4Stale: false,
-      dialsStale: l3.every(
-        (r) =>
-          r.offshoreAssessmentPct == null &&
-          r.aiImpactAssessmentPct == null &&
-          r.dialsRationaleSource == null,
-      ),
-      initiativesStale: hasQueuedRowsV6(l3),
-      missingL4ForRefresh: false,
-    };
-  }
-  const rows = towerState?.l4Rows ?? [];
-  if (rows.length === 0) {
+  // v6 — dial-bearing rows live on `l3Rows`, and each L3 row carries
+  // the curation stage. `l4Stale` (= "queued L4 has no L5 Activities")
+  // does not apply at L3 grain. `missingL4ForRefresh` is irrelevant
+  // because L3 dials don't depend on per-L4 activity rosters.
+  const l3 = towerState?.l3Rows ?? [];
+  if (l3.length === 0) {
     return {
       l4Stale: false,
       dialsStale: false,
@@ -350,22 +336,17 @@ export function getTowerStaleState(
       missingL4ForRefresh: false,
     };
   }
-  const l4Stale = rows.some(
-    (r) => !r.l5Activities || r.l5Activities.length === 0,
-  );
-  const dialsStale = rows.every(
-    (r) =>
-      r.offshoreAssessmentPct == null &&
-      r.aiImpactAssessmentPct == null &&
-      r.dialsRationaleSource == null,
-  );
-  const initiativesStale = hasQueuedRows(rows);
-  const missingL4ForRefresh = rows.some(
-    (r) =>
-      r.curationStage === "queued" &&
-      (!r.l5Activities || r.l5Activities.length === 0),
-  );
-  return { l4Stale, dialsStale, initiativesStale, missingL4ForRefresh };
+  return {
+    l4Stale: false,
+    dialsStale: l3.every(
+      (r) =>
+        r.offshoreAssessmentPct == null &&
+        r.aiImpactAssessmentPct == null &&
+        r.dialsRationaleSource == null,
+    ),
+    initiativesStale: hasQueuedRowsV6(l3),
+    missingL4ForRefresh: false,
+  };
 }
 
 /** v6 sibling — at least one L3 row has stage `queued`. */

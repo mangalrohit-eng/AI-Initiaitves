@@ -1,21 +1,20 @@
 /**
- * Cross-Tower AI Plan — v6 deterministic project composition.
+ * Cross-Tower AI Plan — deterministic project composition.
  *
- * Sibling of `composeProjects.ts` (v5). Under v6 there is no L4-cohort
- * consolidation step — AI initiatives are already authored at L3 grain and
- * each one becomes ONE `AIProjectResolved`. The composer is therefore a
- * 1-to-1 map from `ProgramInitiativeRowV6` → `AIProjectResolved`, with:
+ * AI initiatives are authored at L3 grain and each one becomes ONE
+ * `AIProjectResolved`. The composer is therefore a 1-to-1 map from
+ * `ProgramInitiativeRowV6` → `AIProjectResolved`, with:
  *
  *   - **Deterministic 2x2** at the program median:
  *       value = parent-L3 modeled $ (median split across the program)
  *       effort = inverse of `feasibility` (High → "Low" effort, else "High")
- *   - **Timing** from the v5 `phasePlanTiming` helpers using the
- *     `programTier` already stamped by the v6 selector (so P1/P2/P3 windows
+ *   - **Timing** from the `phasePlanTiming` helpers using the
+ *     `programTier` already stamped by the selector (so P1/P2/P3 windows
  *     stay consistent with the page assumptions and the Gantt math).
  *   - **Narrative** from LLM synthesis when supplied; otherwise the
  *     deterministic L3Initiative `aiRationale` + `tagline` carry the card.
  *
- * What v6 does NOT populate (unlike v5):
+ * What the composer does NOT populate:
  *   - `brief` — v6 generates the four-lens brief lazily on the deep-dive
  *     page, stored on `L3Initiative.generatedProcess`. Cross-tower cards
  *     link to that page; they don't render the brief inline.
@@ -91,7 +90,7 @@ export function composeProjectsV6(
   // Value axis: parent-L3 modeled $. Effort axis: 0 (Low) when feasibility
   // is High, 1 (High) otherwise. Two-bucket effort means a strict median
   // doesn't apply — feasibility IS the bucket. Value uses the program
-  // median (post-tier, post-threshold) as in the v5 composer.
+  // median (post-tier, post-threshold).
   const valueScores = initiatives.map((r) => r.aiUsd);
   const valueMedian = median(valueScores);
   const useMedianSplit = initiatives.length >= 2;
@@ -128,11 +127,7 @@ export function composeProjectsV6(
       programTier: row.programTier,
       name: row.solutionName,
       narrative,
-      brief: null, // generated lazily on the deep-dive page
-      perInitiativeRationale: [],
       constituentInitiativeIds: [row.id],
-      constituents: [], // v6 has no roll-up — see file-level docs
-      effortDrivers: null,
       valueBucket,
       effortBucket,
       valueRationale,
@@ -143,9 +138,8 @@ export function composeProjectsV6(
       buildMonths,
       rampMonths: assumptions.rampMonths,
       valueStartMonth,
-      isStub: false, // v6 never stubs at the cards layer; missing synthesis just falls back to deterministic copy
+      isStub: false,
       isDeprioritized,
-      // v6 extras
       aiRationale: row.aiRationale,
       primaryVendor: row.primaryVendor,
       feasibility: row.feasibility,

@@ -1,25 +1,27 @@
 /**
  * POST /api/cross-tower-ai-plan/generate
  *
- * Cross-Tower AI Plan v3 — per-L4 fan-out + program-synthesis workflow.
+ * Cross-Tower AI Plan v6 — single program-synthesis call against the
+ * curated L3 AI Solution roster.
  *
  * Request body:
  *   {
- *     inputHash: string;                  // selectInitiativesForProgram inputHash
+ *     inputHash: string;                  // selectInitiativesForProgramV6 inputHash
  *     assumptionsHash: string;            // hashAssumptions(...)
- *     cohorts: L4Cohort[];                // pre-grouped by buildL4Cohorts() (engine-owned)
- *     assumptions: CrossTowerAssumptions; // for synthesis prompt timing context + lens emphases + briefDepth
- *     modelId?: string;                   // default gpt-5.5 via env chain
- *     forceRegenerate?: boolean;          // bypass all caches
- *     retryCohortIds?: string[];          // bypass cache for selected cohorts only (per-card retry)
+ *     initiatives: SynthesisV6PromptInitiative[];
+ *     towers: { id: string; name: string }[];
+ *     assumptions: CrossTowerAssumptions;
+ *     modelId?: string;
+ *     synthesisIntakeDigest?: string;
  *   }
  *
  * Response:
  *   {
  *     ok: true;
- *     plan: CrossTowerAiPlanLLM | null;            // .projects[] + .synthesis
- *     cohortStatus: { l4RowId, status }[];
- *     synthesisStatus: "ok" | "stub" | "cache";
+ *     schema: "v6";
+ *     synthesis: ProgramSynthesisV6 | null;
+ *     narratives: V6Narrative[];
+ *     synthesisStatus: "ok" | "stub";
  *     modelId: string;
  *     promptVersion: string;
  *     inputHash: string;
@@ -31,12 +33,11 @@
  *
  * Behaviour:
  *   - Auth: same `forge_session` cookie as the rest of /api routes.
- *   - When LLM is not configured, returns a 200 with `plan: null`, every
- *     cohort marked `stub`, synthesis `stub`, and a single `warning`. The
- *     client renders the deterministic stubs.
- *   - On any LLM exception inside `generateCrossTowerPlan`, the page still
- *     renders — the errored cohorts return `status: "stub"` while the
- *     others return `status: "ok"` or `status: "cache"`.
+ *   - When LLM is not configured, returns a 200 with `synthesis: null`,
+ *     `synthesisStatus: "stub"`, and a single `warning`. The client
+ *     renders the deterministic-only view.
+ *   - On any LLM exception inside `generateProgramSynthesisV6`, the page
+ *     still renders — the response carries `synthesisStatus: "stub"`.
  *   - Logs metadata only — never the prompt body or generated text.
  */
 
@@ -44,50 +45,35 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE_NAME, isValidSessionToken } from "@/lib/auth";
 import {
-  generateCrossTowerPlan,
-  isLLMConfigured,
-  resolveModelId,
-  PROMPT_VERSION,
-  type CohortStatus,
-  type SynthesisStatus,
-} from "@/lib/llm/crossTowerPlanLLM";
-import {
   generateProgramSynthesisV6,
   PROGRAM_SYNTHESIS_V6_PROMPT_VERSION,
   isLLMConfigured as isLLMConfiguredV6,
   resolveModelId as resolveModelIdV6,
   type ProgramSynthesisV6Status,
 } from "@/lib/llm/programSynthesisV6LLM";
-import type { L4Cohort } from "@/lib/cross-tower/aiProjects";
 import {
   clampAssumptions,
   type CrossTowerAssumptions,
 } from "@/lib/cross-tower/assumptions";
 import { TOWER_READINESS_MAX_DIGEST_CHARS } from "@/lib/assess/towerReadinessIntake";
-import { IS_V6 } from "@/lib/schemaFlag";
 import type { SynthesisV6PromptInitiative } from "@/lib/llm/prompts/crossTowerInitiativePlan.v1";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Allow up to 5 minutes — covers the per-L4 fan-out (parallel) + the
-// program-synthesis call + a structured-repair retry on each.
+// Allow up to 5 minutes — covers the program-synthesis call + a
+// structured-repair retry.
 export const maxDuration = 300;
 
-const MAX_COHORTS = 60;
-const MAX_INITIATIVES_PER_COHORT = 25;
 const MAX_INITIATIVES_V6 = 200;
 const MAX_TOWERS_V6 = 13;
 
 type Body = {
   inputHash?: unknown;
   assumptionsHash?: unknown;
-  cohorts?: unknown;
   initiatives?: unknown;
   towers?: unknown;
   assumptions?: unknown;
   modelId?: unknown;
-  forceRegenerate?: unknown;
-  retryCohortIds?: unknown;
   synthesisIntakeDigest?: unknown;
 };
 
@@ -126,8 +112,6 @@ export async function POST(req: Request) {
 
   const modelOverride =
     typeof body.modelId === "string" ? body.modelId : undefined;
-  const forceRegenerate = body.forceRegenerate === true;
-  const retryCohortIds = sanitizeRetryCohortIds(body.retryCohortIds);
   const digestRaw =
     typeof body.synthesisIntakeDigest === "string"
       ? body.synthesisIntakeDigest.trim()
@@ -136,162 +120,49 @@ export async function POST(req: Request) {
     ? digestRaw.slice(0, TOWER_READINESS_MAX_DIGEST_CHARS * 2)
     : undefined;
 
-  // -----------------------------------------------------------------------
-  //  V6 branch — single program-synthesis call against initiative roster
-  // -----------------------------------------------------------------------
-  if (IS_V6) {
-    const v6Initiatives = sanitizeInitiativesV6(body.initiatives);
-    const v6Towers = sanitizeTowersV6(body.towers);
-    if (!v6Initiatives) {
-      return NextResponse.json(
-        { error: "Missing or invalid initiatives" },
-        { status: 400 },
-      );
-    }
-    if (!v6Towers) {
-      return NextResponse.json(
-        { error: "Missing or invalid towers" },
-        { status: 400 },
-      );
-    }
-    const modelId = resolveModelIdV6(modelOverride);
-    if (v6Initiatives.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        schema: "v6" as const,
-        synthesis: null,
-        narratives: [],
-        synthesisStatus: "stub" as ProgramSynthesisV6Status,
-        modelId,
-        promptVersion: PROGRAM_SYNTHESIS_V6_PROMPT_VERSION,
-        inputHash,
-        assumptionsHash,
-        latencyMs: 0,
-        generatedAt: new Date().toISOString(),
-        warnings: [
-          "No in-plan initiatives — adjust the threshold in Assumptions to include more L3 Job Family rows.",
-        ],
-      });
-    }
-
-    if (!isLLMConfiguredV6()) {
-      return NextResponse.json({
-        ok: true,
-        schema: "v6" as const,
-        synthesis: null,
-        narratives: [],
-        synthesisStatus: "stub" as ProgramSynthesisV6Status,
-        modelId,
-        promptVersion: PROGRAM_SYNTHESIS_V6_PROMPT_VERSION,
-        inputHash,
-        assumptionsHash,
-        latencyMs: 0,
-        generatedAt: new Date().toISOString(),
-        warnings: [
-          "OPENAI_API_KEY not set on this deployment; serving deterministic-only view.",
-        ],
-      });
-    }
-
-    try {
-      const result = await generateProgramSynthesisV6({
-        initiatives: v6Initiatives,
-        towers: v6Towers,
-        assumptions,
-        modelOverride,
-        synthesisIntakeDigest,
-      });
-      logMetadataV6("ok", {
-        modelId: result.modelId,
-        promptVersion: result.promptVersion,
-        inputHash,
-        latencyMs: result.latencyMs,
-        initiativeCount: v6Initiatives.length,
-        synthesisStatus: result.status,
-      });
-      return NextResponse.json({
-        ok: true,
-        schema: "v6" as const,
-        synthesis: result.synthesis,
-        narratives: result.narratives,
-        synthesisStatus: result.status,
-        modelId: result.modelId,
-        promptVersion: result.promptVersion,
-        inputHash,
-        assumptionsHash,
-        latencyMs: result.latencyMs,
-        generatedAt: new Date().toISOString(),
-        warnings: result.warnings.length > 0 ? result.warnings : undefined,
-      });
-    } catch (e) {
-      const errMsg = e instanceof Error ? e.message : "Unknown LLM error";
-      logMetadataV6("failure", {
-        modelId,
-        promptVersion: PROGRAM_SYNTHESIS_V6_PROMPT_VERSION,
-        inputHash,
-        latencyMs: 0,
-        initiativeCount: v6Initiatives.length,
-        synthesisStatus: "stub",
-      });
-      return NextResponse.json({
-        ok: true,
-        schema: "v6" as const,
-        synthesis: null,
-        narratives: [],
-        synthesisStatus: "stub" as ProgramSynthesisV6Status,
-        modelId,
-        promptVersion: PROGRAM_SYNTHESIS_V6_PROMPT_VERSION,
-        inputHash,
-        assumptionsHash,
-        latencyMs: 0,
-        generatedAt: new Date().toISOString(),
-        warnings: [
-          `Generation unavailable — showing data-only view. ${errMsg}`,
-        ],
-      });
-    }
-  }
-
-  // -----------------------------------------------------------------------
-  //  V5 branch — original per-cohort fan-out
-  // -----------------------------------------------------------------------
-  const cohorts = sanitizeCohorts(body.cohorts);
-  if (!cohorts) {
+  const v6Initiatives = sanitizeInitiativesV6(body.initiatives);
+  const v6Towers = sanitizeTowersV6(body.towers);
+  if (!v6Initiatives) {
     return NextResponse.json(
-      { error: "Missing or invalid cohorts" },
+      { error: "Missing or invalid initiatives" },
       { status: 400 },
     );
   }
-  if (cohorts.length === 0) {
+  if (!v6Towers) {
     return NextResponse.json(
-      { error: "cohorts must not be empty" },
+      { error: "Missing or invalid towers" },
       { status: 400 },
     );
   }
-  if (cohorts.length > MAX_COHORTS) {
-    return NextResponse.json(
-      {
-        error: `Too many cohorts (${cohorts.length}); max ${MAX_COHORTS}.`,
-      },
-      { status: 413 },
-    );
-  }
-
-  const modelId = resolveModelId(modelOverride);
-
-  // ---- LLM not configured -> deterministic-only stubs --------------------
-  if (!isLLMConfigured()) {
+  const modelId = resolveModelIdV6(modelOverride);
+  if (v6Initiatives.length === 0) {
     return NextResponse.json({
       ok: true,
-      plan: { projects: [], synthesis: null },
-      cohortStatus: cohorts.map((c) => ({
-        l4RowId: c.l4RowId,
-        status: "stub" as const,
-        reason: "OPENAI_API_KEY not set",
-      })) as CohortStatus[],
-      synthesisStatus: "stub" as SynthesisStatus,
+      schema: "v6" as const,
+      synthesis: null,
+      narratives: [],
+      synthesisStatus: "stub" as ProgramSynthesisV6Status,
       modelId,
-      promptVersion: PROMPT_VERSION,
+      promptVersion: PROGRAM_SYNTHESIS_V6_PROMPT_VERSION,
+      inputHash,
+      assumptionsHash,
+      latencyMs: 0,
+      generatedAt: new Date().toISOString(),
+      warnings: [
+        "No in-plan initiatives — adjust the threshold in Assumptions to include more L3 Job Family rows.",
+      ],
+    });
+  }
+
+  if (!isLLMConfiguredV6()) {
+    return NextResponse.json({
+      ok: true,
+      schema: "v6" as const,
+      synthesis: null,
+      narratives: [],
+      synthesisStatus: "stub" as ProgramSynthesisV6Status,
+      modelId,
+      promptVersion: PROGRAM_SYNTHESIS_V6_PROMPT_VERSION,
       inputHash,
       assumptionsHash,
       latencyMs: 0,
@@ -302,59 +173,54 @@ export async function POST(req: Request) {
     });
   }
 
-  // ---- Generate ----------------------------------------------------------
   try {
-    const result = await generateCrossTowerPlan({
-      cohorts,
+    const result = await generateProgramSynthesisV6({
+      initiatives: v6Initiatives,
+      towers: v6Towers,
       assumptions,
-      inputHash,
       modelOverride,
-      forceRegenerate,
-      retryCohortIds,
       synthesisIntakeDigest,
     });
-    logMetadata("ok", {
+    logMetadataV6("ok", {
       modelId: result.modelId,
       promptVersion: result.promptVersion,
       inputHash,
-      latencyMs: result.totalLatencyMs,
-      cohortCount: cohorts.length,
-      stubCount: result.cohortStatus.filter((c) => c.status === "stub").length,
+      latencyMs: result.latencyMs,
+      initiativeCount: v6Initiatives.length,
+      synthesisStatus: result.status,
     });
     return NextResponse.json({
       ok: true,
-      plan: result.plan,
-      cohortStatus: result.cohortStatus,
-      synthesisStatus: result.synthesisStatus,
+      schema: "v6" as const,
+      synthesis: result.synthesis,
+      narratives: result.narratives,
+      synthesisStatus: result.status,
       modelId: result.modelId,
       promptVersion: result.promptVersion,
       inputHash,
       assumptionsHash,
-      latencyMs: result.totalLatencyMs,
+      latencyMs: result.latencyMs,
       generatedAt: new Date().toISOString(),
       warnings: result.warnings.length > 0 ? result.warnings : undefined,
     });
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : "Unknown LLM error";
-    logMetadata("failure", {
+    logMetadataV6("failure", {
       modelId,
-      promptVersion: PROMPT_VERSION,
+      promptVersion: PROGRAM_SYNTHESIS_V6_PROMPT_VERSION,
       inputHash,
       latencyMs: 0,
-      cohortCount: cohorts.length,
-      stubCount: cohorts.length,
+      initiativeCount: v6Initiatives.length,
+      synthesisStatus: "stub",
     });
     return NextResponse.json({
       ok: true,
-      plan: { projects: [], synthesis: null },
-      cohortStatus: cohorts.map((c) => ({
-        l4RowId: c.l4RowId,
-        status: "stub" as const,
-        reason: errMsg,
-      })) as CohortStatus[],
-      synthesisStatus: "stub" as SynthesisStatus,
+      schema: "v6" as const,
+      synthesis: null,
+      narratives: [],
+      synthesisStatus: "stub" as ProgramSynthesisV6Status,
       modelId,
-      promptVersion: PROMPT_VERSION,
+      promptVersion: PROGRAM_SYNTHESIS_V6_PROMPT_VERSION,
       inputHash,
       assumptionsHash,
       latencyMs: 0,
@@ -368,121 +234,14 @@ export async function POST(req: Request) {
 //   Sanitization
 // ===========================================================================
 
-function sanitizeCohorts(raw: unknown): L4Cohort[] | null {
-  if (!Array.isArray(raw)) return null;
-  const out: L4Cohort[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const r = item as Record<string, unknown>;
-    const l4RowId = typeof r.l4RowId === "string" ? r.l4RowId.trim() : "";
-    const l4Name = typeof r.l4Name === "string" ? r.l4Name.trim() : "";
-    const l3JobFamilyName =
-      typeof r.l3JobFamilyName === "string" ? r.l3JobFamilyName.trim() : "";
-    const towerId = typeof r.towerId === "string" ? r.towerId.trim() : "";
-    const towerName =
-      typeof r.towerName === "string" ? r.towerName.trim() : "";
-    const l4AiUsd =
-      typeof r.l4AiUsd === "number" && Number.isFinite(r.l4AiUsd)
-        ? Math.max(0, r.l4AiUsd)
-        : 0;
-    const attributedAiUsdTotal =
-      typeof r.attributedAiUsdTotal === "number" &&
-      Number.isFinite(r.attributedAiUsdTotal)
-        ? Math.max(0, r.attributedAiUsdTotal)
-        : 0;
-    if (!l4RowId || !l4Name || !towerId || !towerName) continue;
-    const initsRaw = Array.isArray(r.l5Initiatives) ? r.l5Initiatives : [];
-    const l5Initiatives: L4Cohort["l5Initiatives"] = [];
-    for (const ii of initsRaw) {
-      if (!ii || typeof ii !== "object") continue;
-      const i = ii as Record<string, unknown>;
-      const id = typeof i.id === "string" ? i.id.trim() : "";
-      const name = typeof i.name === "string" ? i.name.trim() : "";
-      const rationale =
-        typeof i.rationale === "string" ? i.rationale.trim() : undefined;
-      const attributedAiUsd =
-        typeof i.attributedAiUsd === "number" && Number.isFinite(i.attributedAiUsd)
-          ? Math.max(0, i.attributedAiUsd)
-          : 0;
-      const programTier = sanitizeProgramTier(i.programTier);
-      if (!id || !name) continue;
-      l5Initiatives.push({
-        id,
-        name,
-        rationale,
-        attributedAiUsd,
-        programTier,
-      });
-      if (l5Initiatives.length >= MAX_INITIATIVES_PER_COHORT) break;
-    }
-    if (l5Initiatives.length === 0) continue;
-    out.push({
-      l4RowId,
-      l4Name,
-      l3JobFamilyName,
-      towerId: towerId as L4Cohort["towerId"],
-      towerName,
-      l4AiUsd,
-      attributedAiUsdTotal,
-      l5Initiatives,
-    });
-  }
-  return out;
-}
-
-function sanitizeProgramTier(
-  raw: unknown,
-): "P1" | "P2" | "P3" | "Deprioritized" {
-  if (raw === "P1" || raw === "P2" || raw === "P3" || raw === "Deprioritized") {
-    return raw;
-  }
-  return "P1";
-}
-
 function sanitizeAssumptions(raw: unknown): CrossTowerAssumptions | null {
   if (!raw || typeof raw !== "object") return null;
   return clampAssumptions(raw as Partial<CrossTowerAssumptions>);
 }
 
-function sanitizeRetryCohortIds(raw: unknown): string[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const out: string[] = [];
-  for (const item of raw) {
-    if (typeof item !== "string") continue;
-    const trimmed = item.trim();
-    if (trimmed) out.push(trimmed);
-  }
-  return out.length > 0 ? out : undefined;
-}
-
 async function isAuthed(): Promise<boolean> {
   const token = cookies().get(AUTH_COOKIE_NAME)?.value;
   return isValidSessionToken(token);
-}
-
-function logMetadata(
-  event: string,
-  meta: {
-    modelId: string;
-    promptVersion: string;
-    inputHash: string;
-    latencyMs: number;
-    cohortCount: number;
-    stubCount: number;
-  },
-): void {
-  if (process.env.NODE_ENV === "test") return;
-  const fields = [
-    `event=${event}`,
-    `modelId=${meta.modelId}`,
-    `promptVersion=${meta.promptVersion}`,
-    `inputHash=${meta.inputHash}`,
-    `latencyMs=${meta.latencyMs}`,
-    `cohorts=${meta.cohortCount}`,
-    `stubs=${meta.stubCount}`,
-  ];
-  // eslint-disable-next-line no-console
-  console.info(`[forge.crossTowerAiPlan.v3] ${fields.join(" ")}`);
 }
 
 function logMetadataV6(
@@ -510,10 +269,6 @@ function logMetadataV6(
   console.info(`[forge.crossTowerAiPlan.v6] ${fields.join(" ")}`);
 }
 
-// ===========================================================================
-//   V6 sanitizers
-// ===========================================================================
-
 function sanitizeInitiativesV6(
   raw: unknown,
 ): SynthesisV6PromptInitiative[] | null {
@@ -529,7 +284,10 @@ function sanitizeInitiativesV6(
     const tagline = stringField(r.tagline);
     const aiRationale = stringField(r.aiRationale);
     if (!id || !towerName || !l3FamilyName || !solutionName) continue;
-    const feasibility = r.feasibility === "High" || r.feasibility === "Low" ? r.feasibility : "High";
+    const feasibility =
+      r.feasibility === "High" || r.feasibility === "Low"
+        ? r.feasibility
+        : "High";
     const quadrantRaw = r.quadrant;
     const quadrant =
       quadrantRaw === "Quick Win" ||

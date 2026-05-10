@@ -23,9 +23,8 @@ type Props = {
  * The "rejected" segment opens the schema-agnostic
  * `<RejectedInitiativesDrawer>` so the lead can restore an idea.
  *
- * The Postgres-synced `initiativeReviews` map is shared between v5
- * (L4-id keyed) and v6 (V6 initiative-id keyed) decisions; this chip
- * counts only the v6 keys reachable from the current tower's gallery.
+ * Decisions persist via the Postgres-synced `initiativeReviews` map
+ * keyed by `V6InitiativeCard.id`.
  */
 export function InitiativeReviewChipV6({ tower, className }: Props) {
   const { counts, rejectedItems, actions } = useInitiativeReviewsV6(tower);

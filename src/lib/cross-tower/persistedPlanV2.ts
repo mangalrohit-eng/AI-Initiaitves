@@ -1,10 +1,8 @@
 /**
- * Cross-Tower AI Plan — V6 persistence layer (v2 doc shape).
+ * Cross-Tower AI Plan — persistence layer (v2 doc shape).
  *
- * Sibling of `persistedPlan.ts` (v1, used under v5). Under v6 there are no
- * "AI Projects" at all — the cross-tower plan is a 1-to-1 reflection of the
- * curated `L3Initiative` roster from each tower. The persisted document
- * therefore stores:
+ * The cross-tower plan is a 1-to-1 reflection of the curated `L3Initiative`
+ * roster from each tower. The persisted document therefore stores:
  *
  *   - `initiativeRefs`: a compact pointer list (`towerId`, `l3RowId`, `id`,
  *     `solutionName`) that lets us reconstruct the live ProgramInitiativeRowV6
@@ -14,10 +12,10 @@
  *   - `synthesis`: the LLM-authored `ProgramSynthesisLLMV6` (or null when
  *     the synthesis call fell back to a stub).
  *   - `appliedAssumptions`, `inputHash`, `assumptionsHash`, `generatedAt`,
- *     `modelId`, `promptVersion`: same provenance fingerprints as v1.
+ *     `modelId`, `promptVersion`: provenance fingerprints.
  *
- * The validator hard-rejects v1 documents (so a stale v5 row doesn't render
- * under v6 — the page falls through to the empty-state regenerate flow).
+ * The validator hard-rejects unknown doc shapes — the page falls through
+ * to the empty-state regenerate flow.
  */
 
 import {

@@ -15,7 +15,7 @@ import type { AssessProgramV2, TowerId } from "@/data/assess/types";
 import { defaultTowerState } from "@/data/assess/types";
 import type { Tower } from "@/data/types";
 import { getCapabilityMapForTower } from "@/data/capabilityMap/maps";
-import { selectInitiativesForTower } from "@/lib/initiatives/select";
+import { selectInitiativesV6ForTower } from "@/lib/initiatives/selectV6";
 
 const UTF8_BOM = "\uFEFF";
 
@@ -207,7 +207,8 @@ export function buildDialsExportCsv(params: {
   const exportedAt = new Date().toISOString();
   const tState = program.towers[towerId] ?? defaultTowerState(towerId);
   const baseline = tState.baseline;
-  const rows = tState.l4Rows ?? [];
+  // V6: dials live on L3 Job Family rows, not L4 Activity Groups.
+  const rows = tState.l3Rows ?? [];
   const map = getCapabilityMapForTower(towerId);
   const l1 = map?.l1Name ?? "";
 
@@ -218,7 +219,6 @@ export function buildDialsExportCsv(params: {
     "l1_name",
     "l2_name",
     "l3_name",
-    "l4_name",
     "row_id",
     "offshore_pct_effective",
     "ai_pct_effective",
@@ -241,7 +241,6 @@ export function buildDialsExportCsv(params: {
         l1,
         r.l2,
         r.l3,
-        r.l4,
         r.id,
         offEff,
         aiEff,
@@ -258,22 +257,15 @@ export function buildDialsExportCsv(params: {
 }
 
 /**
- * Step 4 "AI initiatives" CSV export. Emits one row per L5 Activity that the
- * Step 4 UI displays — i.e. exactly what `selectInitiativesForTower` returns
- * after its eligibility / `aiPct > 0` filters. This deliberately mirrors the
- * UI count rather than dumping every curated L5 in the database, because the
- * export's purpose is "share what the workshop is showing." A future audit
- * dump that includes `aiEligible: false` and zero-dial rows would be a
- * separate function.
+ * Step 4 "AI Solutions" CSV export. Emits one row per curated L3 AI
+ * Initiative the Step 4 UI displays — i.e. exactly what
+ * `selectInitiativesV6ForTower` returns after dial / placeholder filters.
+ * Mirrors the UI count rather than dumping every curated initiative in
+ * the database, because the export's purpose is "share what the
+ * workshop is showing."
  *
- * Pre-fix history: this function iterated `tower.processes` (the small set of
- * hand-authored 4-lens briefs) instead of the curated initiatives. That made
- * the export emit 5 rows for Finance regardless of how many L5 Activities
- * Step 4 actually showed. The wiring miss pre-dated V5 — V5 just renamed
- * fields without revealing it.
- *
- * Placeholders (`l5.isPlaceholder === true`) are skipped — they exist for
- * ghost-L3 prevention in the UI, not for export consumers.
+ * Placeholders (`init.isPlaceholder === true`) are skipped — they exist
+ * for ghost-row prevention in the UI, not for export consumers.
  */
 export function buildAiInitiativesExportCsv(params: {
   towerId: TowerId;
@@ -286,23 +278,14 @@ export function buildAiInitiativesExportCsv(params: {
   const map = getCapabilityMapForTower(towerId);
   const l1 = map?.l1Name ?? "";
 
-  // View-model layer mapping (post-5-layer-migration):
-  //   sel.l2s        -> L2 Job Grouping (canonical wrapper)
-  //   l2.l3s         -> L3 Job Family
-  //   l3.rowL4Name   -> L4 Activity Group (per-row label)
-  //   l3.l4s         -> L5 Activities (the leaf where initiatives attach)
-  // Note the view-model field names lag the migration (Phase 8 rename pending).
-  const sel = selectInitiativesForTower(towerId, program, tower);
+  // V6 selector: AI Solutions are at L3 Job Family grain. Each row holds
+  // one or more curated `V6InitiativeCard` entries describing the AI
+  // products Versant could build/buy for that family.
+  const sel = selectInitiativesV6ForTower(towerId, program, tower);
 
-  // O(1) brief lookup for `linked_*` enrichment columns. Built once outside
-  // the loop instead of `tower.processes.find(...)` per L5.
-  const processById = new Map(tower.processes.map((p) => [p.id, p]));
-
-  // Read review decisions off the SAME program snapshot the selector saw, so
-  // a row's `review_status` is consistent with its presence in the export.
-  // Going through `program.towers[...]?.initiativeReviews` directly (not
-  // `getInitiativeReviews`) avoids a second `getAssessProgram()` read that
-  // could race with an in-flight save.
+  // Per-tower review decisions still ride on the same shape used in v5
+  // (keyed by initiative id). Read directly off the snapshot so a row's
+  // `review_status` is consistent with its presence in the export.
   const reviews = program.towers[towerId]?.initiativeReviews ?? {};
 
   const header = csvRow([
@@ -312,60 +295,47 @@ export function buildAiInitiativesExportCsv(params: {
     "l1_name",
     "l2_name",
     "l3_name",
-    "l4_name",
-    "l5_id",
-    "l5_name",
-    "feasibility",
+    "l3_row_id",
+    "initiative_id",
+    "solution_name",
+    "tagline",
     "ai_rationale",
+    "feasibility",
     "primary_vendor",
-    "frequency",
-    "criticality",
-    "current_maturity",
-    "source",
+    "covers_l4_row_ids",
+    "deep_dive_href",
     "review_status",
     "review_decided_by",
     "review_decided_at",
-    "linked_initiative_id",
-    "linked_brief_slug",
-    "linked_brief_description",
   ]);
   const lines = [header];
 
-  for (const l2 of sel.l2s) {
-    for (const l3 of l2.l3s) {
-      for (const l5 of l3.l4s) {
-        if (l5.isPlaceholder) continue;
-        const review = reviews[l5.id];
-        const linkedBrief = l5.initiativeId
-          ? processById.get(l5.initiativeId)
-          : undefined;
-        lines.push(
-          csvRow([
-            towerId,
-            towerName,
-            exportedAt,
-            l1,
-            l2.l2.name,
-            l3.l3.name,
-            l3.rowL4Name,
-            l5.id,
-            l5.name,
-            l5.feasibility ?? "",
-            l5.aiRationale ?? "",
-            l5.primaryVendor ?? "",
-            l5.frequency ?? "",
-            l5.criticality ?? "",
-            l5.currentMaturity ?? "",
-            l5.source,
-            review?.status ?? "pending",
-            review?.decidedBy ?? "",
-            review?.decidedAt ?? "",
-            l5.initiativeId ?? "",
-            l5.briefSlug ?? "",
-            linkedBrief?.description ?? "",
-          ]),
-        );
-      }
+  for (const row of sel.l3Rows) {
+    for (const init of row.initiatives) {
+      if (init.isPlaceholder) continue;
+      const review = reviews[init.id];
+      lines.push(
+        csvRow([
+          towerId,
+          towerName,
+          exportedAt,
+          l1,
+          row.l2,
+          row.l3,
+          row.id,
+          init.id,
+          init.solutionName,
+          init.tagline,
+          init.aiRationale,
+          init.feasibility ?? "",
+          init.primaryVendor ?? "",
+          init.coversL4RowIds.join("|"),
+          init.initiativeHref ?? "",
+          review?.status ?? "pending",
+          review?.decidedBy ?? "",
+          review?.decidedAt ?? "",
+        ]),
+      );
     }
   }
 

@@ -23,17 +23,16 @@ import {
 } from "@/lib/cross-tower/persistedPlanV2";
 import { CROSS_TOWER_INITIATIVE_PROMPT_VERSION } from "@/lib/llm/prompts/crossTowerInitiativePlan.v1";
 import type { SelectProgramResultV6 } from "@/lib/initiatives/selectV6Program";
-import type { TowerInScope } from "@/lib/initiatives/selectProgram";
+import type { TowerInScope } from "@/lib/initiatives/programTypes";
 import { getAssessProgram } from "@/lib/localStore";
 import { buildProgramWideTowerIntakeDigest } from "@/lib/assess/towerReadinessIntake";
 import { towers as allTowers } from "@/data/towers";
 
 /**
- * Cross-Tower AI Plan — V6 page-level state hook.
+ * Cross-Tower AI Plan — page-level state hook.
  *
- * Sibling of `useCrossTowerPlan` (the v5 hook). Under v6 the cross-tower
- * page is a 1-to-1 reflection of the curated `L3Initiative` roster across
- * the 13 towers. This hook:
+ * The cross-tower page is a 1-to-1 reflection of the curated
+ * `L3Initiative` roster across the 13 towers. This hook:
  *
  *   1) Composes `AIProjectResolved[]` deterministically from the v6
  *      program substrate the moment the program is ready — no LLM call
@@ -91,7 +90,6 @@ const INITIAL_STATE: CrossTowerPlanV6State = {
     liveAttributedAiUsd: 0,
     m24RunRateUsd: 0,
     fullScaleRunRateUsd: 0,
-    agentsArchitected: 0,
     towersInScope: 0,
   },
   synthesis: null,
@@ -145,12 +143,6 @@ export function useCrossTowerPlanV6(
       });
       const buildup = buildProjectsBuildScale(composed);
       const kpis = summarizeProjects(composed);
-      // Override the v5 "agents architected" tile with a v6-meaningful count
-      // (in-plan AI Solutions) so the KPI strip carries a v6 number even if
-      // the strip falls back to the legacy field name.
-      kpis.agentsArchitected = composed.filter(
-        (p) => !p.isStub && !p.isDeprioritized,
-      ).length;
       return { ...prev, projects: composed, buildup, kpis };
     });
   }, [program, assumptions]);
@@ -231,9 +223,6 @@ export function useCrossTowerPlanV6(
         });
         const buildup = buildProjectsBuildScale(composed);
         const kpis = summarizeProjects(composed);
-        kpis.agentsArchitected = composed.filter(
-          (p) => !p.isStub && !p.isDeprioritized,
-        ).length;
 
         setState((prev) => ({
           ...prev,
@@ -440,9 +429,6 @@ export function useCrossTowerPlanV6(
         });
         const buildup = buildProjectsBuildScale(composed);
         const kpis = summarizeProjects(composed);
-        kpis.agentsArchitected = composed.filter(
-          (p) => !p.isStub && !p.isDeprioritized,
-        ).length;
 
         const generatedAt = json.generatedAt ?? new Date().toISOString();
         const apiWarnings = json.warnings ?? [];

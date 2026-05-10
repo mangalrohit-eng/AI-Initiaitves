@@ -15,7 +15,6 @@ import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
 import { markRowsQueuedOnUpload } from "@/lib/initiatives/curationHash";
 import { resolveRowDescriptions } from "@/data/capabilityMap/descriptions";
 import { deriveL3Rows } from "@/lib/assess/deriveL3Rows";
-import { IS_V6 } from "@/lib/schemaFlag";
 import { stepCompletionNudge } from "@/lib/program/stepCompletionNudges";
 import {
   getAssessProgram,
@@ -93,17 +92,15 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       const queuedRows = markRowsQueuedOnUpload(res.rows, (row) =>
         resolveRowDescriptions(towerId, row.l2, row.l3, row.l4),
       );
-      // V6: derive L3 Job Family rows from the L4 upload. The L4 rows
+      // Derive L3 Job Family rows from the L4 upload. The L4 rows
       // themselves stay in storage as read-only LLM context; the L3 rows
-      // become the dial-bearing primary entity for Step 2 + the curation
+      // become the dial-bearing primary entity for Step 2 and the curation
       // grain for Step 4. Each derived row is stamped `curationStage:
       // "queued"` by `deriveL3Rows` so the StaleCurationBanner picks it up.
-      // Under v5 this assignment is harmless — the field is optional and
-      // no v5 selector reads it.
-      const derivedL3Rows = IS_V6 ? deriveL3Rows(queuedRows, towerId) : undefined;
+      const derivedL3Rows = deriveL3Rows(queuedRows, towerId);
       setTowerAssess(towerId, {
         l4Rows: queuedRows,
-        ...(derivedL3Rows ? { l3Rows: derivedL3Rows } : {}),
+        l3Rows: derivedL3Rows,
         baseline: { ...defaultTowerBaseline },
         status: "data",
         capabilityMapConfirmedAt: new Date().toISOString(),

@@ -9,11 +9,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { BuildupPoint } from "@/lib/llm/useCrossTowerPlan";
+import type { BuildupPoint } from "@/lib/cross-tower/composeProjects";
 import type { CrossTowerAssumptions } from "@/lib/cross-tower/assumptions";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
-import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
  * Cross-Tower AI Plan v3 — project-driven 24-month value buildup curve.
@@ -52,16 +51,14 @@ export function ProjectsValueBuildupModule({
           24-month modeled AI value buildup
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
-          Sum of every live {IS_V6 ? "AI Solution" : "AI Project"}
-          {"'"}s monthly contribution. Start month and build length follow
-          the {IS_V6 ? "solution" : "cohort"} program tier (P1 / P2 / P3) against
-          Assumptions (P1 M{assumptions.p1PhaseStartMonth} /{" "}
+          Sum of every live AI Solution{"'"}s monthly contribution. Start
+          month and build length follow the solution program tier (P1 / P2 /
+          P3) against Assumptions (P1 M{assumptions.p1PhaseStartMonth} /{" "}
           {assumptions.p1BuildMonths}mo build, P2 M{assumptions.p2PhaseStartMonth}{" "}
           / {assumptions.p2BuildMonths}mo, P3 M{assumptions.p3PhaseStartMonth} /{" "}
           {assumptions.p3BuildMonths}mo), then a {assumptions.rampMonths}
           -month linear ramp to full attributed run-rate. No dollar accrues
-          before that {IS_V6 ? "solution" : "project"}
-          {"'"}s build completes.
+          before that solution{"'"}s build completes.
         </p>
       </div>
       {!redact ? (
@@ -176,13 +173,10 @@ export function ProjectsValueBuildupModule({
     <p className="mt-3 text-[11px] leading-relaxed text-forge-subtle">
       Build → {assumptions.rampMonths}-month adoption ramp → full scale. Phase
       starts and per-tier build windows are editable on the Assumptions tab;
-      {IS_V6
-        ? " each AI Solution picks up its P1 / P2 / P3 timing from its 2x2 quadrant placement."
-        : " each L4 cohort picks up P1, P2, or P3 timing from its constituent L5 program tiers (conservative tie-break: latest phase wins when mixed)."}
-      {" "}Adoption is a fixed {assumptions.rampMonths}-month linear ramp per{" "}
-      {IS_V6 ? "solution" : "project"}. Stub{" "}
-      {IS_V6 ? "solutions" : "projects"} and Deprioritize-quadrant{" "}
-      {IS_V6 ? "solutions" : "projects"} are excluded from the curve.
+      each AI Solution picks up its P1 / P2 / P3 timing from its 2x2
+      quadrant placement. Adoption is a fixed {assumptions.rampMonths}-month
+      linear ramp per solution. Stub solutions and Deprioritize-quadrant
+      solutions are excluded from the curve.
     </p>
   );
 

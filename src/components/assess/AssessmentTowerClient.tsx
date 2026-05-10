@@ -34,7 +34,6 @@ import type {
   L3WorkforceRowV6,
   TowerId,
 } from "@/data/assess/types";
-import { IS_V6 } from "@/lib/schemaFlag";
 import { getTowerHref } from "@/lib/towerHref";
 import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
@@ -123,7 +122,7 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
     () => tState.l3Rows ?? [],
     [tState.l3Rows],
   );
-  const useV6 = IS_V6 && v6Rows.length > 0;
+  const useV6 = v6Rows.length > 0;
 
   // Defaults inference (LLM-first, heuristic fallback).
   type ApplyDefaultsOutcome = {
@@ -852,7 +851,7 @@ function TowerLeadSignoff({
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-forge-body">
             {isComplete
               ? `${towerName} is anchored in the impact estimate. Reopen anytime if the offshore or AI dials need to change.`
-              : `Once you've reviewed and adjusted the offshore and AI dials per ${IS_V6 ? "L3 Job Family" : "L4 Activity Group"} for ${towerName}, mark the tower reviewed. The impact estimate locks your roll-up and the AI Initiatives handoff appears below.`}
+              : `Once you've reviewed and adjusted the offshore and AI dials per L3 Job Family for ${towerName}, mark the tower reviewed. The impact estimate locks your roll-up and the AI Initiatives handoff appears below.`}
           </p>
         </div>
         <div className="flex flex-shrink-0 items-center">

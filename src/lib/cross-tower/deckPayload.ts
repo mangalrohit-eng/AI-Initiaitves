@@ -13,13 +13,12 @@
 
 import type {
   AIProjectResolved,
-  ProgramSynthesisLLM,
   Quadrant,
 } from "@/lib/cross-tower/aiProjects";
+import type { ProgramSynthesisLLMV6 } from "@/lib/cross-tower/composeProjectsV6";
 import type { CrossTowerAssumptions } from "@/lib/cross-tower/assumptions";
 import type { BuildupPoint, ProjectKpis } from "@/lib/cross-tower/composeProjects";
-import type { SelectProgramResult } from "@/lib/initiatives/selectProgram";
-import { IS_V6 } from "@/lib/schemaFlag";
+import type { SelectProgramResultV6 } from "@/lib/initiatives/selectV6Program";
 
 export const CROSS_TOWER_DECK_STORAGE_KEY = "forge.crossTowerDeck.payload.v1" as const;
 
@@ -64,11 +63,13 @@ export type CrossTowerDeckPayload = {
   >;
   programMeta: {
     towersInScope: number;
-    inPlanL4Count: number;
-    inPlanL5Count: number;
+    /** Count of L3 Job Family rows that cleared the plan threshold. */
+    inPlanJobFamilyCount: number;
+    /** Count of in-plan AI Solutions (one per L3 row, post curation). */
+    inPlanSolutionCount: number;
     liveProjects: number;
   };
-  synthesis: ProgramSynthesisLLM | null;
+  synthesis: ProgramSynthesisLLMV6 | null;
   projects: DeckProjectSlice[];
 };
 
@@ -80,38 +81,11 @@ function cap(s: string, max: number): string {
   return `${t.slice(0, max - 1)}…`;
 }
 
-function collectKeyShifts(brief: NonNullable<AIProjectResolved["brief"]>): string[] {
-  const out: string[] = [];
-  const pushPool = (pool: readonly string[]) => {
-    for (const line of pool) {
-      const c = cap(line, 120);
-      if (c && !out.includes(c)) out.push(c);
-      if (out.length >= 3) return;
-    }
-  };
-  pushPool(brief.work.keyShifts);
-  pushPool(brief.workforce.keyShifts);
-  pushPool(brief.workbench.keyShifts);
-  if (out.length < 3) {
-    pushPool(brief.digitalCore.dataRequirements);
-  }
-  return out.slice(0, 3);
-}
-
 export function trimProjectForDeck(p: AIProjectResolved): DeckProjectSlice {
-  // v5: an AI Project rolls up several L5 initiatives (its `constituents`)
-  // and ships a 4-lens brief. v6: an AI Solution IS one L3 initiative
-  // and the cross-tower view doesn't realize the brief — so we surface
-  // the v6 fields (tagline, primaryVendor, aiRationale) as the slide
-  // content instead of leaving the card empty.
-  const l5Names = p.constituents.map((c) => c.name).filter(Boolean);
-  const keyShifts = p.brief
-    ? collectKeyShifts(p.brief)
-    : v6KeyShifts(p);
-  const agentSummaries = (p.brief?.agents ?? []).slice(0, 3).map((a) => ({
-    name: a.name,
-    type: a.type,
-  }));
+  // v6: an AI Solution IS one L3 initiative and the cross-tower view
+  // doesn't realize the full four-lens brief — so we surface the v6
+  // fields (tagline, primaryVendor, aiRationale) as the slide content.
+  const keyShifts = v6KeyShifts(p);
   return {
     id: p.id,
     parentL4ActivityGroupName: p.parentL4ActivityGroupName,
@@ -122,9 +96,9 @@ export function trimProjectForDeck(p: AIProjectResolved): DeckProjectSlice {
     attributedAiUsd: p.attributedAiUsd,
     isStub: p.isStub,
     isDeprioritized: p.isDeprioritized,
-    l5Names,
+    l5Names: [],
     keyShifts,
-    agentSummaries,
+    agentSummaries: [],
   };
 }
 
@@ -142,37 +116,26 @@ export type BuildDeckPayloadArgs = {
   projects: AIProjectResolved[];
   buildup: BuildupPoint[];
   kpis: ProjectKpis;
-  synthesis: ProgramSynthesisLLM | null;
+  synthesis: ProgramSynthesisLLMV6 | null;
   generatedAt: string | null;
   /** Snapshot behind KPIs/curve — use `state.appliedAssumptions ?? draftAssumptions`. */
   assumptionsForFootnote: CrossTowerAssumptions;
-  program: SelectProgramResult;
+  program: SelectProgramResultV6;
   redactDollars: boolean;
   isFirstRunForCopy: boolean;
 };
 
 export function buildDeckPayload(args: BuildDeckPayloadArgs): CrossTowerDeckPayload {
-  // Under v5 the source-of-truth for in-plan L4 is the `program.initiatives`
-  // roster (one row per L5 with a parent L4). Under v6 we deliberately
-  // pass `program.initiatives = []` because v6 nests Process bodies under
-  // each `L3Initiative` and the cross-tower view never realizes them. So
-  // we fall back to the projects list — each `AIProjectResolved` row
-  // carries the `parentL4ActivityGroupName` (in v5) or its own initiative
-  // identity (in v6, where one project IS one L3 initiative).
-  const inPlanL4 = new Set<string>();
-  if (args.program.initiatives.length > 0) {
-    for (const row of args.program.initiatives) inPlanL4.add(row.l3.rowId);
-  } else {
-    for (const p of args.projects) {
-      if (p.isStub) continue;
-      inPlanL4.add(p.parentL4ActivityGroupName || p.id);
-    }
+  // Under v6 each `AIProjectResolved` IS one L3 AI Initiative. The
+  // in-plan Job Family count rolls up by parent L3 row id from the
+  // program selector; the in-plan Solution count is the live project
+  // count (one project per initiative).
+  const inPlanJobFamilies = new Set<string>();
+  for (const row of args.program.initiatives) {
+    inPlanJobFamilies.add(row.l3RowId);
   }
-  const inPlanL5Count =
-    args.program.initiatives.length > 0
-      ? args.program.initiatives.length
-      : args.projects.filter((p) => !p.isStub).length;
-  const liveProjects = args.projects.filter((p) => !p.isStub).length;
+  const inPlanSolutionCount = args.projects.filter((p) => !p.isStub).length;
+  const liveProjects = inPlanSolutionCount;
   return {
     version: DECK_PAYLOAD_VERSION,
     generatedAt: args.generatedAt,
@@ -192,8 +155,8 @@ export function buildDeckPayload(args: BuildDeckPayloadArgs): CrossTowerDeckPayl
     },
     programMeta: {
       towersInScope: args.program.towersInScope.length,
-      inPlanL4Count: inPlanL4.size,
-      inPlanL5Count,
+      inPlanJobFamilyCount: inPlanJobFamilies.size,
+      inPlanSolutionCount,
       liveProjects,
     },
     synthesis: args.synthesis,
@@ -237,16 +200,10 @@ export type WriteDeckPayloadResult =
 
 /** Mirrors `defaultExecutiveSummary` in CrossTowerAiPlanClient for deck parity. */
 export function deckExecutiveFallback(isFirstRun: boolean): string {
-  if (IS_V6) {
-    if (isFirstRun) {
-      return "Versant's cross-tower AI plan, sourced directly from the L3 AI Initiatives curated in each tower workshop. Click Regenerate plan to score every solution on the Value × Effort 2x2, sequence them across a 24-month roadmap, and roll up the program-level executive summary, risks, and architecture. Numerics and the value buildup curve update deterministically.";
-    }
-    return "Cross-tower AI plan, sourced directly from the L3 AI Initiatives in scope. Each solution carries its own deep-dive brief, is scored on Value × Effort, and threads into the 24-month roadmap. Click any solution to open its Work / Workforce / Workbench / Digital Core brief.";
-  }
   if (isFirstRun) {
-    return "Versant's cross-tower AI plan, structured as one AI Project per in-plan L4 Activity Group. Click Generate plan to author each project's 4-lens brief, score it on the Value × Effort 2x2, and stage the 24-month roadmap. Numerics, lineage, and the value buildup curve update deterministically.";
+    return "Versant's cross-tower AI plan, sourced directly from the L3 AI Initiatives curated in each tower workshop. Click Regenerate plan to score every solution on the Value × Effort 2x2, sequence them across a 24-month roadmap, and roll up the program-level executive summary, risks, and architecture. Numerics and the value buildup curve update deterministically.";
   }
-  return "Cross-tower AI plan, with one AI Project per L4 Activity Group. Each project ships its own 4-lens brief (Work / Workforce / Workbench / Digital Core), is scored on the Value × Effort 2x2, and threads into the 24-month roadmap. Open the AI Projects tab to drill into briefs.";
+  return "Cross-tower AI plan, sourced directly from the L3 AI Initiatives in scope. Each solution carries its own deep-dive brief, is scored on Value × Effort, and threads into the 24-month roadmap. Click any solution to open its Work / Workforce / Workbench / Digital Core brief.";
 }
 
 export function writeDeckPayloadToLocalStorage(

@@ -2,18 +2,45 @@
 
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Archive, X } from "lucide-react";
+import { Archive, RotateCcw, X } from "lucide-react";
 import type { InitiativeReview } from "@/data/assess/types";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { cn } from "@/lib/utils";
 import { feasibilityChip } from "@/lib/feasibilityChip";
-import { InitiativeReviewRestoreButton } from "./InitiativeReviewActions";
+
+/**
+ * Render-only "Restore" button. Schema-agnostic — takes only an opaque
+ * id + `onRestore` callback so callers pass a `V6InitiativeCard.id`
+ * without the drawer caring about the id space.
+ */
+function InitiativeReviewRestoreButton({
+  id,
+  onRestore,
+  className,
+}: {
+  id: string;
+  onRestore: (id: string) => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onRestore(id)}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border border-forge-border bg-forge-surface px-2.5 py-1 text-xs font-medium text-forge-body transition hover:border-accent-purple/50 hover:text-accent-purple-dark",
+        className,
+      )}
+    >
+      <RotateCcw className="h-3 w-3" aria-hidden />
+      Restore
+    </button>
+  );
+}
 
 /**
  * Schema-agnostic rejected-item row. The drawer only ever needs an
  * opaque id (used as React key + restore arg) and the snapshot stored
- * with the decision, so callers from both v5 (L4 id) and v6 (V6
- * initiative id) pass the same shape.
+ * with the decision.
  */
 export type RejectedDrawerItem = {
   id: string;
@@ -26,8 +53,7 @@ type Props = {
   rejectedItems: ReadonlyArray<RejectedDrawerItem>;
   /**
    * Bring an idea back to "pending". Implementations call
-   * `clearInitiativeReview(towerId, id)` under the hood; the drawer
-   * doesn't need to know the id space (v5 L4 vs v6 initiative).
+   * `clearInitiativeReview(towerId, id)` under the hood.
    */
   onRestore: (id: string) => void;
 };

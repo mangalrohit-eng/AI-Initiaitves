@@ -1,44 +1,14 @@
 /**
- * Cross-Tower AI Plan — program-tier (P1/P2/P3) timing for composed projects.
+ * Cross-Tower AI Plan — program-tier (P1/P2/P3) timing helpers.
  *
- * Tier comes from deterministic `ProgramInitiativeRow.programTier` on cohort
- * constituents. Tie-break (mixed tiers on one L4): highest `programTierRank`
- * wins so the cohort uses the latest start + longest default-build path.
+ * Each helper is a pure function of `(assumptions, tier)` so the v6
+ * composer can sequence projects deterministically off the program tier
+ * already stamped on `ProgramInitiativeRowV6`.
  */
 
-import type { ProgramTier } from "@/data/types";
 import type { CrossTowerAssumptions } from "@/lib/cross-tower/assumptions";
-import type { ProgramInitiativeRow } from "@/lib/initiatives/selectProgram";
-import { programTierRank } from "@/lib/programTierLabels";
 
 export type ComposePlanTier = "P1" | "P2" | "P3";
-
-const ACTIVE: readonly ComposePlanTier[] = ["P1", "P2", "P3"];
-
-function isComposePlanTier(t: ProgramTier): t is ComposePlanTier {
-  return (ACTIVE as readonly ProgramTier[]).includes(t);
-}
-
-/**
- * Resolve cohort program tier for Gantt / value-curve timing.
- * Empty or stub-only cohorts → P1 (earliest window).
- */
-export function resolveTierFromConstituents(
-  constituents: ProgramInitiativeRow[],
-): ComposePlanTier {
-  let best: ComposePlanTier = "P1";
-  let bestRank = -1;
-  for (const row of constituents) {
-    const t = row.programTier;
-    if (!isComposePlanTier(t)) continue;
-    const r = programTierRank(t);
-    if (r > bestRank) {
-      bestRank = r;
-      best = t;
-    }
-  }
-  return best;
-}
 
 export function phaseStartMonthForTier(
   a: CrossTowerAssumptions,

@@ -12,18 +12,9 @@ import {
 } from "@/lib/localStore";
 import { hasInFlightRows } from "@/lib/initiatives/curationHash";
 import {
-  runForRows,
-  type RunSummary,
-} from "@/lib/assess/curationPipeline";
-import {
   runForL3Rows,
   type RunV6Summary,
 } from "@/lib/assess/curationPipelineV6";
-import {
-  aggregateRunSummaries,
-  chunkRowsForCurationApi,
-  regenerableRowsForStep4,
-} from "@/lib/assess/curationRegenerateBatch";
 import { CURATE_L3_PROMPT_VERSION } from "@/lib/assess/curateL3InitiativesLLM";
 import type {
   AssessProgramV2,
@@ -33,7 +24,6 @@ import type {
 import { getTowerHref } from "@/lib/towerHref";
 import { cn } from "@/lib/utils";
 import { curationProgressLine, llmLoadingCopy } from "@/lib/llm/loadingCopy";
-import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
  * Count L3 rows in this tower whose cached AI Solutions were authored
@@ -57,43 +47,15 @@ function legacyPromptVersionRowCount(
   return count;
 }
 
-function applyRegenerateToast(toast: ReturnType<typeof useToast>, summary: RunSummary) {
-  const sourceLabel =
-    summary.source === "llm"
-      ? "Versant-grounded LLM"
-      : summary.source === "fallback"
-        ? "deterministic verdict composer"
-        : null;
-  if (summary.failed > 0) {
-    toast.error({
-      title: `Regenerate finished with ${summary.failed} error${summary.failed === 1 ? "" : "s"}`,
-      description:
-        (summary.warning ? `${summary.warning} ` : "") +
-        `${summary.succeeded} capability succeeded; failed rows kept their previous AI guidance.`,
-    });
-    return;
-  }
-  const eligibleNote = summary.eligibleRows === 1 ? "is" : "are";
-  const reviewNote = summary.needReviewRows === 1 ? "still needs" : "still need";
-  const baseDescription =
-    summary.needReviewRows === 0
-      ? `All ${summary.succeeded} ${summary.eligibleRows === 1 ? "is" : "are"} now AI-eligible.`
-      : `${summary.eligibleRows} ${eligibleNote} now AI-eligible. ${summary.needReviewRows} ${reviewNote} manual review (no AI candidates surfaced — see the placeholder rows for next steps).`;
-  toast.success({
-    title: `${summary.succeeded} capability rescored`,
-    description:
-      (sourceLabel ? `Sourced via ${sourceLabel}. ` : "") +
-      baseDescription +
-      (summary.warning ? ` ${summary.warning}` : ""),
-    durationMs: 8000,
-  });
-}
-
 /**
- * Secondary Step 4 action: re-run AI curation for all L4 Activity Group rows
- * that appear on AI Initiatives (modeled AI dial &gt; 0) with L5 Activities,
- * without requiring a new capability map upload. Lives below StaleCurationBanner,
- * above sub-tabs.
+ * Secondary Step 4 action: re-run AI curation for all L3 Job Family rows
+ * with AI dial > 0, without requiring a new capability map upload. Lives
+ * below StaleCurationBanner, above sub-tabs.
+ *
+ * Drives the L3-grain pipeline (`runForL3Rows`) directly. No batching
+ * layer: the per-L3 pipeline streams one row at a time, and L3
+ * rows-per-tower is small enough (~3-30) that a single streaming request
+ * is the right granularity.
  */
 export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
   const toast = useToast();
@@ -105,51 +67,32 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
     return subscribe("assessProgram", () => setProgram(getAssessProgram()));
   }, []);
 
-  // v6 — dial-bearing rows are L3 Job Families. Regenerable rows are
-  // every L3 with `aiPct > 0` (effective dial after baseline fallback).
-  // The L5-Activity gate doesn't apply at L3 grain — child L4 Activity
-  // Groups are passed in as context to the LLM, not scored individually.
+  // Dial-bearing rows are L3 Job Families. Regenerable rows are every L3
+  // with `aiPct > 0` (effective dial after baseline fallback). Child L4
+  // Activity Groups are passed in as context to the LLM, not scored
+  // individually.
   const v6L3Rows = React.useMemo(
     () => program.towers[towerId]?.l3Rows ?? [],
     [program, towerId],
   );
-  const l4Rows = React.useMemo(
-    () => program.towers[towerId]?.l4Rows ?? [],
-    [program, towerId],
-  );
-  const useV6 = IS_V6 && v6L3Rows.length > 0;
 
-  const inFlight = useV6
-    ? hasInFlightRows(v6L3Rows)
-    : hasInFlightRows(l4Rows);
+  const inFlight = hasInFlightRows(v6L3Rows);
 
-  const v6RegenerableRowIds = React.useMemo(() => {
-    if (!useV6) return [] as string[];
+  const rowIds = React.useMemo(() => {
     const t = program.towers[towerId];
-    if (!t) return [];
+    if (!t) return [] as string[];
     const baseline = t.baseline;
-    // L3 Job Families need AI dial > 0 to be worth scoring AI Solutions
-    // for. Offshore-only rows (no AI headroom) are skipped — the
-    // Versant model has nothing to design against.
     return v6L3Rows
       .filter((r) => {
         const ai = r.aiImpactAssessmentPct ?? baseline.baselineAIPct;
         return ai > 0;
       })
       .map((r) => r.id);
-  }, [useV6, program, towerId, v6L3Rows]);
-
-  const v5RowIds = React.useMemo(
-    () => regenerableRowsForStep4(program, towerId).rowIds,
-    [program, towerId],
-  );
-
-  const rowIds = useV6 ? v6RegenerableRowIds : v5RowIds;
-  const grainNoun = useV6 ? "Job Family" : "Activity Group";
+  }, [program, towerId, v6L3Rows]);
 
   const legacyCount = React.useMemo(
-    () => (useV6 ? legacyPromptVersionRowCount(v6L3Rows) : 0),
-    [useV6, v6L3Rows],
+    () => legacyPromptVersionRowCount(v6L3Rows),
+    [v6L3Rows],
   );
 
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -163,80 +106,15 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
 
   const impactLeversHref = getTowerHref(towerId, "impact-levers");
 
-  const onRegenerateV5 = React.useCallback(async () => {
-    const fresh = getAssessProgram();
-    const { rows: freshRows } = regenerableRowsForStep4(fresh, towerId);
-    if (freshRows.length === 0) {
-      toast.error({
-        title: "Nothing to regenerate",
-        description:
-          "No Activity Groups with AI dial above zero and L5 Activities. Open Configure Impact Levers to raise the dial.",
-      });
-      setConfirmOpen(false);
-      return;
-    }
-    const plan = chunkRowsForCurationApi(freshRows);
-    if (plan.oversizeRowIds.length > 0) {
-      toast.error({
-        title: "Some Activity Groups exceed the batch limit",
-        description: `${plan.oversizeRowIds.length} Activity Group row(s) have more than 100 L5 Activities and cannot be rescored in one request. Shorten the L5 Activity list on Step 1 (Capability Map) or split the row.`,
-      });
-    }
-    if (plan.batches.length === 0) {
-      setConfirmOpen(false);
-      return;
-    }
-    const totalRows = plan.batches.reduce((sum, b) => sum + b.length, 0);
-    // Close the modal BEFORE the long-running LLM call so the user can
-    // see the toolbar's "Scoring X/Y" progress chip + the AI Initiative
-    // cards hydrating row-by-row behind it. Native <dialog> blurs
-    // everything behind the backdrop, so leaving it open during the
-    // 30-90s call hides every streaming signal we wired up.
-    setConfirmOpen(false);
-    setRunning(true);
-    setProgress({ scored: 0, total: totalRows });
-    const summaries: RunSummary[] = [];
-    try {
-      for (const batchIds of plan.batches) {
-        const s = await runForRows({ towerId, rowIds: batchIds }, (p) => {
-          if (p.stage === "done" || p.stage === "failed") {
-            setProgress((prev) => ({
-              scored: Math.min(prev.scored + 1, prev.total),
-              total: prev.total,
-            }));
-          }
-        });
-        summaries.push(s);
-      }
-    } catch (e) {
-      const error = e instanceof Error ? e.message : String(e);
-      toast.error({
-        title: "Couldn't regenerate AI guidance",
-        description: error,
-      });
-      setRunning(false);
-      setProgress({ scored: 0, total: 0 });
-      return;
-    }
-    setRunning(false);
-    setProgress({ scored: 0, total: 0 });
-    const summary = aggregateRunSummaries(summaries);
-    applyRegenerateToast(toast, summary);
-  }, [toast, towerId]);
-
-  /**
-   * v6 sibling — drives the L3-grain pipeline (`runForL3Rows`) directly.
-   * No batching layer: the per-L3 pipeline streams one row at a time,
-   * and L3 rows-per-tower is small enough (~3-30) that a single
-   * streaming request is the right granularity.
-   */
-  const onRegenerateV6 = React.useCallback(async () => {
+  const onRegenerate = React.useCallback(async () => {
+    if (running || inFlight) return;
     const fresh = getAssessProgram();
     const t = fresh.towers[towerId];
     if (!t || !t.l3Rows) {
       toast.error({
         title: "Nothing to regenerate",
-        description: "L3 Job Family rows haven't derived yet. Re-import the capability map.",
+        description:
+          "L3 Job Family rows haven't derived yet. Re-import the capability map.",
       });
       setConfirmOpen(false);
       return;
@@ -306,13 +184,7 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
         (summary.warning ? ` ${summary.warning}` : ""),
       durationMs: 8000,
     });
-  }, [toast, towerId]);
-
-  const onRegenerate = React.useCallback(async () => {
-    if (running || inFlight) return;
-    if (useV6) return onRegenerateV6();
-    return onRegenerateV5();
-  }, [running, inFlight, useV6, onRegenerateV5, onRegenerateV6]);
+  }, [running, inFlight, toast, towerId]);
 
   if (rowIds.length === 0) return null;
 
@@ -331,7 +203,7 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
             title={
               inFlight
                 ? "Curation in progress"
-                : `Re-run Versant-grounded AI scoring for the eligible ${grainNoun}s (typically ${curateCopy.timeWindow} for a tower)`
+                : `Re-run Versant-grounded AI scoring for the eligible Job Families (typically ${curateCopy.timeWindow} for a tower)`
             }
             className={cn(
               "inline-flex items-center gap-2 rounded-lg border border-accent-purple/50 bg-transparent px-4 py-2 text-sm font-semibold text-forge-body transition",
@@ -376,7 +248,7 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
           >
             <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-accent-purple" aria-hidden />
             <span className="min-w-0">
-              {curationProgressLine(progress.scored, progress.total, grainNoun)}
+              {curationProgressLine(progress.scored, progress.total, "Job Family")}
             </span>
           </div>
         ) : null}
@@ -392,19 +264,15 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
         description={
           <div className="space-y-2 text-sm leading-relaxed text-forge-body">
             <p>
-              This re-runs Versant-grounded AI {useV6 ? "Solution" : "eligibility and priority"} scoring
-              for{" "}
+              This re-runs Versant-grounded AI Solution scoring for{" "}
               <span className="font-mono text-accent-purple-dark">{rowIds.length}</span>{" "}
-              {grainNoun}
-              {rowIds.length === 1 ? "" : "s"} where the AI dial is above zero
-              {useV6 ? "" : " and L5 Activities exist"}. Cached{" "}
-              {useV6 ? "AI Solutions" : "L5 verdicts"} for those rows are
-              replaced.
+              Job Famil{rowIds.length === 1 ? "y" : "ies"} where the AI dial is
+              above zero. Cached AI Solutions for those rows are replaced.
             </p>
             <p>
               When the amber banner shows a capability map change, use{" "}
               <span className="font-semibold text-forge-ink">Refresh AI guidance</span>{" "}
-              first. Regenerate skips {grainNoun}s at zero AI dial — open{" "}
+              first. Regenerate skips Job Families at zero AI dial — open{" "}
               <Link
                 href={impactLeversHref}
                 className="font-semibold text-accent-purple-dark underline-offset-2 hover:underline"

@@ -36,6 +36,7 @@ import { AUTH_COOKIE_NAME, isValidSessionToken } from "@/lib/auth";
 import {
   buildFallbackProcess,
   curateBriefWithLLM,
+  CURATE_BRIEF_PROMPT_VERSION,
   getCurateBriefInferenceMeta,
   isLLMConfigured,
   type CurateBriefLLMInput,
@@ -129,7 +130,11 @@ export async function POST(req: Request) {
         process,
         generatedAt: new Date().toISOString(),
         source: "llm",
-        inference: { model: inf.model, mode: inf.mode },
+        inference: {
+          model: inf.model,
+          mode: inf.mode,
+          promptVersion: CURATE_BRIEF_PROMPT_VERSION,
+        },
       };
       return NextResponse.json(
         { ok: true, source: "llm" as const, generatedProcess },

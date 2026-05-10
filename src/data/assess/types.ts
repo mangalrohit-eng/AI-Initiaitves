@@ -9,7 +9,6 @@ import type {
 } from "@/data/types";
 import type { AiCurationStatus } from "@/data/capabilityMap/types";
 import { towers } from "@/data/towers";
-import { IS_V6 } from "@/lib/schemaFlag";
 
 export type TowerId = Tower["id"];
 
@@ -642,13 +641,9 @@ export type TowerAssessState = {
    * Strictly additive — older snapshots simply have this undefined and the
    * AI Initiatives view treats every L5 as "pending review."
    *
-   * Rides the existing `AssessProgramV5` envelope, so decisions persist
-   * to Postgres via `AssessSyncProvider` → `/api/assess` → `assess_workshop`.
-   *
-   * V6 NOTE: Under v6 these decisions are keyed by `L3Initiative.id`
-   * instead of `L5Item.id`. The shape is identical so the same field
-   * holds both — the selector (`useInitiativeReviews`) reads the right
-   * id under each schema.
+   * Decisions persist to Postgres via `AssessSyncProvider` →
+   * `/api/assess` → `assess_workshop`. Keyed by `L3Initiative.id`
+   * (≡ `V6InitiativeCard.id`); read by `useInitiativeReviewsV6`.
    */
   initiativeReviews?: Record<string, InitiativeReview>;
   /**
@@ -803,17 +798,18 @@ export const DEFAULT_OFFSHORE_ASSUMPTIONS: OffshoreAssumptions = {
 };
 
 /**
- * V6 program shape — current target (Phase 1).
+ * V6 program shape — current production schema.
  *
  * V6 moves the unit of analysis from L4 (Activity Group, dials + L5-grain
  * AI initiatives) up to L3 (Job Family, dials + 1-N AI Solution products
  * per L3). L4 rows remain on `TowerAssessState.l4Rows` as read-only LLM
- * context; the new `l3Rows` array is the dial-bearing primary entity.
+ * context; the `l3Rows` array is the dial-bearing primary entity.
  *
- * The `version` field accepts both 5 and 6 so v5 reads still compile
- * cleanly through the cutover. The runtime schema is selected by
- * `NEXT_PUBLIC_FORGE_SCHEMA` (default v5; flip to v6 to activate). Phase
- * 7 cleanup tightens this back to `version: 6` once v5 is retired.
+ * The `version` field accepts both 5 and 6 so legacy v5 export files
+ * (e.g. JSON downloads from a previous deployment) still parse through
+ * `assessProgramIO.importAssessProgramFromJsonText`, which derives the
+ * `l3Rows` and stamps `version: 6` before they reach the read path. The
+ * in-memory shape is always v6.
  *
  * V5 background (kept for migration context):
  *   V5 inserted a new L2 Job Grouping layer between the L1 Function and
@@ -823,10 +819,9 @@ export const DEFAULT_OFFSHORE_ASSUMPTIONS: OffshoreAssumptions = {
  */
 export type AssessProgramV6 = {
   /**
-   * Schema version of the persisted blob. v5 = legacy (L4 dials, L5
-   * initiatives); v6 = current (L3 dials, L3 AI Solutions). Both load
-   * cleanly into the same envelope — selectors gate behavior on the
-   * runtime `IS_V6` flag from `lib/schemaFlag.ts`.
+   * Schema version of the persisted blob. The app writes `6`; legacy v5
+   * export files may carry `5` and are translated to `6` by
+   * `assessProgramIO.importAssessProgramFromJsonText`.
    */
   version: 5 | 6;
   towers: Partial<Record<TowerId, TowerAssessState>>;
@@ -884,11 +879,7 @@ export function defaultTowerState(towerId: TowerId): TowerAssessState {
 
 export function defaultAssessProgramV2(): AssessProgramV5 {
   return {
-    // Stamp the version that matches the active runtime schema. v5 default
-    // keeps existing dev environments byte-identical; v6 default writes
-    // the new envelope so the v5 -> v6 read-time migration doesn't keep
-    // re-running on every cold load.
-    version: IS_V6 ? 6 : 5,
+    version: 6,
     towers: {},
     leadDeadlines: buildDefaultProgramLeadDeadlines(),
   };

@@ -1,60 +1,47 @@
 "use client";
 
-import type { ProjectKpis, BuildupPoint } from "@/lib/llm/useCrossTowerPlan";
+import type { ProjectKpis, BuildupPoint } from "@/lib/cross-tower/composeProjects";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
-import { IS_V6 } from "@/lib/schemaFlag";
 
 /**
  * Cross-Tower AI Plan — executive KPI strip.
  *
- * Six tiles, every value derived deterministically from the resolved
- * project set and the `composeProjects` (or `composeProjectsV6`) curve:
+ * Five tiles, every value derived deterministically from the resolved
+ * solution set and the `composeProjectsV6` curve:
  *
  *   1. Program AI run-rate at full scale — sum of attributed $ across
- *      all live (non-stub, non-Deprioritize) projects/initiatives.
+ *      all live (non-stub, non-Deprioritize) initiatives.
  *   2. Modeled M24 run-rate — last point of the buildup curve.
- *   3. {AI Solutions | AI Projects} in plan — count of authored items.
+ *   3. AI Solutions in plan — count of authored items.
  *   4. Towers in scope — distinct primary tower count across live items.
- *   5. v5: Agents architected — sum of `brief.agents.length` across live
- *      project briefs.
- *      v6: Initiative mix — High-feasibility share of live initiatives
- *      (the v6 substrate carries no agent fleet at the program grain;
- *      agents are authored per-initiative on the deep-dive page).
- *   6. Quadrant mix — Quick Win + Strategic Bet count vs total live.
+ *   5. Quadrant mix — Quick Win + Strategic Bet count vs total live.
+ *
+ * Per-initiative agent fleets are authored on each AI Solution's
+ * deep-dive page and aren't surfaced at the program grain.
  */
 export function ProjectsKpiStrip({
   kpis,
   buildup,
   stubProjectCount,
-  hasNarrative,
 }: {
   kpis: ProjectKpis;
   buildup: BuildupPoint[];
   stubProjectCount: number;
-  hasNarrative: boolean;
 }) {
   const redact = useRedactDollars();
   const m24 = buildup[buildup.length - 1]?.cumulativeAiUsd ?? kpis.m24RunRateUsd;
   const gap = Math.max(0, kpis.fullScaleRunRateUsd - m24);
   const showGap = gap > 0 && kpis.fullScaleRunRateUsd > 0 && !redact;
 
-  const itemNoun = IS_V6 ? "solution" : "project";
-  const itemNounPlural = IS_V6 ? "solutions" : "projects";
-  const inPlanLabel = IS_V6 ? "AI Solutions in plan" : "AI Projects in plan";
   const initiativesSubtitle =
     kpis.liveProjects === 0
-      ? `Click Regenerate to author the ${itemNoun} set.`
+      ? "Click Regenerate to author the solution set."
       : `${kpis.quickWinCount} Quick Wins · ${kpis.strategicBetCount} Strategic Bets · ${kpis.fillInCount} Fill-ins`;
 
   return (
     <section>
-      <div
-        className={[
-          "grid gap-3 sm:grid-cols-2",
-          IS_V6 ? "lg:grid-cols-5" : "lg:grid-cols-6",
-        ].join(" ")}
-      >
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Tile
           label="In-plan AI run-rate"
           value={
@@ -62,11 +49,7 @@ export function ProjectsKpiStrip({
               ? "—"
               : formatUsdCompact(kpis.fullScaleRunRateUsd, { decimals: 2 })
           }
-          subtitle={
-            IS_V6
-              ? "At full scale, every solution ramped"
-              : "At full scale, all projects ramped"
-          }
+          subtitle="At full scale, every solution ramped"
           emphasis
         />
         <Tile
@@ -74,14 +57,14 @@ export function ProjectsKpiStrip({
           value={redact ? "—" : formatUsdCompact(m24, { decimals: 2 })}
           subtitle={
             kpis.liveProjects === 0
-              ? `No ${itemNounPlural} in plan`
+              ? "No solutions in plan"
               : showGap
                 ? `${formatUsdCompact(gap, { decimals: 2 })} ramps past M24`
-                : `Every ${itemNoun} at full scale by M24`
+                : "Every solution at full scale by M24"
           }
         />
         <Tile
-          label={inPlanLabel}
+          label="AI Solutions in plan"
           value={String(kpis.liveProjects)}
           subtitle={initiativesSubtitle}
         />
@@ -90,39 +73,26 @@ export function ProjectsKpiStrip({
           value={String(kpis.towersInScope)}
           subtitle={
             kpis.deprioritizedProjects > 0
-              ? `${kpis.deprioritizedProjects} ${itemNoun}${kpis.deprioritizedProjects === 1 ? "" : "s"} deprioritized`
+              ? `${kpis.deprioritizedProjects} solution${kpis.deprioritizedProjects === 1 ? "" : "s"} deprioritized`
               : "Cross-tower coverage"
           }
         />
-        {!IS_V6 ? (
-          <Tile
-            label="Agents architected"
-            value={String(kpis.agentsArchitected)}
-            subtitle={
-              hasNarrative
-                ? "Across live project briefs"
-                : "Pending plan generation"
-            }
-          />
-        ) : null}
         <Tile
           label="Quadrant mix"
           value={`${kpis.quickWinCount + kpis.strategicBetCount}/${kpis.liveProjects || 0}`}
-          subtitle={`High-value (QW + SB) of live ${itemNounPlural}`}
+          subtitle="High-value (QW + SB) of live solutions"
         />
       </div>
 
       {stubProjectCount > 0 ? (
         <p className="mt-2 text-[11px] text-forge-subtle">
           <span className="font-mono text-accent-amber">
-            {stubProjectCount} {itemNoun}
+            {stubProjectCount} solution
             {stubProjectCount === 1 ? "" : "s"}
           </span>{" "}
           pending generation — model authoring failed and the cards are
-          showing deterministic placeholders.{" "}
-          {IS_V6
-            ? "Open the AI Solutions tab and click Regenerate to retry."
-            : "Use the per-card Retry CTA on the Projects tab to author them individually."}
+          showing deterministic placeholders. Open the AI Solutions tab and
+          click Regenerate to retry.
         </p>
       ) : null}
     </section>

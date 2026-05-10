@@ -42,8 +42,7 @@ export type UseInitiativeReviewsV6Result = {
    * V6 selector output with rejected initiative cards filtered out of
    * every `V6L3Row.initiatives`. When all real cards under a row get
    * rejected we synthesize an "all rejected" placeholder so the row's
-   * AI dial isn't silently dropped from the gallery — mirrors the v5
-   * `buildAllRejectedPlaceholder` contract.
+   * AI dial isn't silently dropped from the gallery.
    */
   result: SelectInitiativesV6Result;
   /** Raw decisions for this tower, keyed by `V6InitiativeCard.id`. */
@@ -65,24 +64,11 @@ export type UseInitiativeReviewsV6Result = {
 };
 
 /**
- * v6 sibling of `useInitiativeReviews` — applies tower-lead validate /
- * reject decisions to the V6 AI Solutions gallery.
- *
- * Why a separate hook instead of reusing the v5 one?
- *   - The v5 hook is keyed by `InitiativeL4.id` (Activity-Group level),
- *     while v6 cards are at L3-Initiative grain (`L3Initiative.id` ⇒
- *     `V6InitiativeCard.id`). Mixing them in one map would require
- *     callers to know the schema and pass the right id.
- *   - The two id spaces are disjoint so they coexist in the same
- *     `initiativeReviews` map — v5 surfaces (operating-model deep dive,
- *     `<AiRoadmap>`, `<ProcessLandscape>`) keep working unchanged, and
- *     the v6 surfaces (`<SolutionsGallery>`, `<SolutionCardV2>`) read
- *     only their own keys.
+ * Applies tower-lead validate / reject decisions to the AI Solutions
+ * gallery. Cards are keyed by `L3Initiative.id` (≡ `V6InitiativeCard.id`).
  *
  * Storage shape: `Record<string, InitiativeReview>` on
- * `tState.initiativeReviews` — the same Postgres-synced field used by
- * v5. Keys are opaque strings so we can mix v5 L4 ids and v6 card ids
- * without schema gymnastics.
+ * `tState.initiativeReviews` — Postgres-synced via `AssessSyncProvider`.
  *
  * Filter semantics:
  *   - Rejected cards are removed from `result.l3Rows[i].initiatives`.

@@ -20,7 +20,6 @@ import { towers } from "@/data/towers";
 import { coerceInitiativeReviews, groupL4RowsToL3RowsForImport } from "@/lib/localStore";
 import { parseAiReadinessIntakeFromUnknown } from "@/lib/assess/towerReadinessIntake";
 import { deriveL3Rows } from "@/lib/assess/deriveL3Rows";
-import { IS_V6 } from "@/lib/schemaFlag";
 
 export const ASSESS_PROGRAM_FILE_FORMAT = "forge-assess-program-v5" as const;
 const SUPPORTED_PROGRAM_VERSIONS: ReadonlyArray<number> = [2, 3, 4, 5, 6];
@@ -286,10 +285,9 @@ export function importAssessProgramFromJsonText(
   const hasLegacyGlobal = Object.keys(legacyOverrides).length > 0;
 
   const program: AssessProgramV2 = {
-    // Preserve a v6 input version so a v6 export imported under v5 mode
-    // doesn't get silently downgraded. The v6 post-derivation later in
-    // this function bumps the version to 6 when IS_V6 is active.
-    version: inputVersion === 6 ? 6 : 5,
+    // Always v6: the post-derivation step below upgrades any v5 import
+    // (or any v6 import missing `l3Rows`) before returning.
+    version: 6,
     towers: {},
   };
 
@@ -338,9 +336,8 @@ export function importAssessProgramFromJsonText(
         (hasLegacyGlobal ? { ...defaultTowerRates(k), ...legacyOverrides } : defaultTowerRates(k));
 
       // V6: preserve persisted L3 rows verbatim from a v6 import. The
-      // post-derivation step (below the towers loop) takes care of
-      // deriving them when IS_V6 is active and the import is v5 (or
-      // l3Rows is missing for any reason).
+      // post-derivation step (below the towers loop) derives them when
+      // the import is v5 (or `l3Rows` is missing for any reason).
       const persistedL3Rows: L3WorkforceRowV6[] | undefined = Array.isArray(
         v.l3Rows,
       )
@@ -414,46 +411,44 @@ export function importAssessProgramFromJsonText(
     program.leadDeadlines = mergedDeadlines;
   }
 
-  // V6 post-derivation: when v6 is the active runtime schema, derive
-  // `l3Rows` for any tower that lacks them (i.e. v5 imports). Mirrors
-  // `migrateToV6IfActive` in `localStore.ts` so the API GET path and the
-  // file-import path both produce the same v6 shape. No-op under v5.
-  if (IS_V6) {
-    let touchedV6 = false;
-    const towersOut: AssessProgramV2["towers"] = {};
-    for (const [k, t] of Object.entries(program.towers)) {
-      if (!t) continue;
-      const towerId = k as TowerId;
-      const needsFreshDerivation = !t.l3Rows || t.l3Rows.length === 0;
-      if (needsFreshDerivation) {
-        const cleanedL4Rows = t.l4Rows.map((r) => {
-          const next: typeof r = {
-            id: r.id,
-            l2: r.l2,
-            l3: r.l3,
-            l4: r.l4,
-            fteOnshore: r.fteOnshore,
-            fteOffshore: r.fteOffshore,
-            contractorOnshore: r.contractorOnshore,
-            contractorOffshore: r.contractorOffshore,
-          };
-          if (r.annualSpendUsd != null) next.annualSpendUsd = r.annualSpendUsd;
-          if (r.l5Activities && r.l5Activities.length > 0) {
-            next.l5Activities = r.l5Activities;
-          }
-          return next;
-        });
-        const l3Rows = deriveL3Rows(cleanedL4Rows, towerId);
-        towersOut[towerId] = { ...t, l4Rows: cleanedL4Rows, l3Rows };
-        touchedV6 = true;
-      } else {
-        towersOut[towerId] = t;
-      }
+  // V6 post-derivation: derive `l3Rows` for any tower that lacks them
+  // (i.e. legacy v5 imports). Strips v5 dial fields from each L4 context
+  // row when freshly migrating — under v6 Step 2 reads `l3Rows`, so the
+  // L4 dials are vestigial and would surface stale numbers in any code
+  // path that still reads `l4Rows[*].offshoreAssessmentPct`.
+  let touchedV6 = false;
+  const towersOut: AssessProgramV2["towers"] = {};
+  for (const [k, t] of Object.entries(program.towers)) {
+    if (!t) continue;
+    const towerId = k as TowerId;
+    const needsFreshDerivation = !t.l3Rows || t.l3Rows.length === 0;
+    if (needsFreshDerivation) {
+      const cleanedL4Rows = t.l4Rows.map((r) => {
+        const next: typeof r = {
+          id: r.id,
+          l2: r.l2,
+          l3: r.l3,
+          l4: r.l4,
+          fteOnshore: r.fteOnshore,
+          fteOffshore: r.fteOffshore,
+          contractorOnshore: r.contractorOnshore,
+          contractorOffshore: r.contractorOffshore,
+        };
+        if (r.annualSpendUsd != null) next.annualSpendUsd = r.annualSpendUsd;
+        if (r.l5Activities && r.l5Activities.length > 0) {
+          next.l5Activities = r.l5Activities;
+        }
+        return next;
+      });
+      const l3Rows = deriveL3Rows(cleanedL4Rows, towerId);
+      towersOut[towerId] = { ...t, l4Rows: cleanedL4Rows, l3Rows };
+      touchedV6 = true;
+    } else {
+      towersOut[towerId] = t;
     }
-    if (touchedV6 || program.version !== 6) {
-      program.version = 6;
-      program.towers = towersOut;
-    }
+  }
+  if (touchedV6) {
+    program.towers = towersOut;
   }
 
   return { ok: true, program };

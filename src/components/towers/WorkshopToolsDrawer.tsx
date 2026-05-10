@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, Settings2 } from "lucide-react";
+import { ChevronDown, Settings2, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Tower } from "@/data/types";
 import type { TowerId } from "@/data/assess/types";
@@ -9,9 +9,20 @@ import { TowerDataExports } from "@/components/assess/TowerDataExports";
 import { TowerReadinessIntakePanel } from "@/components/operatingModel/TowerReadinessIntakePanel";
 import { RegenerateAiGuidanceToolbar } from "@/components/operatingModel/RegenerateAiGuidanceToolbar";
 import { StaleCurationBanner } from "@/components/operatingModel/StaleCurationBanner";
+import {
+  BulkGenerateBriefsToolbar,
+  useBulkBriefSummary,
+} from "@/components/towers/BulkGenerateBriefsToolbar";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "workshop-tools-drawer-open-v1";
+/**
+ * Per-tower flag for the "auto-open the drawer once when uncached briefs
+ * are detected" experience. We only auto-open the FIRST time on a given
+ * tower so the drawer doesn't fight the user every visit — once they've
+ * dismissed it, it stays put.
+ */
+const AUTO_OPEN_KEY_PREFIX = "workshop-tools-drawer-autoopen-v1::";
 
 /**
  * Collapsible "facilitator-only" controls drawer for Step 4.
@@ -41,6 +52,7 @@ export function WorkshopToolsDrawer({
 }) {
   const towerId = tower.id as TowerId;
   const [open, setOpen] = React.useState(false);
+  const briefSummary = useBulkBriefSummary(towerId);
 
   React.useEffect(() => {
     try {
@@ -51,6 +63,27 @@ export function WorkshopToolsDrawer({
     }
   }, []);
 
+  // One-shot auto-open: the first time a tower has uncached briefs (or
+  // stale ones), pop the drawer open so the bulk generator is visible
+  // without forcing the lead to discover the collapsed control. We
+  // remember the auto-open per tower so it only happens once — repeat
+  // visits respect the user's manual collapse.
+  React.useEffect(() => {
+    if (briefSummary.totalInitiatives === 0) return;
+    if (briefSummary.missingCount === 0 && briefSummary.staleCount === 0) {
+      return;
+    }
+    try {
+      const key = AUTO_OPEN_KEY_PREFIX + towerId;
+      if (window.localStorage.getItem(key) === "1") return;
+      window.localStorage.setItem(key, "1");
+      setOpen(true);
+    } catch {
+      // No localStorage — auto-open every visit instead of crashing.
+      setOpen(true);
+    }
+  }, [briefSummary.missingCount, briefSummary.staleCount, briefSummary.totalInitiatives, towerId]);
+
   React.useEffect(() => {
     try {
       window.localStorage.setItem(STORAGE_KEY, open ? "1" : "0");
@@ -58,6 +91,8 @@ export function WorkshopToolsDrawer({
       // ignore quota / disabled localStorage
     }
   }, [open]);
+
+  const pendingCount = briefSummary.missingCount + briefSummary.staleCount;
 
   return (
     <section
@@ -82,12 +117,25 @@ export function WorkshopToolsDrawer({
             <Settings2 className="h-3.5 w-3.5" aria-hidden />
           </span>
           <div className="min-w-0">
-            <div className="font-display text-sm font-semibold text-forge-ink">
-              Workshop tools
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-display text-sm font-semibold text-forge-ink">
+                Workshop tools
+              </span>
+              {pendingCount > 0 ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-accent-purple/40 bg-accent-purple/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-accent-purple-light"
+                  title={`${briefSummary.missingCount} missing brief${
+                    briefSummary.missingCount === 1 ? "" : "s"
+                  }${briefSummary.staleCount > 0 ? `, ${briefSummary.staleCount} stale` : ""}`}
+                >
+                  <Sparkles className="h-2.5 w-2.5" aria-hidden />
+                  {pendingCount} brief{pendingCount === 1 ? "" : "s"} to generate
+                </span>
+              ) : null}
             </div>
             <div className="text-[11px] text-forge-subtle">
-              Data exports, intake import, and regenerate AI guidance —
-              for facilitators only.
+              Bulk generate AI Solution briefs, exports, intake import, and
+              regenerate AI guidance — for facilitators only.
             </div>
           </div>
         </div>
@@ -112,6 +160,7 @@ export function WorkshopToolsDrawer({
             className="overflow-hidden"
           >
             <div className="space-y-4 px-4 py-4">
+              <BulkGenerateBriefsToolbar towerId={towerId} />
               <TowerDataExports tower={tower} />
               <TowerReadinessIntakePanel tower={tower} />
               <div className="flex justify-end">

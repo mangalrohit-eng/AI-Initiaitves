@@ -118,11 +118,10 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
   const program: AssessProgramV2 = parsed.program;
-  // V6 cutover: accept both legacy v5 payloads and current v6 payloads on
-  // the PUT path. The server-side `importAssessProgramFromJsonText`
-  // already runs the v5 -> v6 derivation when `IS_V6` is active, so any
-  // v5 body lands as version 6 by the time it reaches this check. Both
-  // versions persist into the same JSONB column verbatim.
+  // PUT path accepts both legacy v5 payloads and current v6 payloads —
+  // the server-side `importAssessProgramFromJsonText` runs the v5 -> v6
+  // derivation so any v5 body lands as version 6 by the time it reaches
+  // this check. Both versions persist into the same JSONB column verbatim.
   if (program.version !== 5 && program.version !== 6) {
     return NextResponse.json({ error: "version must be 5 or 6" }, { status: 400 });
   }

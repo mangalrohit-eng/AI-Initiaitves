@@ -12,7 +12,7 @@ import {
 } from "@/lib/localStore";
 import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
 import { getTowerStaleState } from "@/lib/initiatives/curationHash";
-import { useInitiativeReviews } from "@/lib/initiatives/useInitiativeReviews";
+import { useInitiativeReviewsV6 } from "@/lib/initiatives/useInitiativeReviewsV6";
 import {
   hubCapabilityMapLine,
   hubImpactLeversLine,
@@ -33,8 +33,11 @@ function dialStatus(
 ): DialStatus {
   const t = program.towers[towerId];
   if (!t || !t.l4Rows.length) return "no-footprint";
-  const hasOff = t.l4Rows.some((r) => r.offshoreAssessmentPct != null);
-  const hasAi = t.l4Rows.some((r) => r.aiImpactAssessmentPct != null);
+  // Dials live on l3Rows under v6 (Job Family grain); l4Rows still exist
+  // as read-only context but no longer carry the offshore / AI dial values.
+  const l3 = t.l3Rows ?? [];
+  const hasOff = l3.some((r) => r.offshoreAssessmentPct != null);
+  const hasAi = l3.some((r) => r.aiImpactAssessmentPct != null);
   return hasOff || hasAi ? "dialed" : "default-only";
 }
 
@@ -86,7 +89,7 @@ export function useGuidanceImpactLevers(
 }
 
 export function useGuidanceAiInitiatives(tower: Tower): ResolvedJourneyGuidance {
-  const { counts } = useInitiativeReviews(tower);
+  const { counts } = useInitiativeReviewsV6(tower);
   const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());
   React.useEffect(() => {
     setProgram(getAssessProgram());
@@ -125,8 +128,8 @@ export function useProgramHomeGuidance(): ResolvedJourneyGuidance {
 }
 
 /**
- * Per-surface hooks so we never call `useInitiativeReviews` conditionally
- * (Step 4 only, always receives a `Tower`).
+ * Per-surface hooks so we never call `useInitiativeReviewsV6`
+ * conditionally (Step 4 only, always receives a `Tower`).
  */
 export function useGuidanceCapabilityMapHub(): ResolvedJourneyGuidance {
   const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());

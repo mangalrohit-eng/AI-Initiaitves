@@ -5,7 +5,6 @@ import type { Quadrant } from "@/lib/cross-tower/aiProjects";
 import type { CrossTowerDeckPayload, DeckProjectSlice } from "@/lib/cross-tower/deckPayload";
 import { deckExecutiveFallback } from "@/lib/cross-tower/deckPayload";
 import { formatUsdCompact } from "@/lib/format";
-import { IS_V6 } from "@/lib/schemaFlag";
 import { DeckSlide } from "./DeckSlide";
 import { DeckValueChart } from "./DeckValueChart";
 import {
@@ -166,9 +165,8 @@ export function CrossTowerDeckDocument({ payload }: { payload: CrossTowerDeckPay
               Plan
             </h1>
             <p className="mt-3 max-w-2xl text-sm text-forge-subtle">
-              {IS_V6
-                ? "24-month agentic AI plan across thirteen towers — sourced from the L3 AI Initiatives curated in each tower workshop."
-                : "24-month agentic AI plan across thirteen towers — one AI Project per in-plan L4 Activity Group."}
+              24-month agentic AI plan across thirteen towers — sourced from
+              the L3 AI Initiatives curated in each tower workshop.
             </p>
           </div>
           <p className="font-mono text-xs text-forge-hint">
@@ -185,10 +183,10 @@ export function CrossTowerDeckDocument({ payload }: { payload: CrossTowerDeckPay
         </p>
         <p className="mt-3 text-base leading-relaxed text-forge-body">{exec}</p>
         <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Kpi label="Live projects" value={String(payload.kpis.liveProjects)} />
+          <Kpi label="Live solutions" value={String(payload.kpis.liveProjects)} />
           <Kpi label="M24 run-rate" value={fmtUsd(payload.kpis.m24RunRateUsd, redact)} />
           <Kpi label="Full-scale total" value={fmtUsd(payload.kpis.fullScaleRunRateUsd, redact)} />
-          <Kpi label="Agents" value={String(payload.kpis.agentsArchitected)} />
+          <Kpi label="Towers in scope" value={String(payload.kpis.towersInScope)} />
         </div>
         <p className="mt-4 font-mono text-xs text-forge-subtle">
           QW {payload.kpis.quickWinCount} · SB {payload.kpis.strategicBetCount} · FI{" "}
@@ -216,9 +214,10 @@ export function CrossTowerDeckDocument({ payload }: { payload: CrossTowerDeckPay
           ))}
         </div>
         <p className="mt-6 font-mono text-xs text-forge-hint">
-          {payload.programMeta.towersInScope} towers in scope · {payload.programMeta.inPlanL4Count}{" "}
-          L4 groups · {payload.programMeta.inPlanL5Count} L5 opportunities ·{" "}
-          {payload.programMeta.liveProjects} live AI Projects
+          {payload.programMeta.towersInScope} towers in scope ·{" "}
+          {payload.programMeta.inPlanJobFamilyCount} L3 Job Families ·{" "}
+          {payload.programMeta.inPlanSolutionCount} AI Solutions ·{" "}
+          {payload.programMeta.liveProjects} live
         </p>
       </DeckSlide>
 

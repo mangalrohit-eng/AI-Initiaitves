@@ -224,6 +224,76 @@ export type Process = {
   confidence?: "Modeled" | "Validated";
   // P1 — see Tower.lastUpdated
   lastUpdated?: string;
+  /**
+   * Client-narrative brief used by the AI Solution detail page. Authored
+   * by the curate-brief LLM alongside the four-lens `Process` body and
+   * persists on the same `GeneratedProcessCache.process` blob. Optional
+   * because legacy caches predate the field — readers derive a fallback
+   * `SolutionBrief` from the rest of the `Process` so old briefs still
+   * render the new layout (with a "regenerate for the new fields" hint
+   * surfaced via `GeneratedProcessCache.inference.promptVersion`).
+   */
+  solutionBrief?: SolutionBrief;
+};
+
+/**
+ * Six-section client-narrative for an AI Solution. Replaces the four-lens
+ * `<ProcessExperience>` view as the primary detail-page layout. Each
+ * section answers a question a Versant exec asks when sizing the
+ * initiative:
+ *
+ *   A. `whatItDoes`           — What exactly does this solution do?
+ *   B. `howItWorks`           — How does it run? (Excel intake citations
+ *                               surface here when the tower lead's AI
+ *                               readiness questionnaire is loaded.)
+ *   C. `sourcing`             — Build vs. Buy vs. Discover.
+ *   D. `buyOptions`           — Named vendors that may cover this when
+ *                               the verdict is Buy (or adjacent context
+ *                               for Build).
+ *   E. `referenceArchitecture`— Plain-language source → AI → target →
+ *                               users flow.
+ *   F. `buildAgents`          — When sourcing is Build, the AI agents
+ *                               Versant needs to develop. Curated
+ *                               subset of `Process.agents[]`.
+ */
+export type SolutionBrief = {
+  whatItDoes: { headline: string; capabilities: string[] };
+  howItWorks: {
+    steps: { title: string; detail: string }[];
+    /**
+     * Short pull-quotes from the tower's Excel readiness questionnaire
+     * when the LLM grounded a step in the intake. Empty / omitted when
+     * the questionnaire wasn't used.
+     */
+    intakeCitations?: string[];
+  };
+  sourcing: { approach: SolutionSourcingApproach; rationale: string };
+  buyOptions: SolutionBuyOption[];
+  referenceArchitecture: SolutionReferenceArchitecture;
+  buildAgents: SolutionBuildAgent[];
+};
+
+export type SolutionSourcingApproach = "Build" | "Buy" | "Discover";
+
+export type SolutionBuyOption = {
+  vendor: string;
+  fit: string;
+  /** Coverage of the solution scope by the named vendor. */
+  coverage: "Strong" | "Partial" | "Adjacent";
+};
+
+export type SolutionReferenceArchitecture = {
+  sourceSystems: string[];
+  aiLayer: { components: string[]; description: string };
+  targetSystems: string[];
+  users: string[];
+  dataFlowSummary: string;
+};
+
+export type SolutionBuildAgent = {
+  name: string;
+  role: string;
+  llmRequired?: boolean;
 };
 
 export type BusinessCase = {

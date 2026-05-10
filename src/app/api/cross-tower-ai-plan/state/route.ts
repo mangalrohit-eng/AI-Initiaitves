@@ -37,14 +37,9 @@ import {
   isDatabaseUrlConfigured,
 } from "@/lib/db";
 import {
-  validatePersistedPlan,
-  type PersistedCrossTowerAiPlan,
-} from "@/lib/cross-tower/persistedPlan";
-import {
   validatePersistedPlanV2,
   type PersistedCrossTowerAiPlanV2,
 } from "@/lib/cross-tower/persistedPlanV2";
-import { IS_V6 } from "@/lib/schemaFlag";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,25 +48,19 @@ export const dynamic = "force-dynamic";
 const MAX_BODY_BYTES = 2_000_000;
 
 /**
- * Schema-aware validator. Under v6 the document MUST be the v2 shape
- * (`version: 2, schema: "v6"`); v1 docs from a previous v5 deployment are
- * rejected so the page falls through to the empty-state regenerate flow.
- * Under v5 the validator behaves exactly as before.
+ * Validate a persisted v6 plan envelope (`version: 2, schema: "v6"`).
+ * Documents from older v5 deployments are rejected so the page falls
+ * through to the empty-state regenerate flow.
  */
-type AnyPersistedPlan = PersistedCrossTowerAiPlan | PersistedCrossTowerAiPlanV2;
+type AnyPersistedPlan = PersistedCrossTowerAiPlanV2;
 type ValidatedPlan =
   | { ok: true; plan: AnyPersistedPlan }
   | { ok: false; error: string };
 
 function validateForActiveSchema(raw: unknown): ValidatedPlan {
-  if (IS_V6) {
-    const v2 = validatePersistedPlanV2(raw);
-    if (v2.ok) return { ok: true, plan: v2.plan };
-    return { ok: false, error: v2.error };
-  }
-  const v1 = validatePersistedPlan(raw);
-  if (v1.ok) return { ok: true, plan: v1.plan };
-  return { ok: false, error: v1.error };
+  const v2 = validatePersistedPlanV2(raw);
+  if (v2.ok) return { ok: true, plan: v2.plan };
+  return { ok: false, error: v2.error };
 }
 
 type DbDisposition = "ok" | "unconfigured" | "unavailable";
@@ -208,7 +197,7 @@ export async function PUT(req: Request) {
       modelId: document.modelId,
       promptVersion: document.promptVersion,
       inputHash: document.inputHash,
-      schema: "schema" in document ? document.schema : "v1",
+      schema: document.schema,
       bytes: text.length,
     });
     return NextResponse.json(

@@ -13,11 +13,10 @@ import {
 import type { AssessProgramV2 } from "@/data/assess/types";
 
 /**
- * Subscribe to `forge.assessProgram.v2` and recompute the v6 cross-tower
- * substrate whenever the program changes. Mirrors `useProgramInitiatives()`
- * (the v5 hook) — seeds with the hydration snapshot so the first client
- * render matches the static SSR HTML, then swaps to the persisted program
- * inside `useEffect`.
+ * Subscribe to `forge.assessProgram.v2` and recompute the cross-tower
+ * substrate whenever the program changes. Seeds with the hydration
+ * snapshot so the first client render matches the static SSR HTML, then
+ * swaps to the persisted program inside `useEffect`.
  */
 export function useProgramInitiativesV6(
   aiUsdThreshold = 0,

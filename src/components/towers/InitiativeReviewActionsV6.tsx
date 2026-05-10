@@ -31,10 +31,10 @@ type Props = {
  * otherwise approving an idea would also fire the deep-dive
  * navigation.
  *
- * Visual contract mirrors the v5 `<InitiativeReviewActions compact />`:
- * tiny icon-only buttons, low default opacity, full opacity on hover /
- * focus / when a decision is in place. Approved state collapses to a
- * single teal "Validated" pill (clickable to revert to pending).
+ * Visual contract: tiny icon-only buttons, low default opacity, full
+ * opacity on hover / focus / when a decision is in place. Approved
+ * state collapses to a single teal "Validated" pill (clickable to
+ * revert to pending).
  *
  * Reject fires a 6-second Undo toast so a stray click is one tap away
  * from being reverted; matches the workshop-friendly UX pattern from

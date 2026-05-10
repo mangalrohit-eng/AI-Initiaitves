@@ -24,7 +24,6 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
-  AlertTriangle,
   ArrowLeft,
   Layers,
   Loader2,
@@ -48,9 +47,10 @@ import {
   intakeHasMinimumSubstance,
   TOWER_READINESS_ATTRIBUTION_LABEL,
 } from "@/lib/assess/towerReadinessIntake";
+import { CURATE_BRIEF_PROMPT_VERSION } from "@/lib/assess/curateBriefLLM";
 import { ProcessMetrics } from "@/components/processes/ProcessMetrics";
 import { BusinessCase } from "@/components/processes/BusinessCase";
-import { ProcessExperience } from "@/components/processes/ProcessExperience";
+import { SolutionBriefView } from "@/components/initiatives/SolutionBriefView";
 import { SolutionIcon } from "@/components/towers/SolutionIcon";
 import { feasibilityChip } from "@/lib/feasibilityChip";
 import type {
@@ -278,6 +278,16 @@ export default function V6InitiativePage() {
   const inf = initiative.generatedProcess?.inference;
   const coverageCount = coveredL4Names.length;
   const totalChildren = childL4Names.length;
+  // Cache is "stale" when:
+  //  - it came from the LLM path (fallback caches always render
+  //    derived sections so they don't need a refresh hint), AND
+  //  - the recorded prompt version doesn't match the current one (or
+  //    no version was recorded — i.e. authored before the
+  //    solution-brief fields were stamped).
+  const isStaleCache = Boolean(
+    initiative.generatedProcess?.source === "llm" &&
+      inf?.promptVersion !== CURATE_BRIEF_PROMPT_VERSION,
+  );
 
   return (
     <PageShell>
@@ -445,47 +455,62 @@ export default function V6InitiativePage() {
 
         <div className="mt-6">
           {resolvedProcess ? (
-            <div className="mt-2 space-y-4">
-              <div className="mt-2 space-y-2">
+            <div className="space-y-6">
+              <div className="space-y-2">
                 <h2 className="sr-only">Initiative summary</h2>
                 <ProcessMetrics process={resolvedProcess} />
               </div>
-              {resolvedProcess.currentPainPoints?.length ? (
-                <section
-                  aria-label="Why this matters now"
-                  className="mt-10 rounded-2xl border border-accent-amber/40 bg-amber-50/80 p-5 shadow-sm sm:p-6"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-amber/50 bg-white px-2.5 py-0.5 text-xs font-semibold text-amber-900">
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                      Why this matters today
-                    </span>
-                  </div>
-                  <h3 className="mt-3 font-display text-xl font-semibold text-forge-ink">
-                    The pain points this initiative addresses
-                  </h3>
-                  <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {resolvedProcess.currentPainPoints.map((p) => (
-                      <li
-                        key={p}
-                        className="flex gap-2 rounded-xl border border-amber-200/80 bg-white/70 p-3 text-sm text-forge-body shadow-sm"
-                      >
-                        <span
-                          className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-amber"
-                          aria-hidden
-                        />
-                        <span>{p}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+              {isStaleCache ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent-purple/40 bg-accent-purple/5 px-4 py-3 text-xs leading-relaxed text-forge-body">
+                  <span>
+                    <span className="font-mono uppercase tracking-[0.14em] text-accent-purple-light">
+                      &gt; Cache notice
+                    </span>{" "}
+                    This brief was generated under an older prompt
+                    {inf?.promptVersion ? ` (${inf.promptVersion})` : ""}. Regenerate
+                    to populate the new sourcing verdict, vendor options, and
+                    reference-architecture sections.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fresh = getAssessProgram().towers[tower.id as TowerId];
+                      if (!fresh || !fresh.l3Rows) return;
+                      setTowerAssess(tower.id as TowerId, {
+                        l3Rows: fresh.l3Rows.map((r) =>
+                          r.id === rowId
+                            ? {
+                                ...r,
+                                l3Initiatives: (r.l3Initiatives ?? []).map((it) =>
+                                  it.id === initiativeId
+                                    ? { ...it, generatedProcess: undefined }
+                                    : it,
+                                ),
+                              }
+                            : r,
+                        ),
+                      });
+                      void fireGeneration();
+                    }}
+                    disabled={generating}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-accent-purple/50 bg-accent-purple/10 px-2.5 py-1 text-[11px] font-medium text-accent-purple-light hover:bg-accent-purple/20 disabled:opacity-50"
+                  >
+                    {generating ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Refreshing…
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-3 w-3" />
+                        Refresh brief
+                      </>
+                    )}
+                  </button>
+                </div>
               ) : null}
-              <div className="mt-10">
-                <BusinessCase process={resolvedProcess} />
-              </div>
-              <div className="mt-12">
-                <ProcessExperience process={resolvedProcess} evidence={[]} />
-              </div>
+              <SolutionBriefView process={resolvedProcess} />
+              <BusinessCase process={resolvedProcess} />
             </div>
           ) : generationError ? (
             <ErrorState
@@ -494,7 +519,7 @@ export default function V6InitiativePage() {
               retrying={generating}
             />
           ) : (
-            <LoadingState message="Synthesizing four-lens work, team, tools, and platform with Versant context." />
+            <LoadingState message="Synthesizing the six-section solution brief with Versant context." />
           )}
         </div>
 

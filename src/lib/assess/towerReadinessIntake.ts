@@ -5,7 +5,7 @@ import type {
   TowerAssessState,
 } from "@/data/assess/types";
 import { towers } from "@/data/towers";
-import { hasQueuedRows } from "@/lib/initiatives/curationHash";
+import { hasQueuedRowsV6 } from "@/lib/initiatives/curationHash";
 
 function isRecord(x: unknown): x is Record<string, unknown> {
   return x !== null && typeof x === "object" && !Array.isArray(x);
@@ -181,11 +181,13 @@ export function latestTowerIntakeImportedAtIso(
 
 /** Step 4 banner: queued rows and curation predates latest intake import. */
 export function shouldShowIntakeStaleBannerCopy(
-  tower: Pick<TowerAssessState, "l4Rows" | "aiReadinessIntake"> | undefined,
+  tower:
+    | Pick<TowerAssessState, "l3Rows" | "aiReadinessIntake">
+    | undefined,
 ): boolean {
   const intake = tower?.aiReadinessIntake;
-  const rows = tower?.l4Rows ?? [];
-  if (!intake || !hasQueuedRows(rows)) return false;
+  const rows = tower?.l3Rows ?? [];
+  if (!intake || !hasQueuedRowsV6(rows)) return false;
   const imported = intake.importedAt;
   return rows.some(
     (r) =>

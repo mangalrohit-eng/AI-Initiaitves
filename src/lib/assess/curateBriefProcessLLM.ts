@@ -20,6 +20,11 @@ import type {
   PlatformRequirement,
   Process,
   RoleState,
+  SolutionBrief,
+  SolutionBuildAgent,
+  SolutionBuyOption,
+  SolutionReferenceArchitecture,
+  SolutionSourcingApproach,
   ToolState,
   WorkforceLens,
   WorkLens,
@@ -27,8 +32,20 @@ import type {
   WorkStep,
 } from "@/data/types";
 import type { GeneratedBrief, TowerId } from "@/data/assess/types";
+
+/**
+ * Prompt version stamp for the curate-brief LLM call. Bumped whenever the
+ * system prompt's JSON contract changes in a way that older caches won't
+ * carry — e.g. the addition of `solutionBrief` (this version). The detail
+ * page reads `GeneratedProcessCache.inference.promptVersion` and offers
+ * a "regenerate for the new layout" hint without erasing existing caches.
+ *
+ *   2026-05-solution-brief — added top-level `solutionBrief` (Build/Buy
+ *                            verdict, named buy options, plain-language
+ *                            reference architecture, build agents).
+ */
+export const CURATE_BRIEF_PROMPT_VERSION = "2026-05-solution-brief";
 import { digitalCore, orchestration, role, tool, workState } from "@/data/helpers";
-import { VENDOR_ALLOW_LIST } from "./curateInitiativesLLM";
 import { TOWER_READINESS_MAX_DIGEST_CHARS } from "@/lib/assess/towerReadinessIntake";
 import {
   ALLOWED_VENDORS,
@@ -546,7 +563,7 @@ export function buildFallbackProcess(input: CurateBriefLLMInput): Process {
     post: [tool(input.primaryVendor?.trim() || "TBD — subject to discovery", "TBD", "TBD — subject to discovery")],
     keyShifts: ["TBD — subject to discovery"],
   };
-  return {
+  const baseProcess: Process = {
     id: pid,
     name: l4n,
     description: input.aiRationale.slice(0, 500),
@@ -579,6 +596,7 @@ export function buildFallbackProcess(input: CurateBriefLLMInput): Process {
       ],
     ),
   };
+  return { ...baseProcess, solutionBrief: deriveSolutionBriefFromProcess(baseProcess) };
 }
 
 /**
@@ -627,7 +645,7 @@ export function legacyGeneratedBriefToProcess(
   }
   const a0 = agents[0]!;
   const a1 = agents[1] ?? a0;
-  return {
+  const baseProcess: Process = {
     id: `llm-${input.l4Id.replace(/[^a-zA-Z0-9-_]/g, "-")}`.slice(0, 120),
     name: input.l4Name,
     description: input.aiRationale.slice(0, 500),
@@ -673,6 +691,339 @@ export function legacyGeneratedBriefToProcess(
       [{ from: a0.id, to: a1.id, dataPassed: "L4 work item", trigger: "Batch" }],
     ),
   };
+  return { ...baseProcess, solutionBrief: deriveSolutionBriefFromProcess(baseProcess) };
+}
+
+// ===========================================================================
+//   SolutionBrief — six-section client narrative
+// ===========================================================================
+
+const SOURCING_APPROACHES: readonly SolutionSourcingApproach[] = [
+  "Build",
+  "Buy",
+  "Discover",
+];
+
+const COVERAGE_TIERS: readonly SolutionBuyOption["coverage"][] = [
+  "Strong",
+  "Partial",
+  "Adjacent",
+];
+
+function pickSourcingApproach(v: unknown): SolutionSourcingApproach {
+  if (typeof v !== "string") return "Discover";
+  const t = v.trim();
+  if (SOURCING_APPROACHES.includes(t as SolutionSourcingApproach)) {
+    return t as SolutionSourcingApproach;
+  }
+  // Tolerate common LLM phrasings.
+  const lc = t.toLowerCase();
+  if (lc.startsWith("build")) return "Build";
+  if (lc.startsWith("buy") || lc.startsWith("purchase") || lc.includes("vendor")) {
+    return "Buy";
+  }
+  return "Discover";
+}
+
+function pickCoverage(v: unknown): SolutionBuyOption["coverage"] {
+  if (typeof v !== "string") return "Partial";
+  const t = v.trim();
+  if (COVERAGE_TIERS.includes(t as SolutionBuyOption["coverage"])) {
+    return t as SolutionBuyOption["coverage"];
+  }
+  const lc = t.toLowerCase();
+  if (lc.startsWith("strong") || lc.startsWith("full") || lc.startsWith("high")) {
+    return "Strong";
+  }
+  if (lc.startsWith("adjacent") || lc.startsWith("near") || lc.startsWith("indirect")) {
+    return "Adjacent";
+  }
+  return "Partial";
+}
+
+function normHowItWorksSteps(raw: unknown): { title: string; detail: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const out: { title: string; detail: string }[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const o = row as Record<string, unknown>;
+    const title = asStr(o.title, 200) || asStr(o.heading, 200) || asStr(o.name, 200);
+    const detail =
+      asStr(o.detail, 600) ||
+      asStr(o.description, 600) ||
+      asStr(o.body, 600) ||
+      "TBD — subject to discovery";
+    if (!title) continue;
+    out.push({ title, detail });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function normBuyOptions(raw: unknown): SolutionBuyOption[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SolutionBuyOption[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const o = row as Record<string, unknown>;
+    const vendor = asStr(o.vendor, 200) || asStr(o.name, 200);
+    if (!vendor) continue;
+    const fit =
+      asStr(o.fit, 600) ||
+      asStr(o.fitNote, 600) ||
+      asStr(o.note, 600) ||
+      "TBD — subject to discovery";
+    out.push({ vendor, fit, coverage: pickCoverage(o.coverage) });
+    if (out.length >= 6) break;
+  }
+  return out;
+}
+
+function normRefArch(
+  raw: unknown,
+  fallback: SolutionReferenceArchitecture,
+): SolutionReferenceArchitecture {
+  if (!raw || typeof raw !== "object") return fallback;
+  const o = raw as Record<string, unknown>;
+  const aiLayerRaw = o.aiLayer;
+  let aiLayer = fallback.aiLayer;
+  if (aiLayerRaw && typeof aiLayerRaw === "object") {
+    const a = aiLayerRaw as Record<string, unknown>;
+    aiLayer = {
+      components: ensureStrArray(a.components, fallback.aiLayer.components, 8),
+      description:
+        asStr(a.description, 600) || fallback.aiLayer.description,
+    };
+  }
+  return {
+    sourceSystems: ensureStrArray(
+      o.sourceSystems,
+      fallback.sourceSystems,
+      10,
+    ),
+    aiLayer,
+    targetSystems: ensureStrArray(
+      o.targetSystems,
+      fallback.targetSystems,
+      10,
+    ),
+    users: ensureStrArray(o.users, fallback.users, 10),
+    dataFlowSummary:
+      asStr(o.dataFlowSummary, 800) ||
+      asStr(o.summary, 800) ||
+      fallback.dataFlowSummary,
+  };
+}
+
+function normBuildAgents(
+  raw: unknown,
+  fallback: SolutionBuildAgent[],
+): SolutionBuildAgent[] {
+  if (!Array.isArray(raw)) return fallback;
+  const out: SolutionBuildAgent[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const o = row as Record<string, unknown>;
+    const name = asStr(o.name, 200);
+    if (!name) continue;
+    out.push({
+      name,
+      role: asStr(o.role, 600) || "TBD — subject to discovery",
+      llmRequired: o.llmRequired === false ? false : true,
+    });
+    if (out.length >= 8) break;
+  }
+  return out.length > 0 ? out : fallback;
+}
+
+/**
+ * Compose a deterministic `SolutionBrief` from the rest of a `Process`.
+ * Used when the LLM omits the field, when the cache predates the
+ * solution-brief upgrade, or as the seed inside `normSolutionBrief`.
+ *
+ * Read-only — never mutates the input.
+ */
+export function deriveSolutionBriefFromProcess(p: Process): SolutionBrief {
+  const capabilities = (p.work?.keyShifts ?? [])
+    .filter((s) => s.trim().length > 0)
+    .slice(0, 6);
+  const headline =
+    p.work?.post?.description?.trim() ||
+    p.description?.trim() ||
+    "TBD — subject to discovery";
+
+  const steps = (p.work?.post?.steps ?? []).slice(0, 6).map((s) => ({
+    title: s.action || `Step ${s.step}`,
+    detail: `${s.owner ? `${s.owner} · ` : ""}${s.duration ? `${s.duration} · ` : ""}${
+      s.isManual ? "human-led" : "automated"
+    }`,
+  }));
+
+  // Heuristic verdict: if any post-state vendor is named (and not TBD), Buy
+  // is the leaning; if the platforms / agents look custom-heavy, Build;
+  // otherwise Discover.
+  const postVendors = (p.workbench?.post ?? [])
+    .map((t) => t.tool?.trim() ?? "")
+    .filter((s) => s.length > 0 && !/^TBD/i.test(s));
+  const platformExamples = (p.digitalCore?.requiredPlatforms ?? [])
+    .flatMap((rp) => rp.examples ?? [])
+    .filter((s) => s && !/^TBD/i.test(s));
+  const namedVendors = Array.from(new Set([...postVendors, ...platformExamples]));
+  const approach: SolutionSourcingApproach =
+    namedVendors.length >= 2
+      ? "Buy"
+      : namedVendors.length === 1
+        ? "Buy"
+        : "Discover";
+
+  const buyOptions: SolutionBuyOption[] = namedVendors.slice(0, 4).map((v, i) => ({
+    vendor: v,
+    fit:
+      i === 0
+        ? "Anchor of the recommended stack — covers the routine workflow."
+        : "Adjacent capability — extends coverage on a specific sub-flow.",
+    coverage: i === 0 ? "Strong" : "Partial",
+  }));
+
+  const sourceSystems = (p.digitalCore?.dataRequirements ?? [])
+    .filter((s) => s.trim().length > 0)
+    .slice(0, 6);
+  const aiComponents = (p.agents ?? []).map((a) => a.name).slice(0, 6);
+  const targetSystems = (p.digitalCore?.integrations ?? [])
+    .filter((s) => s.trim().length > 0)
+    .slice(0, 6);
+  const users = (p.workforce?.post ?? [])
+    .map((r) => r.role)
+    .filter((s) => s.trim().length > 0)
+    .slice(0, 6);
+
+  const buildAgents: SolutionBuildAgent[] = (p.agents ?? []).slice(0, 6).map((a) => ({
+    name: a.name,
+    role: a.role,
+    llmRequired: a.llmRequired,
+  }));
+
+  return {
+    whatItDoes: {
+      headline,
+      capabilities:
+        capabilities.length > 0
+          ? capabilities
+          : ["TBD — subject to discovery"],
+    },
+    howItWorks: {
+      steps:
+        steps.length > 0
+          ? steps
+          : [
+              {
+                title: "Run today's flow",
+                detail: p.work?.pre?.description ?? "TBD — subject to discovery",
+              },
+              {
+                title: "Run with AI",
+                detail: p.work?.post?.description ?? "TBD — subject to discovery",
+              },
+            ],
+    },
+    sourcing: {
+      approach,
+      rationale:
+        approach === "Buy"
+          ? `Named vendors in the recommended stack (${namedVendors.slice(0, 3).join(", ")}) cover the routine workflow; build is reserved for Versant-specific gaps.`
+          : "No anchor vendor surfaced — discovery needed to confirm whether existing tools cover ≥80% of the scope or a custom build is justified.",
+    },
+    buyOptions,
+    referenceArchitecture: {
+      sourceSystems:
+        sourceSystems.length > 0 ? sourceSystems : ["TBD — subject to discovery"],
+      aiLayer: {
+        components:
+          aiComponents.length > 0
+            ? aiComponents
+            : ["Primary execution agent", "Quality / exception monitor"],
+        description:
+          p.agentOrchestration?.description ??
+          "Agent layer routes work end-to-end with humans on exceptions.",
+      },
+      targetSystems:
+        targetSystems.length > 0 ? targetSystems : ["TBD — subject to discovery"],
+      users: users.length > 0 ? users : ["TBD — subject to discovery"],
+      dataFlowSummary:
+        p.work?.post?.description?.trim() ||
+        "Data flows from source ledgers / systems through the AI layer; humans approve exceptions; results land in target systems for downstream consumers.",
+    },
+    buildAgents,
+  };
+}
+
+/**
+ * Normalize the LLM-emitted `solutionBrief` block. Falls back to the
+ * derived-from-Process brief whenever a field is missing or malformed,
+ * so partial responses never produce an empty section.
+ */
+export function normSolutionBrief(raw: unknown, p: Process): SolutionBrief {
+  const fallback = deriveSolutionBriefFromProcess(p);
+  if (!raw || typeof raw !== "object") return fallback;
+  const o = raw as Record<string, unknown>;
+
+  const wid = o.whatItDoes;
+  let whatItDoes = fallback.whatItDoes;
+  if (wid && typeof wid === "object") {
+    const w = wid as Record<string, unknown>;
+    whatItDoes = {
+      headline: asStr(w.headline, 800) || fallback.whatItDoes.headline,
+      capabilities: ensureStrArray(
+        w.capabilities,
+        fallback.whatItDoes.capabilities,
+        10,
+      ),
+    };
+  }
+
+  const hiw = o.howItWorks;
+  let howItWorks = fallback.howItWorks;
+  if (hiw && typeof hiw === "object") {
+    const h = hiw as Record<string, unknown>;
+    const steps = normHowItWorksSteps(h.steps);
+    const citations = Array.isArray(h.intakeCitations)
+      ? (h.intakeCitations as unknown[])
+          .map((c) => asStr(c, 400))
+          .filter((s) => s.length > 0)
+          .slice(0, 6)
+      : [];
+    howItWorks = {
+      steps: steps.length > 0 ? steps : fallback.howItWorks.steps,
+      ...(citations.length > 0 ? { intakeCitations: citations } : {}),
+    };
+  }
+
+  const src = o.sourcing;
+  let sourcing = fallback.sourcing;
+  if (src && typeof src === "object") {
+    const s = src as Record<string, unknown>;
+    sourcing = {
+      approach: pickSourcingApproach(s.approach),
+      rationale:
+        asStr(s.rationale, 1000) || fallback.sourcing.rationale,
+    };
+  }
+
+  const buyOptions = normBuyOptions(o.buyOptions);
+  const referenceArchitecture = normRefArch(
+    o.referenceArchitecture,
+    fallback.referenceArchitecture,
+  );
+  const buildAgents = normBuildAgents(o.buildAgents, fallback.buildAgents);
+
+  return {
+    whatItDoes,
+    howItWorks,
+    sourcing,
+    buyOptions: buyOptions.length > 0 ? buyOptions : fallback.buyOptions,
+    referenceArchitecture,
+    buildAgents,
+  };
 }
 
 /**
@@ -700,7 +1051,7 @@ export function normalizeLlmProcess(rawRoot: unknown, input: CurateBriefLLMInput
   const normAgents: Agent[] = agentArr
     .map((g, i) => normAgent(g, i, input.l4Id, i === 0 ? "Primary Agent" : `Agent ${i + 1}`, `llm-${input.l4Id.replace(/[^a-zA-Z0-9-]/g, "-")}-a${i + 1}`));
   const agents = normAgents.length > 0 ? normAgents : sk.agents;
-  return {
+  const baseProcess: Process = {
     id: id.slice(0, 200),
     name: name,
     description: desc,
@@ -720,6 +1071,10 @@ export function normalizeLlmProcess(rawRoot: unknown, input: CurateBriefLLMInput
     agents: agents as Agent[],
     agentOrchestration: normOrchestration(root.agentOrchestration, agents as Agent[]),
   };
+  return {
+    ...baseProcess,
+    solutionBrief: normSolutionBrief(root.solutionBrief, baseProcess),
+  };
 }
 
 function buildSystemPrompt(towerId: TowerId, towerIntakeDigest?: string): string {
@@ -735,10 +1090,6 @@ function buildSystemPrompt(towerId: TowerId, towerIntakeDigest?: string): string
         digest,
       ].join("\n")
     : "";
-  // Reference the unused legacy export so trimming the inline list later
-  // doesn't strand the import (the kit's ALLOWED_VENDORS is the canonical
-  // source rendered into the prompt below).
-  void VENDOR_ALLOW_LIST;
   return [
     "You are a senior Versant operating partner. Output ONE JSON object only (the root fields of a 'Process' initiative). Every string must be Versant-specific. Declarative voice. No emojis. No hedging.",
     "",
@@ -763,9 +1114,17 @@ function buildSystemPrompt(towerId: TowerId, towerIntakeDigest?: string): string
     "",
     "The JSON must fully satisfy this TypeScript-style shape: Process { id, name, description, isAiEligible, complexity, timelineMonths, impactTier, currentPainPoints[], work{ pre: WorkState, post: WorkState, keyShifts[] }, work.pre/post have: description, steps[WorkStep], avgCycleTime, touchpoints, errorRate }. WorkStep: step number, action, owner, duration, isManual. workforce{ pre, post: RoleState[], keyShifts, workforceImpactTier, workforceImpactSummary } RoleState: role, headcount, primaryActivities, skillsRequired, timeAllocation: { string: number summing to ~100 }. workbench, digitalCore with requiredPlatforms[{platform,purpose,priority,examples}]. agents: Agent[] min 1 — each: id, name, role, type: Orchestrator|Specialist|Monitor|Router|Executor, inputs, outputs, llmRequired, toolsUsed. agentOrchestration: pattern, description, flow: {from,to,dataPassed,trigger}[] where from/to are agent id strings that exist in agents.",
     "",
+    "ALSO author a top-level `solutionBrief` field — the client-facing six-section narrative the AI Solution detail page renders as its primary view. Required keys (every one is mandatory; do not omit, do not return empty arrays):",
+    "  whatItDoes: { headline: 1-2 plain-English sentences naming the AI Solution and the outcome it delivers; capabilities: 3-6 declarative bullets, each one named capability (verb-led)).",
+    "  howItWorks: { steps: 3-6 ordered objects with { title (3-7 words, action-first), detail (1-2 sentences explaining how it runs end-to-end) }; intakeCitations?: 0-3 short pull-quotes lifted verbatim from the TOWER LEAD QUESTIONNAIRE block when one was used to ground a step. Omit the array entirely if the questionnaire was not present or not used. }.",
+    "  sourcing: { approach: \"Build\" | \"Buy\" | \"Discover\"; rationale: 2-4 sentences explaining the verdict in Versant terms. RULES: choose Buy when ALLOWED VENDORS cover ≥80% of the capabilities; Build when the data, brand voice, or competitive moat justifies a custom stack; Discover when neither is clear. The verdict MUST reconcile with workbench.post vendors and digitalCore.estimatedBuildEffort. }.",
+    "  buyOptions: array of { vendor (MUST be from the ALLOWED VENDORS list above), fit (1-2 sentences explaining what the vendor covers and where it falls short), coverage: \"Strong\" | \"Partial\" | \"Adjacent\" }. Provide 2-4 options when sourcing.approach is \"Buy\"; provide 0-2 adjacent options when \"Build\" or \"Discover\". Coverage tiers: Strong = ≥80% of scope, Partial = 40-79%, Adjacent = related but doesn't directly cover scope.",
+    "  referenceArchitecture: { sourceSystems: 3-6 plain-English source system names (e.g. \"Workday Financials\", \"News rundown system (iNEWS)\"); aiLayer: { components: 2-5 short labels for the AI layer (e.g. \"Reconciliation agent\", \"Variance narrative drafter\"); description: 1-2 sentences naming what the AI layer does }; targetSystems: 3-6 destination system names (e.g. \"BlackLine close workspace\", \"Auditor portal\"); users: 2-5 role labels (e.g. \"Controllers\", \"CFO team\", \"Auditors\"); dataFlowSummary: 2-4 sentence plain-English narrative of how data moves end-to-end }. KEEP IT JARGON-LIGHT — name the system in plain English, then put a product / vendor name in parentheses once if it helps (e.g. \"News rundown system (iNEWS)\"). NEVER lead with raw acronyms.",
+    "  buildAgents: array of { name (matches one of the agents in `agents[]` above), role (1-2 sentences, what this agent does in client-friendly language), llmRequired (boolean) }. Provide 2-5 agents when sourcing.approach is \"Build\" or \"Discover\". Empty array when sourcing.approach is \"Buy\" — Buy means Versant doesn't develop net-new agents.",
+    "",
     `Total allowed vendors: ${ALLOWED_VENDORS.length}.`,
     "",
-    "Return strict JSON. No keys outside the Process. No markdown fences.",
+    "Return strict JSON. No keys outside the documented Process + solutionBrief fields. No markdown fences.",
   ].join("\n") + digestBlock;
 }
 

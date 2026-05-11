@@ -49,6 +49,8 @@ export type AiInitiativesGuidanceInput = {
   towerId: import("@/data/assess/types").TowerId;
   /** Whether the tower lead has signed Step 4 off (drives the trailing nudge). */
   stepFourValidated: boolean;
+  /** True when `aiReadinessIntake` exists for this tower (Forge Excel questionnaire imported). */
+  hasAiReadinessIntake: boolean;
 };
 
 export type { TowerStaleState };

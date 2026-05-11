@@ -12,6 +12,7 @@ import {
 } from "@/lib/localStore";
 import { clientCurateBrief } from "@/lib/assess/assessClientApi";
 import { CURATE_BRIEF_PROMPT_VERSION } from "@/lib/assess/curateBriefLLM";
+import { feasibilityFromGeneratedProcess } from "@/lib/assess/feasibilityFromSourcing";
 import { buildTowerReadinessDigest } from "@/lib/assess/towerReadinessIntake";
 import type {
   AssessProgramV2,
@@ -149,6 +150,9 @@ export function BulkGenerateBriefsToolbar({
             errors.push(`${t.solutionName}: tower state missing`);
             continue;
           }
+          const stamped = feasibilityFromGeneratedProcess(
+            res.result.generatedProcess,
+          );
           setTowerAssess(towerId, {
             l3Rows: snap.l3Rows.map((r) =>
               r.id === t.rowId
@@ -156,7 +160,11 @@ export function BulkGenerateBriefsToolbar({
                     ...r,
                     l3Initiatives: (r.l3Initiatives ?? []).map((it) =>
                       it.id === t.initiativeId
-                        ? { ...it, generatedProcess: res.result.generatedProcess }
+                        ? {
+                            ...it,
+                            generatedProcess: res.result.generatedProcess,
+                            ...(stamped ? { feasibility: stamped } : {}),
+                          }
                         : it,
                     ),
                   }

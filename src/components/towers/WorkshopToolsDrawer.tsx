@@ -1,10 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, Settings2, Sparkles } from "lucide-react";
+import { Check, ChevronDown, Settings2, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Tower } from "@/data/types";
-import type { TowerId } from "@/data/assess/types";
+import type { AssessProgramV2, TowerId } from "@/data/assess/types";
+import { intakeHasMinimumSubstance } from "@/lib/assess/towerReadinessIntake";
+import { hasQueuedRowsV6 } from "@/lib/initiatives/curationHash";
+import {
+  getAssessProgram,
+  subscribe,
+} from "@/lib/localStore";
 import { TowerReadinessIntakePanel } from "@/components/operatingModel/TowerReadinessIntakePanel";
 import { RegenerateAiGuidanceToolbar } from "@/components/operatingModel/RegenerateAiGuidanceToolbar";
 import { StaleCurationBanner } from "@/components/operatingModel/StaleCurationBanner";
@@ -22,6 +28,42 @@ const STORAGE_KEY = "workshop-tools-drawer-open-v1";
  * dismissed it, it stays put.
  */
 const AUTO_OPEN_KEY_PREFIX = "workshop-tools-drawer-autoopen-v1::";
+
+/** Hash link from Step 4 guidance / intake CTAs — expands drawer so Import is visible. */
+export const WORKSHOP_TOOLS_SECTION_HASH = "#workshop-tools";
+
+type BriefSummary = ReturnType<typeof useBulkBriefSummary>;
+
+/**
+ * Per-step completion for facilitator progress — drives checkmarks in the drawer.
+ *
+ * - Step 1: intake meets the same substance bar as LLM attribution (`intakeHasMinimumSubstance`).
+ * - Step 2: at least one AI Solution exists and no L3 row is `queued` for guidance refresh.
+ * - Step 3: every initiative has a current-version cached brief (same counts as bulk toolbar).
+ */
+function useWorkshopStepCompletion(
+  towerId: TowerId,
+  briefSummary: BriefSummary,
+): { step1: boolean; step2: boolean; step3: boolean } {
+  const [program, setProgram] = React.useState<AssessProgramV2 | null>(null);
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
+
+  return React.useMemo(() => {
+    const intake = program?.towers[towerId]?.aiReadinessIntake;
+    const step1 = intakeHasMinimumSubstance(intake);
+    const l3 = program?.towers[towerId]?.l3Rows ?? [];
+    const step2 =
+      briefSummary.totalInitiatives > 0 && !hasQueuedRowsV6(l3);
+    const step3 =
+      briefSummary.totalInitiatives > 0 &&
+      briefSummary.missingCount === 0 &&
+      briefSummary.staleCount === 0;
+    return { step1, step2, step3 };
+  }, [program, towerId, briefSummary]);
+}
 
 /**
  * Collapsible "facilitator-only" controls drawer for Step 4.
@@ -64,6 +106,7 @@ export function WorkshopToolsDrawer({
   const towerId = tower.id as TowerId;
   const [open, setOpen] = React.useState(false);
   const briefSummary = useBulkBriefSummary(towerId);
+  const stepCompletion = useWorkshopStepCompletion(towerId, briefSummary);
 
   React.useEffect(() => {
     try {
@@ -72,6 +115,18 @@ export function WorkshopToolsDrawer({
     } catch {
       // localStorage unavailable; default closed.
     }
+  }, []);
+
+  React.useEffect(() => {
+    const applyHash = () => {
+      if (typeof window === "undefined") return;
+      if (window.location.hash === WORKSHOP_TOOLS_SECTION_HASH) {
+        setOpen(true);
+      }
+    };
+    applyHash();
+    window.addEventListener("hashchange", applyHash);
+    return () => window.removeEventListener("hashchange", applyHash);
   }, []);
 
   // One-shot auto-open: the first time a tower has uncached briefs (or
@@ -107,6 +162,7 @@ export function WorkshopToolsDrawer({
 
   return (
     <section
+      id="workshop-tools"
       aria-label="Workshop facilitator tools"
       className={cn(
         "rounded-2xl border border-forge-border bg-forge-surface/40",
@@ -169,11 +225,12 @@ export function WorkshopToolsDrawer({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <ol className="space-y-3 px-4 py-4">
+            <ol className="grid grid-cols-1 gap-3 px-4 py-4 md:grid-cols-3 md:items-stretch">
               <DrawerStep
                 index={1}
                 title="Import tower AI readiness intake"
                 helper="Optional. Tower questionnaire context for the next step."
+                complete={stepCompletion.step1}
               >
                 <TowerReadinessIntakePanel tower={tower} compact />
               </DrawerStep>
@@ -181,6 +238,7 @@ export function WorkshopToolsDrawer({
                 index={2}
                 title="Regenerate AI guidance"
                 helper="Rebuilds AI Solutions for every eligible L3 Job Family. Use the amber banner above for a queued-only refresh after a capability-map edit."
+                complete={stepCompletion.step2}
               >
                 <RegenerateAiGuidanceToolbar towerId={towerId} />
               </DrawerStep>
@@ -188,6 +246,7 @@ export function WorkshopToolsDrawer({
                 index={3}
                 title="Generate AI Solution briefs"
                 helper="Fills the six-section narrative for each AI Solution. Runs sequentially, 30–90s per brief."
+                complete={stepCompletion.step3}
               >
                 <BulkGenerateBriefsToolbar towerId={towerId} compact />
               </DrawerStep>
@@ -213,21 +272,37 @@ function DrawerStep({
   index,
   title,
   helper,
+  complete,
   children,
 }: {
   index: number;
   title: string;
   helper: string;
+  /** Questionnaire imported with enough substance, guidance current, or all briefs cached — drives the checkmark. */
+  complete: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <li className="rounded-xl border border-forge-border bg-near-black/30 p-3">
-      <div className="flex items-start gap-3">
+    <li className="flex h-full min-w-0 flex-col rounded-xl border border-forge-border bg-near-black/30 p-3">
+      <div className="flex min-h-0 flex-1 items-start gap-3">
         <span
-          aria-hidden
-          className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-accent-purple/40 bg-accent-purple/10 font-mono text-xs font-semibold text-accent-purple-light"
+          className={cn(
+            "mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border font-mono text-xs font-semibold",
+            complete
+              ? "border-accent-teal/50 bg-accent-teal/10 text-accent-teal"
+              : "border-accent-purple/40 bg-accent-purple/10 text-accent-purple-light",
+          )}
+          aria-label={
+            complete
+              ? `Step ${index} complete`
+              : `Step ${index} — not complete yet`
+          }
         >
-          {index}
+          {complete ? (
+            <Check className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+          ) : (
+            <span aria-hidden>{index}</span>
+          )}
         </span>
         <div className="min-w-0 flex-1">
           <div className="font-display text-sm font-semibold text-forge-ink">

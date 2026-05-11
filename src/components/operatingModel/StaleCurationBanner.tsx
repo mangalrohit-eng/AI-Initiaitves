@@ -146,7 +146,11 @@ export function StaleCurationBanner({
     <section
       id="stale-curation-panel"
       className="rounded-2xl border border-accent-amber/45 bg-gradient-to-br from-accent-amber/12 via-accent-amber/5 to-transparent p-4 sm:p-5"
-      aria-label="Capability map updated"
+      aria-label={
+        intakeStaleCopy
+          ? "Tower questionnaire updated; refresh AI guidance"
+          : "Capability map updated; refresh AI guidance"
+      }
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -184,12 +188,19 @@ export function StaleCurationBanner({
             </h3>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-forge-subtle">
-            Refresh runs the Versant-grounded LLM at the L3 Job Family
-            grain — one stream, one pass through every queued row. If the
-            LLM is unavailable, each row falls back to a deterministic
-            Versant stub. Until you refresh, AI Solutions and feasibility
-            (Proven pattern / New build) stay out of date for the queued
-            rows. Dollars and headcount on Steps 2 and 3 are unaffected.
+            {intakeStaleCopy ? (
+              <>
+                You updated the tower questionnaire—run{" "}
+                <span className="text-forge-body">Refresh AI guidance</span> so
+                AI initiatives match.
+              </>
+            ) : (
+              <>
+                You changed the capability map—run{" "}
+                <span className="text-forge-body">Refresh AI guidance</span> to
+                regenerate AI initiatives so Step 4 stays aligned.
+              </>
+            )}
           </p>
         </div>
         <button

@@ -105,7 +105,14 @@ export function resolveImpactLeversGuidance(
 export function resolveAiInitiativesGuidance(
   input: AiInitiativesGuidanceInput,
 ): ResolvedJourneyGuidance {
-  const { stale, pendingReviewCount, towerName, towerId, stepFourValidated } = input;
+  const {
+    stale,
+    pendingReviewCount,
+    towerName,
+    towerId,
+    stepFourValidated,
+    hasAiReadinessIntake,
+  } = input;
   if (stale.missingL4ForRefresh) {
     return {
       tier: 1,
@@ -122,6 +129,15 @@ export function resolveAiInitiativesGuidance(
       staleKind: "curation",
       actionHref: "#stale-curation-panel",
       actionLabel: "Jump to refresh",
+    };
+  }
+  if (!hasAiReadinessIntake) {
+    return {
+      tier: 2,
+      title: `Upload the Forge Tower AI Questionnaire (.xlsx) for ${towerName} under Workshop tools — parsed answers condition AI Solution names, vendors, and constraints on the next refresh.`,
+      staleKind: null,
+      actionHref: "#workshop-tools",
+      actionLabel: "Open workshop tools",
     };
   }
   if (pendingReviewCount > 0) {

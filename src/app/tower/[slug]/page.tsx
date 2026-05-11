@@ -10,6 +10,7 @@ import { TowerDataExports } from "@/components/assess/TowerDataExports";
 import { WorkshopToolsDrawer } from "@/components/towers/WorkshopToolsDrawer";
 import { TowerStep4TopChrome } from "@/components/towers/TowerStep4TopChrome";
 import { TowerAiJourneyGuidance } from "@/components/towers/TowerAiJourneyGuidance";
+import { TowerReadinessIntakeStatus } from "@/components/towers/TowerReadinessIntakeStatus";
 import { ShareBar } from "@/components/ui/ShareBar";
 import { ViewTracker } from "@/components/collab/ViewTracker";
 import { towers } from "@/data/towers";
@@ -30,13 +31,15 @@ export function generateStaticParams() {
  *   3. Tower data exports — same inline placement as Steps 1 and 2 so
  *      the CSV download affordance lives in a consistent slot across
  *      every per-tower page (instead of being buried in the drawer).
- *   4. Coaching — `TowerAiJourneyGuidance` (what to do on this tab).
- *   5. Hero — motif icon, name, narrative, current state, leads.
- *   6. KPI strip — 4 numbers from the V6 selector.
- *   7. Workshop tools drawer — collapsed; numbered AI-curation pipeline
+ *   4. Questionnaire status — `TowerReadinessIntakeStatus` (imported / when /
+ *      view parsed answers).
+ *   5. Coaching — `TowerAiJourneyGuidance` (what to do on this tab).
+ *   6. Hero — motif icon, name, narrative, current state, leads.
+ *   7. KPI strip — 4 numbers from the V6 selector.
+ *   8. Workshop tools drawer — collapsed; numbered AI-curation pipeline
  *      (intake → regenerate guidance → bulk briefs) plus the
  *      `StaleCurationBanner` always-visible alert in the header.
- *   8. AI solutions gallery — a right-aligned validation status chip
+ *   9. AI solutions gallery — a right-aligned validation status chip
  *      sits above a single filterable card grid (no heading, no
  *      explanatory paragraph, no tabs, no group-by toggle, no marquee,
  *      no value-effort matrix). The cards ARE the content; the hero +
@@ -88,6 +91,8 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
         </div>
 
         <TowerDataExports tower={tower} className="mt-3" />
+
+        <TowerReadinessIntakeStatus tower={tower} />
 
         <TowerAiJourneyGuidance tower={tower} />
 

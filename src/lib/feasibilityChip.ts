@@ -59,7 +59,7 @@ const UNKNOWN: FeasibilityChipStyle = {
   dot: "bg-forge-border",
   label: "Pending",
   tooltip:
-    "Feasibility not yet scored. Re-run capability curation on Step 1 to populate the cross-tower 2x2 input.",
+    "No AI Solution brief yet — generate the brief (Step 4 workshop tools) to lock Proven pattern vs New build from build/buy/discover.",
 };
 
 export function feasibilityChip(

@@ -33,12 +33,14 @@ export function TowerKpiStrip({ tower }: { tower: Tower }) {
 
   const totalSolutions = result.diagnostics.initiativesRendered;
   let shipReady = 0;
-  let investigate = 0;
+  let newBuild = 0;
+  let pendingBrief = 0;
   for (const row of result.l3Rows) {
     for (const init of row.initiatives) {
       if (init.isPlaceholder) continue;
       if (init.feasibility === "High") shipReady += 1;
-      else investigate += 1;
+      else if (init.feasibility === "Low") newBuild += 1;
+      else pendingBrief += 1;
     }
   }
   const totalRows = result.diagnostics.totalRowCount;
@@ -81,21 +83,23 @@ export function TowerKpiStrip({ tower }: { tower: Tower }) {
         hint={`Specific products Versant could build or buy in this tower`}
       />
       <KpiCell
-        label="Proven pattern / New build"
+        label="Proven / New build / Pending brief"
         Icon={Rocket}
         tone="text-accent-teal border-accent-teal/40"
         value={
           <span className="font-mono tabular-nums text-forge-ink">
             <span className="text-accent-teal">{shipReady}</span>
             <span className="px-1 text-forge-hint">/</span>
-            <span className="text-forge-body">{investigate}</span>
+            <span className="text-forge-body">{newBuild}</span>
+            <span className="px-1 text-forge-hint">/</span>
+            <span className="text-forge-subtle">{pendingBrief}</span>
           </span>
         }
         hint={
           <span className="inline-flex items-center gap-1.5">
             <Compass className="h-3 w-3 text-forge-hint" aria-hidden />
-            Proven pattern reuses an existing Versant platform; New build
-            needs runway
+            After the AI Solution brief runs, Proven vs New build is locked from
+            build/buy/discover. Pending means no brief yet.
           </span>
         }
       />

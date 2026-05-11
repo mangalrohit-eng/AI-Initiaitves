@@ -48,6 +48,10 @@ import {
   TOWER_READINESS_ATTRIBUTION_LABEL,
 } from "@/lib/assess/towerReadinessIntake";
 import { CURATE_BRIEF_PROMPT_VERSION } from "@/lib/assess/curateBriefLLM";
+import {
+  effectiveInitiativeFeasibility,
+  feasibilityFromGeneratedProcess,
+} from "@/lib/assess/feasibilityFromSourcing";
 import { ProcessMetrics } from "@/components/processes/ProcessMetrics";
 import { BusinessCase } from "@/components/processes/BusinessCase";
 import { SolutionBriefView } from "@/components/initiatives/SolutionBriefView";
@@ -163,6 +167,7 @@ export default function V6InitiativePage() {
     setWarning(res.result.warning);
     const fresh = getAssessProgram().towers[towerId];
     if (!fresh || !fresh.l3Rows) return;
+    const stamped = feasibilityFromGeneratedProcess(res.result.generatedProcess);
     setTowerAssess(towerId, {
       l3Rows: fresh.l3Rows.map((r) =>
         r.id === rowId
@@ -170,7 +175,11 @@ export default function V6InitiativePage() {
               ...r,
               l3Initiatives: (r.l3Initiatives ?? []).map((it) =>
                 it.id === initiativeId
-                  ? { ...it, generatedProcess: res.result.generatedProcess }
+                  ? {
+                      ...it,
+                      generatedProcess: res.result.generatedProcess,
+                      ...(stamped ? { feasibility: stamped } : {}),
+                    }
                   : it,
               ),
             }
@@ -266,9 +275,8 @@ export default function V6InitiativePage() {
     );
   }
 
-  const feas = initiative.feasibility
-    ? feasibilityChip(initiative.feasibility)
-    : null;
+  const displayFeasibility = effectiveInitiativeFeasibility(initiative);
+  const feas = feasibilityChip(displayFeasibility);
   const headerSubtitle =
     resolvedProcess?.description ?? initiative.tagline ?? initiative.aiRationale;
   const generatedLabel = initiative.generatedProcess?.source;
@@ -330,7 +338,7 @@ export default function V6InitiativePage() {
               <div className="flex min-w-0 items-start gap-4">
                 <SolutionIcon
                   iconKey={initiative.iconKey}
-                  feasibility={initiative.feasibility}
+                  feasibility={displayFeasibility}
                   size="xl"
                   className="mt-1 shrink-0"
                   towerIconKey={tower?.iconKey}
@@ -355,18 +363,16 @@ export default function V6InitiativePage() {
                 </div>
               </div>
               <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
-                {feas ? (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${feas.badge}`}
+                  title={feas.tooltip}
+                >
                   <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${feas.badge}`}
-                    title={feas.tooltip}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${feas.dot}`}
-                      aria-hidden
-                    />
-                    {feas.label}
-                  </span>
-                ) : null}
+                    className={`h-1.5 w-1.5 rounded-full ${feas.dot}`}
+                    aria-hidden
+                  />
+                  {feas.label}
+                </span>
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/40 bg-accent-purple/10 px-2.5 py-0.5 text-xs font-medium text-accent-purple">
                   <Sparkles className="h-3 w-3" />
                   AI Solution

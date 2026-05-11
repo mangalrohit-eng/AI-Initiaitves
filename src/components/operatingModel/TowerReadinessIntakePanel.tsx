@@ -15,6 +15,7 @@ import {
   intakeHasMinimumSubstance,
   markRowsQueuedAfterIntakeImport,
 } from "@/lib/assess/towerReadinessIntake";
+import { TowerReadinessIntakeFields } from "@/components/operatingModel/TowerReadinessIntakeFields";
 import { cn } from "@/lib/utils";
 
 /**
@@ -169,19 +170,11 @@ export function TowerReadinessIntakePanel({
             </span>
           </button>
           {expanded ? (
-            <dl className="mt-3 space-y-2 text-xs">
-              <IntakeRow label="Systems / platforms" value={intake.systemsPlatforms} />
-              <IntakeRow label="AI / automation tools" value={intake.currentAiTools} />
-              <IntakeRow label="Experiments & learnings" value={intake.experimentsLearnings} />
-              <IntakeRow label="Data" value={intake.dataRelevant} />
-              <IntakeRow label="Constraints" value={intake.constraints} />
-              <IntakeRow label="Biggest impact" value={intake.biggestImpact} />
-              <IntakeRow label="Ready now" value={intake.readyNow} />
-              <IntakeRow label="Do not go" value={intake.noGoAreas} />
-              {intake.respondentTowerLabel ? (
-                <IntakeRow label="Excel tower name" value={intake.respondentTowerLabel} />
-              ) : null}
-            </dl>
+            <TowerReadinessIntakeFields
+              className="mt-3"
+              intake={intake}
+              showMetadata
+            />
           ) : null}
         </div>
       ) : (
@@ -190,23 +183,5 @@ export function TowerReadinessIntakePanel({
         </p>
       )}
     </section>
-  );
-}
-
-function IntakeRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-forge-border/80 bg-forge-well/40 p-2">
-      <dt className="text-[10px] font-semibold uppercase tracking-wide text-forge-hint">
-        {label}
-      </dt>
-      <dd
-        className={cn(
-          "mt-1 whitespace-pre-wrap text-forge-body",
-          !value.trim() ? "italic text-forge-hint" : "",
-        )}
-      >
-        {value.trim() || "—"}
-      </dd>
-    </div>
   );
 }

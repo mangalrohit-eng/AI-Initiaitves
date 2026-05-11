@@ -100,12 +100,15 @@ export function useGuidanceAiInitiatives(tower: Tower): ResolvedJourneyGuidance 
     const stale = getTowerStaleState(program.towers[tid]);
     const stepFourValidated =
       program.towers[tid]?.aiInitiativesValidatedAt != null;
+    const hasAiReadinessIntake =
+      program.towers[tid]?.aiReadinessIntake != null;
     return resolveAiInitiativesGuidance({
       stale,
       pendingReviewCount: counts.pending,
       towerName: tower.name,
       towerId: tid,
       stepFourValidated,
+      hasAiReadinessIntake,
     });
   }, [program, tower, counts.pending]);
 }

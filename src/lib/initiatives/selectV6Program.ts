@@ -169,7 +169,9 @@ export function selectInitiativesV6ForProgram(
       const attributedAiUsd =
         splitCount > 0 ? row.aiUsd / splitCount : row.aiUsd;
       for (const card of realInitiatives) {
-        if (!card.feasibility) continue; // can't tier without feasibility
+        // Brief-first: initiatives without a stamped brief have no card.feasibility.
+        // Tier conservatively as Low until curate-brief stamps Buy vs Build/Discover.
+        const feasibilityForTier = card.feasibility ?? "Low";
         allInitiatives.push({
           id: card.id,
           towerId: tower.id as TowerId,
@@ -181,7 +183,7 @@ export function selectInitiativesV6ForProgram(
           tagline: card.tagline,
           aiRationale: card.aiRationale,
           primaryVendor: card.primaryVendor,
-          feasibility: card.feasibility,
+          feasibility: feasibilityForTier,
           // Tier is stamped in the second pass once we have the full sample.
           programTier: "Deprioritized",
           programTierReason: "",

@@ -39,6 +39,7 @@ import {
   modeledSavingsForTower,
   rowModeledSaving,
 } from "@/lib/assess/scenarioModel";
+import { effectiveInitiativeFeasibility } from "@/lib/assess/feasibilityFromSourcing";
 
 // ===========================================================================
 //   View-model types
@@ -269,7 +270,8 @@ function buildCardFromInitiative(
     solutionName: init.solutionName,
     tagline: init.tagline,
     aiRationale: init.aiRationale,
-    feasibility: init.feasibility,
+    /** Brief-first: omit curation-only feasibility until `solutionBrief` exists. */
+    feasibility: effectiveInitiativeFeasibility(init),
     primaryVendor: init.primaryVendor,
     iconKey: init.iconKey,
     coversL4RowIds: init.coversL4RowIds ?? [],

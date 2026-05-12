@@ -1874,7 +1874,7 @@ export const processBriefs: AIProcessBrief[] = [
     "parentProcessId": "mlops",
     "matchRowName": "LLM Gateway & Cost Management",
     "briefRoutingTier": "P1",
-    "description": "Centralized gateway for all LLM API calls across Versant — routing, caching, cost tracking per use case, rate limiting, and prompt management. Without this, LLM costs from 200+ agents across 13 towers will spiral uncontrolled.",
+    "description": "Centralized gateway for all LLM API calls across Versant — routing, caching, cost tracking per use case, rate limiting, and prompt management. Without this, LLM costs from 200+ agents across 14 towers will spiral uncontrolled.",
     "impactTier": "Medium",
     "preState": {
       "summary": "No centralized LLM management. Each team calls LLM APIs directly with separate API keys. No visibility into total LLM spend. No caching of repeated queries. No prompt versioning.",

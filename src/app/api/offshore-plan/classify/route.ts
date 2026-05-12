@@ -69,6 +69,7 @@ const TOWER_DEFAULTS: Record<string, LLMOffshoreLane | "EditorialCarveOut"> = {
   "corp-services": "GccEligible",
   "tech-engineering": "GccEligible",
   "operations-technology": "GccWithOverlay",
+  "ad-sales": "OnshoreRetained",
   sales: "OnshoreRetained",
   "marketing-comms": "GccWithOverlay",
   service: "GccEligible",

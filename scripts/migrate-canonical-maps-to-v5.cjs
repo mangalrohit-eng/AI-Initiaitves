@@ -4,7 +4,7 @@
  * function, and cascade-rename inner `l4:` → `l5:` and `l3:` → `l4:`.
  *
  * Run once via `node scripts/migrate-canonical-maps-to-v5.cjs`. After all
- * 13 files compile cleanly, this script can be deleted.
+ * capability map files compile cleanly, this script can be deleted.
  *
  * Idempotency: detects an already-migrated file by the presence of the
  * dummy wrapper id (e.g. `finance-jg`) and skips re-running on it.
@@ -22,7 +22,8 @@ const TOWER_FUNCTION_NAME = {
   legal: "Legal & Business Affairs",
   "corp-services": "Corporate Services",
   "tech-engineering": "Technology & Engineering",
-  "operations-technology": "Operations & Technology",
+  "operations-technology": "Technology Operations",
+  "ad-sales": "Ad Sales",
   sales: "Sales",
   "marketing-comms": "Marketing & Communications",
   service: "Service",

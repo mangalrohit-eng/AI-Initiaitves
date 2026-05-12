@@ -426,7 +426,7 @@ function main() {
   // ---- Verdict ----
   if (failures.length === 0) {
     console.log(
-      "\nAll consistency contracts (A) hierarchy, (B) row totals, (C) tower totals, (D) program totals, (E) coverage, (F) view-model shape pass across all 13 towers.",
+      "\nAll consistency contracts (A) hierarchy, (B) row totals, (C) tower totals, (D) program totals, (E) coverage, (F) view-model shape pass across all 14 towers.",
     );
     process.exit(0);
   }

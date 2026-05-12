@@ -38,7 +38,7 @@ type PlanWithProgram = OffshorePlanResult & { program: AssessProgramV2 };
  *   1. Program-wide flow band (today onshore + today offshore →
  *      retained onshore + GCC India + Manila), all counts deterministic.
  *   2. Per-tower org-transition table, expandable to L3 detail.
- *   3. Stacked-bar visualization for all 13 towers — "who moves, who stays".
+ *   3. Stacked-bar visualization for all 14 towers — "who moves, who stays".
  */
 export function OrgTransitionTab({ plan }: { plan: PlanWithProgram }) {
   const labels = offshoreLocationLabels(plan.program);

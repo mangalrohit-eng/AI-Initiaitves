@@ -6,7 +6,7 @@ import { AskClient } from "@/components/ask/AskClient";
 export const metadata: Metadata = {
   title: "Ask Forge · Versant Forge Program",
   description:
-    "LLM-powered analyst for the Versant Forge Program. Ask about headcount, offshoring, modeled savings, P1 initiatives, and brand exposure across all 13 towers.",
+    "LLM-powered analyst for the Versant Forge Program. Ask about headcount, offshoring, modeled savings, P1 initiatives, and brand exposure across all 14 towers.",
 };
 
 export default function AskPage() {

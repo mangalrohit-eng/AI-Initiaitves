@@ -694,6 +694,7 @@ const SEEDED_TOWER_FTE_ONSHORE_USD: Record<TowerId, number> = {
   production: 176_000,
   "programming-dev": 135_600,
   "research-analytics": 185_400,
+  "ad-sales": 122_600,
   sales: 122_600,
   service: 76_200,
   "tech-engineering": 208_200,
@@ -715,7 +716,7 @@ function roundToHundred(n: number): number {
  *   - blendedContractorOnshore  = round(onshore × 0.80 / 100) * 100
  *   - blendedContractorOffshore = round(offshore × 0.80 / 100) * 100
  *
- * Tower id outside the canonical 13 falls back to the program-wide average
+ * Tower id outside the canonical 14 falls back to the program-wide average
  * onshore rate (so any future tower added without a workshop number still
  * gets sensible defaults).
  */

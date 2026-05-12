@@ -29,6 +29,7 @@ const TOWER_PRIORS: Record<TowerId, Priors> = {
   "corp-services": { offshore: 40, ai: 40 },
   "tech-engineering": { offshore: 55, ai: 55 },
   "operations-technology": { offshore: 25, ai: 40 },
+  "ad-sales": { offshore: 20, ai: 45 },
   sales: { offshore: 20, ai: 45 },
   "marketing-comms": { offshore: 30, ai: 50 },
   service: { offshore: 50, ai: 55 },

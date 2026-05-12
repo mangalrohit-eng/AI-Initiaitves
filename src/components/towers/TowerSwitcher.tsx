@@ -13,14 +13,14 @@ import { cn } from "@/lib/utils";
 
 /**
  * Compact tower switcher: a button-styled combobox that pops a panel
- * listing all 13 towers (with their motif icons). Selecting a tower
+ * listing all 14 towers (with their motif icons). Selecting a tower
  * navigates to that tower's Step 4 page (`/tower/[slug]`), preserving
  * the user's spot in the journey.
  *
  * Why a switcher (not just breadcrumbs):
  *   - Workshop attendees often want to pivot between towers without
  *     bouncing back to `/towers`.
- *   - The motif icons make the list scannable across 13 towers.
+ *   - The motif icons make the list scannable across 14 towers.
  *   - Keyboard navigation: ArrowDown / ArrowUp / Enter / Escape.
  */
 export function TowerSwitcher({ active }: { active: Tower }) {

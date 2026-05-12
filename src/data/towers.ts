@@ -1,6 +1,7 @@
 import type { Tower, TowerSlice, WorkCategory } from "./types";
 import { financeTower } from "./slices/finance";
 import {
+  adSalesTower,
   corpTower,
   editorialTower,
   hrTower,
@@ -43,6 +44,7 @@ export const towers: Tower[] = [
   corpTower,
   techTower,
   opsTower,
+  adSalesTower,
   salesTower,
   marketingTower,
   serviceTower,

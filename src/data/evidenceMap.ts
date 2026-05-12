@@ -40,7 +40,7 @@ export const processEvidenceMap: Record<string, string[]> = {
   "tech-3": ["mlops-llmops"],
   "tech-4": ["cybersecurity"],
 
-  // Operations & Technology — Broadcast
+  // Technology Operations — Broadcast
   "ops-1": ["broadcast-ops"],
   "ops-2": ["broadcast-ops"],
 

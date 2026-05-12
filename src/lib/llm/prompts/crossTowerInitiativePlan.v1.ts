@@ -196,7 +196,7 @@ function buildSynthesisV6SchemaSpec(): string {
     '    { "title": "<≤6 words>", "description": "<≤30 words>", "mitigation": "<≤30 words>" }',
     "  ],",
     '  "roadmapNarrative": {',
-    '    "overall": "<≤55 words; 24-month sequencing across the 13 towers; no phase keys>",',
+    '    "overall": "<≤55 words; 24-month sequencing across the 14 towers; no phase keys>",',
     '    "ladder": "<≤45 words; Quick Wins → Strategic Bets handoff>",',
     '    "milestones": ["<≤18 words>", "<≤18 words>"],',
     '    "ownerNotes": ["<≤25 words; names a tower lead from ALLOWED_PEOPLE>"]',
@@ -212,7 +212,7 @@ function buildLensEmphasisLines(a: CrossTowerAssumptions): string[] {
   const lines: string[] = [];
   if (a.emphasizeTsaReadiness) {
     lines.push(
-      "  - TSA readiness: when initiatives sit in towers exposed to NBCU TSA cutover (Sales, Finance, HR, Tech & Engineering, Operations & Technology), name the TSA dependency and the cutover urgency.",
+      "  - TSA readiness: when initiatives sit in towers exposed to NBCU TSA cutover (Sales, Finance, HR, Tech & Engineering, Technology Operations), name the TSA dependency and the cutover urgency.",
     );
   }
   if (a.emphasizeBbCreditDiscipline) {
@@ -227,7 +227,7 @@ function buildLensEmphasisLines(a: CrossTowerAssumptions): string[] {
   }
   if (a.emphasizeBroadcastResilience) {
     lines.push(
-      "  - Live-broadcast resilience: when initiatives sit in Operations & Technology or Production, frame the post-state agents as protecting the on-air signal.",
+      "  - Live-broadcast resilience: when initiatives sit in Technology Operations or Production, frame the post-state agents as protecting the on-air signal.",
     );
   }
   return lines;

@@ -3,7 +3,7 @@ import type { TowerId } from "@/data/assess/types";
 /**
  * Single source of truth for cross-module tower URLs.
  *
- * Tower id is the same string across modules (verified for all 13 towers in
+ * Tower id is the same string across modules (verified for all 14 towers in
  * `src/data/slices/*`). Centralising the path construction here prevents the
  * stepper, handoff CTA, and kebab links from drifting if a route ever changes.
  */

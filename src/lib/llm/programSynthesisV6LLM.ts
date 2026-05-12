@@ -358,7 +358,7 @@ function sanitizeStringArray(v: unknown): string[] {
  * Guard against the LLM authoring fabricated metrics the engine should own
  * (dollar figures, percentages, FTE counts, savings claims). The prompt
  * explicitly asks for some structural digits in places — `24-month`,
- * `13 towers`, milestone identifiers like `M24`, phase keys `P1/P2/P3` —
+ * `14 towers`, milestone identifiers like `M24`, phase keys `P1/P2/P3` —
  * so we strip those before checking for forbidden numerics.
  */
 function passesDeterminismGuard(s: string): boolean {
@@ -374,7 +374,7 @@ function passesDeterminismGuard(s: string): boolean {
       /\b\d+(?:[-–\s]?\d+)?[-\s](?:month|months|week|weeks|year|years|day|days|hour|hours|minute|minutes)\b/gi,
       "",
     )
-    // Versant org-scale references: "13 towers", "7 entities", "4 brands"
+    // Versant org-scale references: "14 towers", "7 entities", "4 brands"
     .replace(
       /\b\d+\s+(?:towers?|functions?|entities?|brands?|networks?|workshops?|leads?)\b/gi,
       "",

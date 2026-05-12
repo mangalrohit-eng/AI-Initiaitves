@@ -2403,7 +2403,7 @@ export const techTower: TowerSlice = {
 
 export const opsTower: TowerSlice = {
   id: "operations-technology",
-  name: "Operations & Technology",
+  name: "Technology Operations",
   iconKey: "Workflow",
   versantLeads: ["Nate Balogh"],
   accentureLeads: ["Sandhya Parameshwara"],
@@ -2719,6 +2719,24 @@ export const opsTower: TowerSlice = {
       ]),
     }),
   ],
+};
+
+/** Dedicated Ad Sales tower; workshop state keys under `ad-sales`. Explorer initiatives remain on Sales until a content split. */
+export const adSalesTower: TowerSlice = {
+  id: "ad-sales",
+  name: "Ad Sales",
+  iconKey: "Target",
+  versantLeads: ["Tom Winlarald", "Becky Mason"],
+  accentureLeads: ["Rob Aitken"],
+  description:
+    "Advertising sales revenue and yield across linear, digital, FAST, OTA, DTC, and podcast. Use this tower for Ad Sales capability uploads and workshops; the Sales tower still carries the full combined program narrative.",
+  currentState:
+    "Independent ad sales is greenfield after the NBCU TSA (~2028). Same leadership covers Sales and Ad Sales during stand-up—upload headcount and L4 rows here for Ad Sales–scoped planning.",
+  totalProcesses: 0,
+  aiEligibleProcesses: 0,
+  impactTier: "Medium",
+  topOpportunityHeadline: "AI-native ad sales platform",
+  processes: [],
 };
 
 export const salesTower: TowerSlice = {

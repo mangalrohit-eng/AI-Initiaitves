@@ -64,7 +64,7 @@ const SYSTEM_RULES = [
   "",
   "RESPONSE FORMAT EXAMPLE (illustrative; actual values must come from context):",
   '{ "blocks": [',
-  '  { "kind": "metric", "label": "TOTAL HEADCOUNT", "value": "12,450", "numericValue": 12450, "unit": "FTE", "subtext": "Across 13 towers, 247 L4 rows", "citations": [{"kind":"workshopRow","id":"program-totals","label":"Program totals"}] },',
+  '  { "kind": "metric", "label": "TOTAL HEADCOUNT", "value": "12,450", "numericValue": 12450, "unit": "FTE", "subtext": "Across 14 towers, 247 L4 rows", "citations": [{"kind":"workshopRow","id":"program-totals","label":"Program totals"}] },',
   '  { "kind": "ranking", "title": "Top towers by headcount", "unit": "FTE", "items": [{"label":"Editorial & News","value":1247},{"label":"Finance","value":982}], "citations": [{"kind":"tower","id":"editorial-news","label":"Editorial & News"}] },',
   '  { "kind": "prose", "text": "`Editorial & News` carries the largest headcount at `1,247` FTE. Finance follows at `982`." }',
   "],",

@@ -258,6 +258,7 @@ const TOWER_DEFAULT_CARVE_OUT: Record<TowerId, CarveOutClass> = {
   "corp-services": "GccEligible",
   "tech-engineering": "GccEligible",
   "operations-technology": "GccWithOverlay",
+  "ad-sales": "OnshoreRetained",
   sales: "OnshoreRetained",
   "marketing-comms": "GccWithOverlay",
   service: "GccEligible",
@@ -280,6 +281,7 @@ const TOWER_ONSHORE_LOCATION_HINT: Record<TowerId, UsLocation[]> = {
   "corp-services": ["NycHq", "Distributed"],
   "tech-engineering": ["Distributed", "NycHq"],
   "operations-technology": ["EnglewoodCliffs", "Distributed"],
+  "ad-sales": ["NycHq", "Distributed"],
   sales: ["NycHq", "Distributed"],
   "marketing-comms": ["NycHq"],
   service: ["Distributed"],
@@ -302,6 +304,7 @@ const TOWER_TSA_DEPENDENCY: Record<TowerId, TsaTag> = {
   "corp-services": "None",
   "tech-engineering": "Tech-Infra",
   "operations-technology": "Tech-Infra",
+  "ad-sales": "None",
   sales: "None",
   "marketing-comms": "None",
   service: "None",
@@ -698,6 +701,8 @@ const TOWER_RECOMMENDED_SCOPE: Record<TowerId, string> = {
     "L1/L2 helpdesk · DevOps · platform engineering · QA automation",
   "operations-technology":
     "Broadcast ops back-office · monitoring ops",
+  "ad-sales":
+    "Ad ops back-office · traffic · billing · CRM hygiene (post-NBCU TSA)",
   sales:
     "Ad ops back-office · traffic · billing · CRM hygiene (post-NBCU TSA)",
   "marketing-comms": "Production ops · asset management · campaign ops",
@@ -725,6 +730,8 @@ const TOWER_RETAINED_SPINE: Record<TowerId, string> = {
     "Architecture · cybersecurity SOC · CIO office (Nate Balogh)",
   "operations-technology":
     "Live broadcast ops · master control · transmission",
+  "ad-sales":
+    "Top-tier ad sales relationships ($1.58B post-NBCU TSA story)",
   sales:
     "Top-tier ad sales relationships ($1.58B post-NBCU TSA story)",
   "marketing-comms":

@@ -130,7 +130,7 @@ export function AiRoadmapV6({ tower }: { tower: Tower }) {
         Final program priority (P1 / P2 / P3) is set on the{" "}
         <span className="font-semibold text-forge-body">Cross-Tower AI Plan</span>{" "}
         via the feasibility × business-impact 2x2 — that view reconciles
-        sequencing across all 13 towers.
+        sequencing across all 14 towers.
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
         {columns.map((col) => {

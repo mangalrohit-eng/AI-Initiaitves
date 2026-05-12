@@ -785,6 +785,7 @@ export const workCategoriesByTower: Record<string, WorkCategory[]> = {
   "tech-engineering": tech,
   "operations-technology": ops,
   sales,
+  "ad-sales": sales,
   "marketing-comms": marketing,
   service,
   "editorial-news": editorial,

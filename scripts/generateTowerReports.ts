@@ -193,7 +193,7 @@ function indexReport(allRows: WalkRow[]): string {
   lines.push("# Versant Forge — L4 AI-eligibility reports");
   lines.push("");
   lines.push(
-    "Snapshot of the deterministic-fallback curation verdict across all 13 Versant Forge towers.",
+    "Snapshot of the deterministic-fallback curation verdict across all 14 Versant Forge towers.",
   );
   lines.push("");
   lines.push("## How to read these reports");

@@ -59,6 +59,12 @@ const TOWER_NOTES: Record<TowerId, RowRationale> = {
     ai:
       "Transcription, captioning, and metadata are quick wins. Live ops and on-camera workflows need human judgment.",
   },
+  "ad-sales": {
+    offshore:
+      "Direct-to-advertiser ad sales is a relationship game post NBCU TSA. Sales ops and pipeline hygiene offshore; carriage / agency relationships stay onshore.",
+    ai:
+      "Lead scoring, pipeline analytics, and forecast cleanup convert to agents. Negotiation and key-account work stays human.",
+  },
   sales: {
     offshore:
       "Direct-to-advertiser ad sales is a relationship game post NBCU TSA. Sales ops and pipeline hygiene offshore; carriage / agency relationships stay onshore.",

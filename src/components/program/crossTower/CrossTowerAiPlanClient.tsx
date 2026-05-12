@@ -512,7 +512,7 @@ export function CrossTowerAiPlanClient() {
             </span>
             <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-forge-ink sm:text-4xl">
               <span className="font-mono text-accent-purple-dark">&gt;</span>{" "}
-              24-month agentic AI plan, across the 13 towers
+              24-month agentic AI plan, across the 14 towers
             </h1>
             <p className="mt-3 text-sm leading-relaxed text-forge-body">
               {state.synthesis?.executiveSummary ??

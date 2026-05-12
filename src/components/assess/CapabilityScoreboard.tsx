@@ -24,7 +24,7 @@ import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepSt
 import { cn } from "@/lib/utils";
 
 type Props = {
-  /** "program" — sums L1/L2/L3/L4 across the 13 towers. "tower" — single tower. */
+  /** "program" — sums L1/L2/L3/L4 across the 14 towers. "tower" — single tower. */
   variant: "program" | "tower";
   program: AssessProgramV2;
   /** Required when variant is "tower". */

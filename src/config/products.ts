@@ -157,7 +157,7 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     status: "coming-soon",
     comingSoonLabel: "Planned",
     comingSoonBullets: [
-      "Workshop calendar across the 13 towers with Versant tower-lead and Accenture facilitator pairing.",
+      "Workshop calendar across the 14 towers with Versant tower-lead and Accenture facilitator pairing.",
       "Pre-read packs auto-generated from the tower's capability map and starter dial defaults.",
       "Structured decision log for editorial / news / political-brand carve-outs (BB- credit, on-air talent).",
       "Attendance + sign-off so the impact-lever dials carry the names of the people who agreed to them.",

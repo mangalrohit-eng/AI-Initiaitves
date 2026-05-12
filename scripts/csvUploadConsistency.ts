@@ -519,7 +519,7 @@ function main() {
   // ---- Verdict ----
   if (failures.length === 0) {
     console.log(
-      "\nAll Step 2/3/4 dollar contracts hold across simulated uploads on all 13 towers.",
+      "\nAll Step 2/3/4 dollar contracts hold across simulated uploads on all 14 towers.",
     );
     process.exit(0);
   }

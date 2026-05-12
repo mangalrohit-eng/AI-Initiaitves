@@ -122,7 +122,7 @@ function buildSystemPrompt(towerId: TowerId): string {
     "  - Sales is GREENFIELD post-TSA — relationship-driven, mostly US-onshore for now; AI-augmentation OK (lead scoring, outreach drafting). Election-cycle 2026 capture matters for MS NOW.",
     "  - BB- credit rating + dividend + buyback → Treasury / covenant / debt management is high-consequence; humans stay in the loop.",
     "  - Multi-entity JV (Fandango 75/25 WBD, Nikkei CNBC), split-rights deals (Kardashians on-air retained, streaming to Hulu) → rights & legal complexity = lower offshore, AI-augmentable for first-pass.",
-    "  - Operations & Technology / Production / studio ops are PHYSICAL — low offshore (work happens at the venue/studio), low-medium AI. Olympics on USA/CNBC, USGA through 2032 are high-stakes live windows where downtime is unacceptable.",
+    "  - Technology Operations / Production / studio ops are PHYSICAL — low offshore (work happens at the venue/studio), low-medium AI. Olympics on USA/CNBC, USGA through 2032 are high-stakes live windows where downtime is unacceptable.",
     "",
     buildVoiceRulesBlock(),
     "",

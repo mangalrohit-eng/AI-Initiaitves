@@ -65,7 +65,7 @@ export type CrossTowerAssumptions = {
   emphasizeBbCreditDiscipline: boolean;
   /** Editorial floor → human-judgment guardrails (Editorial, MS NOW, Production). */
   emphasizeEditorialIntegrity: boolean;
-  /** Live-broadcast resilience floor (Operations & Technology, Production). */
+  /** Live-broadcast resilience floor (Technology Operations, Production). */
   emphasizeBroadcastResilience: boolean;
 };
 

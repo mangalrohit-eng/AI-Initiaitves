@@ -9,7 +9,7 @@
  *                              and a TSA carve-out flag where relevant.
  *   - `REQUEST_FLOW_STEPS`   — eight-step end-to-end flow from a tower
  *                              lead's question to an audited agent action.
- *   - `TOWER_AGENT_MAP`      — one row per Versant tower (13 rows). Each
+ *   - `TOWER_AGENT_MAP`      — one row per Versant tower (14 rows). Each
  *                              row names the lead agent, primary LLM use
  *                              case, and the source-system vendors that
  *                              specific tower depends on.
@@ -300,7 +300,7 @@ export const TOWER_AGENT_MAP: TowerAgentRow[] = [
     leadAgent: "Talent Match Agent",
     sourceSystems: ["Workday", "Eightfold", "ServiceNow"],
     primaryLLMUseCase:
-      "Skills inference and internal mobility match across the 13 towers; surface candidates for tower-lead pods running P1 builds.",
+      "Skills inference and internal mobility match across the 14 towers; surface candidates for tower-lead pods running P1 builds.",
   },
   {
     id: "research-analytics",
@@ -338,13 +338,23 @@ export const TOWER_AGENT_MAP: TowerAgentRow[] = [
   },
   {
     id: "operations-technology",
-    name: "Operations & Technology",
+    name: "Technology Operations",
     leadAgent: "Broadcast Operations Agent",
     sourceSystems: ["Amagi", "Telestream", "Datadog"],
     primaryLLMUseCase:
       "Surrounding-workflow automation: schedule reconciliation, QC exception triage, ad-break verification — never replaces the master-control operator's seat.",
     versantConstraint:
       "Live broadcast physical floor — automation supports, never substitutes for the on-air operator.",
+  },
+  {
+    id: "ad-sales",
+    name: "Ad Sales",
+    leadAgent: "Pipeline & Pricing Agent",
+    sourceSystems: ["Salesforce", "FreeWheel", "Operative", "LiveRamp"],
+    primaryLLMUseCase:
+      "Greenfield ad-sales yield and RFP acceleration post-NBCU TSA — audience packaging, floor pricing, political-window demand.",
+    versantConstraint:
+      "MS NOW progressive brand positioning → brand-safety models must respect editorial intent.",
   },
   {
     id: "sales",

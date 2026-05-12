@@ -32,7 +32,7 @@ import { towers as allTowers } from "@/data/towers";
  * Cross-Tower AI Plan — page-level state hook.
  *
  * The cross-tower page is a 1-to-1 reflection of the curated
- * `L3Initiative` roster across the 13 towers. This hook:
+ * `L3Initiative` roster across the 14 towers. This hook:
  *
  *   1) Composes `AIProjectResolved[]` deterministically from the v6
  *      program substrate the moment the program is ready — no LLM call

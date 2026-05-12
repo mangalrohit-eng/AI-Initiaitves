@@ -5,7 +5,7 @@ export const salesCapabilities: CapabilityMapDefinition = {
   id: "sales-capabilities",
   name: "Sales Capabilities",
   l1Name: "Sales",
-  mapRelatedTowerIds: ["sales"],
+  mapRelatedTowerIds: ["sales", "ad-sales"],
   l2: [
     {
       id: "sales-jg",

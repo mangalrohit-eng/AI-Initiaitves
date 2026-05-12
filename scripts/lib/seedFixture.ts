@@ -47,6 +47,7 @@ const TOWER_HEADCOUNT: Record<TowerId, { fte: number; contractor: number }> = {
   "corp-services": { fte: 57, contractor: 0 },
   "tech-engineering": { fte: 689, contractor: 0 },
   "operations-technology": { fte: 200, contractor: 0 },
+  "ad-sales": { fte: 35, contractor: 0 },
   sales: { fte: 137, contractor: 0 },
   "marketing-comms": { fte: 366, contractor: 0 },
   service: { fte: 67, contractor: 0 },
@@ -97,6 +98,9 @@ const TOWER_L3_HEADCOUNT: Partial<Record<TowerId, Record<string, number>>> = {
     "Signal Distribution": 60,
     "Broadcast Engineering": 60,
   },
+  "ad-sales": {
+    "Advertising Sales": 35,
+  },
   sales: {
     "Advertising Sales": 35,
     "Distribution Sales": 37,
@@ -136,6 +140,7 @@ const CONTRACTOR_L3_HINT: Partial<Record<TowerId, string[]>> = {
   finance: ["Procurement & Vendor Management", "Record to Report"],
   "tech-engineering": ["Software Engineering", "AI / ML Platform"],
   "operations-technology": ["Broadcast Engineering"],
+  "ad-sales": ["Advertising Sales"],
   production: ["Post-Production", "Remote & Field Production"],
   "editorial-news": ["Audio & Podcast Production", "News Production — Digital & Live"],
   "marketing-comms": ["Brand Marketing & Events", "Social Media & Content Distribution"],

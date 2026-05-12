@@ -15,7 +15,7 @@ import {
  * Top-nav "My towers" multi-select. Replaces the older "My program"
  * shortlist drawer — the user lives in the Capability Map / Impact Levers
  * workflow now, and tower ownership is the most meaningful piece of
- * personalisation. On click this opens a popover with all 13 towers; clicks
+ * personalisation. On click this opens a popover with all 14 towers; clicks
  * persist via `forge.myTowers.v1` (same store the hub reads).
  */
 export function NavActions() {

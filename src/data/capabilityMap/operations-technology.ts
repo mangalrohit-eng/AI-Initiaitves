@@ -1,15 +1,15 @@
 import type { CapabilityMapDefinition } from "./types";
 
-/** Capability Map — Operations & Technology (Forge tower: `operations-technology`). */
+/** Capability Map — Technology Operations (Forge tower: `operations-technology`). */
 export const operationsTechnologyCapabilities: CapabilityMapDefinition = {
   id: "operations-technology-capabilities",
-  name: "Operations & Technology Capabilities",
-  l1Name: "Operations & Technology",
+  name: "Technology Operations Capabilities",
+  l1Name: "Technology Operations",
   mapRelatedTowerIds: ["operations-technology"],
   l2: [
     {
       id: "operations-technology-jg",
-      name: "Operations & Technology",
+      name: "Technology Operations",
       l3: [
         {
           id: "ops-l2-master-control-playout",

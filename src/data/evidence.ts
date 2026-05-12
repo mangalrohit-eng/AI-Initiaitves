@@ -286,7 +286,7 @@ export const evidenceClusters: EvidenceCluster[] = [
         title: "LiteLLM / Portkey — LLM Gateway & Cost Management",
         source: "LiteLLM / Portkey",
         description:
-          "LLM proxy/gateway that centralises all LLM API calls — routing, caching, cost tracking, and rate limiting. Open source and enterprise versions. Critical for managing LLM costs as agentic AI deploys across 13 towers.",
+          "LLM proxy/gateway that centralises all LLM API calls — routing, caching, cost tracking, and rate limiting. Open source and enterprise versions. Critical for managing LLM costs as agentic AI deploys across 14 towers.",
         metric: "30-40% LLM cost reduction through caching and model routing",
         year: "2025",
       },

@@ -91,7 +91,7 @@ export default function SummaryPage() {
               {totalAiEligible}
               <span className="text-forge-subtle"> / {totalOperatingProcesses}</span>
             </div>
-            <p className="mt-1 text-xs text-forge-subtle">{eligibilityPct}% AI-eligible across 13 towers</p>
+            <p className="mt-1 text-xs text-forge-subtle">{eligibilityPct}% AI-eligible across 14 towers</p>
           </div>
           <div className="rounded-2xl border border-accent-purple/30 bg-gradient-to-b from-accent-purple/10 to-forge-surface p-4 shadow-sm">
             <div className="text-xs uppercase tracking-wide text-accent-purple-dark/80">

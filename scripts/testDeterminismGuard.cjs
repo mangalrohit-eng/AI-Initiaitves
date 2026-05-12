@@ -6,7 +6,7 @@
  *   The guard's job is to reject fabricated metrics the deterministic engine
  *   should own ($ figures, %, FTE counts, savings claims) — but the cross-
  *   tower prompt explicitly asks the model to author "24-month sequencing
- *   across the 13 towers" in roadmapNarrative.overall. The original v6 guard
+ *   across the 14 towers" in roadmapNarrative.overall. The original v6 guard
  *   shipped with `if (/\d{2,}/.test(s)) return false;` which rejected those
  *   structural digits and silently fell back to the deterministic stub.
  *
@@ -35,11 +35,11 @@ function passesDeterminismGuard(s) {
 const cases = [
   // ===== Should PASS — exactly what the prompt asks the LLM to author =====
   ["Across the 24-month plan, Versant Finance moves first on TSA exits.", true],
-  ["24-month sequencing across the 13 towers anchors P1 / P2 / P3 cadence.", true],
+  ["24-month sequencing across the 14 towers anchors P1 / P2 / P3 cadence.", true],
   ["Quick Wins land in P1; Strategic Bets layer in P2 and P3.", true],
   ["M24 run-rate is the steady state once every solution ramps.", true],
   ["12-month build, then a 6-month ramp.", true],
-  ["Across 13 towers and 7 entities, the program threads through 4 brands.", true],
+  ["Across 14 towers and 7 entities, the program threads through 4 brands.", true],
   ["Anand Kini owns Finance value realization through TSA exit.", true],
   ["The two-year arc starts with covenant-sensitive workflows.", true],
 

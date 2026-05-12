@@ -251,7 +251,7 @@ export function AssumptionsTab({
           />
           <ToggleField
             label="Live-broadcast resilience"
-            description="On-air signal protection for Operations & Technology, Production."
+            description="On-air signal protection for Technology Operations, Production."
             checked={assumptions.emphasizeBroadcastResilience}
             onChange={(v) => onChange({ emphasizeBroadcastResilience: v })}
           />

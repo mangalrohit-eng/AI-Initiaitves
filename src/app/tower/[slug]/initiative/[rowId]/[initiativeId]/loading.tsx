@@ -21,7 +21,8 @@ export default function InitiativeRouteLoading() {
             </p>
             <p className="mt-2 max-w-md text-sm text-forge-subtle">
               Loading the view. A full four-lens brief is generated on first open
-              (often 20–90 seconds) and cached in your workshop.
+              (often 1–4 minutes; allow up to about five minutes) and cached in
+              your workshop.
             </p>
           </div>
           <p

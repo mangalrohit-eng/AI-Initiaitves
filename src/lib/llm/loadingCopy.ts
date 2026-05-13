@@ -16,14 +16,16 @@
  *   - L5 generation  (Step 1):     1 batched call → 20-60s
  *   - curation       (Step 4):     1 streamed call per L4, fan-out 6 →
  *                                  20-90s total for a typical tower
- *   - brief authoring (Step 5):    1 call per leaf → 20-90s per brief
+ *   - brief authoring (Step 5):    1 call per leaf → often 1-4 min; allow
+ *                                    up to ~5 min before server timeout
  *   - cross-tower plan:            1 call per cohort + 1 synthesis →
  *                                  60-180s for a full program
  *   - ask:                         1 call per turn → 10-60s
  *
  * Copy rules — must match the design system:
  *   - Declarative voice ("This is calling the model" — not "May we please…").
- *   - State the time window numerically; users can plan around 20-60s.
+ *   - State the time window numerically; users can plan around multi-minute
+ *     waits on GPT-5.5 + Responses.
  *   - Anti-anxiety phrase: "Don't refresh — your work is saved."
  *   - Never hedge ("could potentially") — see versantPromptKit.HEDGE_PHRASES.
  */
@@ -79,8 +81,8 @@ const LOADING_COPY: Record<LLMCallShape, LLMLoadingCopy> = {
     buttonShort: "Authoring...",
     toastTitle: "Authoring the four-lens brief with the Versant model",
     description:
-      "Calls the model with reasoning to draft Work, Workforce, Workbench, and Digital Core in one pass. Typically 20-90 seconds — your tab can stay open; results are saved to the workshop when complete.",
-    timeWindow: "20-90s",
+      "Calls the model with reasoning to draft Work, Workforce, Workbench, and Digital Core in one pass. Often 1–4 minutes on GPT-5.5; allow up to about five minutes before the server stops waiting — keep this tab open; results save when complete.",
+    timeWindow: "1-5min",
   },
   "cross-tower-plan": {
     buttonShort: "Authoring...",

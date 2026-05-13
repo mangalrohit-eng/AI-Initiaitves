@@ -314,8 +314,9 @@ export default function V6InitiativePage() {
               />
               <p className="min-w-0 text-sm text-forge-body">
                 <span className="text-accent-purple">&gt;</span> Generating
-                full four-lens brief (work, team, tools, platform). Typically
-                20–90 seconds. You can keep this tab open; results are saved to
+                full four-lens brief (work, team, tools, platform). Often 1–4
+                minutes on GPT-5.5; allow up to about five minutes before the
+                server stops waiting. Keep this tab open; results are saved to
                 your workshop when complete.
               </p>
             </div>

@@ -62,7 +62,11 @@ import {
   shouldUseResponsesApi as kitShouldUseResponsesApi,
 } from "@/lib/llm/prompts/versantPromptKit";
 
-const DEFAULT_TIMEOUT_MS = 120_000;
+/** Default OpenAI wait for initiative brief (`/api/assess/curate-brief`). GPT-5.5 + Responses often exceeds 120s. */
+const DEFAULT_TIMEOUT_MS = 240_000;
+/** Floor / ceiling so env typos do not hang forever or exceed `curate-brief` route `maxDuration` (300s). */
+const CURATE_BRIEF_TIMEOUT_MIN_MS = 30_000;
+const CURATE_BRIEF_TIMEOUT_MAX_MS = 290_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 const VENDOR_TBD = "TBD — subject to discovery";
 
@@ -134,9 +138,17 @@ export function getCurateBriefInferenceMeta(
   return { model: meta.model, mode: meta.mode };
 }
 
+function resolveTimeoutMsFromEnv(): number | null {
+  const raw = process.env.CURATE_BRIEF_TIMEOUT_MS?.trim();
+  if (!raw) return null;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(CURATE_BRIEF_TIMEOUT_MAX_MS, Math.max(CURATE_BRIEF_TIMEOUT_MIN_MS, n));
+}
+
 function resolveTimeoutMs(options: CurateBriefLLMOptions): number {
   if (options.timeoutMs != null) return options.timeoutMs;
-  return DEFAULT_TIMEOUT_MS;
+  return resolveTimeoutMsFromEnv() ?? DEFAULT_TIMEOUT_MS;
 }
 
 function resolveMaxOutputTokens(options: CurateBriefLLMOptions): number {

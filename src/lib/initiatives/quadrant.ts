@@ -4,7 +4,7 @@
  * Single source of truth for the (value, effort) bucket each solution
  * lands in inside a tower:
  *   - axis x = effort (curator-set feasibility — High → low effort)
- *   - axis y = value  (parent L3 modeled AI $; median split inside the
+ *   - axis y = value  (initiative **Attributed AI $**; median split inside the
  *     tower so the bucket assignment is in-tower-relative, not absolute)
  *
  * The four buckets mirror the program-level cross-tower 2x2 vocabulary
@@ -41,8 +41,8 @@ export type QuadrantInput = {
   id: string;
   /** Feasibility of the underlying solution. `undefined` falls to high effort. */
   feasibility?: Feasibility;
-  /** Modeled $ from the parent L3 row — drives the value axis. */
-  l3AiUsd: number;
+  /** Value axis — initiative Attributed AI $ (median split in-tower). */
+  valueUsd: number;
   /** Skip placeholders — they have no feasibility signal yet. */
   isPlaceholder?: boolean;
 };
@@ -70,10 +70,10 @@ export function assignQuadrants(
   rows: ReadonlyArray<QuadrantInput>,
 ): Map<string, Quadrant> {
   const real = rows.filter((r) => !r.isPlaceholder);
-  const valueMedian = median(real.map((r) => r.l3AiUsd));
+  const valueMedian = median(real.map((r) => r.valueUsd));
   const out = new Map<string, Quadrant>();
   for (const r of real) {
-    const isHighValue = r.l3AiUsd >= valueMedian;
+    const isHighValue = r.valueUsd >= valueMedian;
     const isLowEffort = r.feasibility === "High";
     const q: Quadrant = isHighValue
       ? isLowEffort

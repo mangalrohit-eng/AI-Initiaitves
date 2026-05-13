@@ -6,7 +6,7 @@
  * `ProgramInitiativeRowV6` → `AIProjectResolved`, with:
  *
  *   - **Deterministic 2x2** at the program median:
- *       value = parent-L3 modeled $ (median split across the program)
+ *       value = initiative **Attributed AI $** (median split across the program)
  *       effort = inverse of `feasibility` (High → "Low" effort, else "High")
  *   - **Timing** from the `phasePlanTiming` helpers using the
  *     `programTier` already stamped by the selector (so P1/P2/P3 windows
@@ -87,20 +87,20 @@ export function composeProjectsV6(
   for (const n of narratives ?? []) narrativeById.set(n.initiativeId, n);
 
   // --- Median split for value × effort -----------------------------------
-  // Value axis: parent-L3 modeled $. Effort axis: 0 (Low) when feasibility
+  // Value axis: initiative Attributed AI $. Effort axis: 0 (Low) when feasibility
   // is High, 1 (High) otherwise. Two-bucket effort means a strict median
   // doesn't apply — feasibility IS the bucket. Value uses the program
   // median (post-tier, post-threshold).
-  const valueScores = initiatives.map((r) => r.aiUsd);
+  const valueScores = initiatives.map((r) => r.attributedAiUsd);
   const valueMedian = median(valueScores);
   const useMedianSplit = initiatives.length >= 2;
 
   const resolved: AIProjectResolved[] = initiatives.map((row) => {
     const valueBucket: ValueBucket = !useMedianSplit
-      ? row.aiUsd >= 1_000_000
+      ? row.attributedAiUsd >= 1_000_000
         ? "High"
         : "Low"
-      : row.aiUsd >= valueMedian
+      : row.attributedAiUsd >= valueMedian
         ? "High"
         : "Low";
     const effortBucket: EffortBucket =
@@ -134,6 +134,7 @@ export function composeProjectsV6(
       effortRationale,
       quadrant,
       attributedAiUsd: row.attributedAiUsd,
+      l3FteDataMissing: row.l3FteDataMissing,
       startMonth,
       buildMonths,
       rampMonths: assumptions.rampMonths,
@@ -165,8 +166,8 @@ function buildValueRationale(
 ): string {
   const headline =
     bucket === "High"
-      ? `High-value: parent ${row.l3Name} carries program-leading modeled $.`
-      : `Lower-value relative to peers in plan; parent ${row.l3Name} sits below the program median.`;
+      ? `High-value: this solution’s attributed modeled AI $ ranks at or above the program median among in-plan initiatives.`
+      : `Lower-value relative to in-plan peers; this solution’s attributed modeled AI $ sits below the program median.`;
   return headline;
 }
 

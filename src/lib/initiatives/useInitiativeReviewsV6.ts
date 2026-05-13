@@ -242,5 +242,7 @@ function buildAllRejectedV6Placeholder(rowId: string): V6InitiativeCard {
     aiRationale: "",
     coversL4RowIds: [],
     isPlaceholder: true,
+    attributedAiUsd: 0,
+    l3FteDataMissing: false,
   };
 }

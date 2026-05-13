@@ -15,6 +15,7 @@ import { useRedactDollars } from "@/lib/clientMode";
 import { SolutionIcon } from "@/components/towers/SolutionIcon";
 import { InitiativeReviewActionsV6 } from "@/components/towers/InitiativeReviewActionsV6";
 import { cn } from "@/lib/utils";
+import { L3_FTE_DATA_MISSING_LABEL } from "@/lib/initiatives/attributeL3AiUsd";
 
 /**
  * Redesigned per-AI-Solution card used inside `SolutionsGallery`.
@@ -25,8 +26,8 @@ import { cn } from "@/lib/utils";
  *   3. Descriptive solution title (no truncation up to ~10 words)
  *   4. Tagline subtitle (plain English, what it does + saving target)
  *   5. AI rationale (Versant-grounded justification, 2-3 lines)
- *   6. Footer: parent Job Family · prize $ · Validate/Reject ·
- *      "Open deep dive" CTA
+ *   6. Footer: parent Job Family · Attributed AI $ (or missing-data copy) ·
+ *      Validate/Reject · "Open deep dive" CTA
  *
  * The card surface is one `<Link>` to the deep-dive when
  * `initiativeHref` is set; placeholders render the same frame without
@@ -42,7 +43,6 @@ export function SolutionCardV2({
   init,
   row,
   l3Name,
-  l3AiUsd,
   className,
   towerIconKey,
   review,
@@ -52,7 +52,6 @@ export function SolutionCardV2({
   /** V6 L3 row — needed by the validate/reject snapshot. */
   row: V6L3Row;
   l3Name: string;
-  l3AiUsd: number;
   className?: string;
   /**
    * Tower motif iconKey — passed to `<SolutionIcon>` so legacy
@@ -149,11 +148,23 @@ export function SolutionCardV2({
         <span className="inline-flex min-w-0 items-center gap-1.5 truncate font-mono uppercase tracking-[0.16em] text-forge-hint">
           <span className="text-accent-purple-light">&gt;</span>
           <span className="truncate normal-case tracking-normal">{l3Name}</span>
-          {!redact && l3AiUsd > 0 ? (
-            <span className="ml-1 font-mono tabular-nums normal-case tracking-normal text-forge-body">
-              · {formatUsdCompact(l3AiUsd, { decimals: 1 })}{" "}
-              <span className="text-forge-hint">prize</span>
-            </span>
+          {!redact && !init.isPlaceholder ? (
+            init.l3FteDataMissing && init.attributedAiUsd <= 0 ? (
+              <span
+                className="ml-1 max-w-[14rem] truncate font-mono text-[10px] font-normal normal-case tracking-normal text-forge-body"
+                title={L3_FTE_DATA_MISSING_LABEL}
+              >
+                · {L3_FTE_DATA_MISSING_LABEL}
+              </span>
+            ) : (
+              <span
+                className="ml-1 font-mono tabular-nums normal-case tracking-normal text-forge-body"
+                title={`Job Family modeled AI $ (program tier): ${formatUsdCompact(row.aiUsd, { decimals: 1 })}`}
+              >
+                · {formatUsdCompact(init.attributedAiUsd, { decimals: 1 })}{" "}
+                <span className="text-forge-hint">Attributed AI $</span>
+              </span>
+            )
           ) : null}
         </span>
         <div className="flex shrink-0 items-center gap-2">

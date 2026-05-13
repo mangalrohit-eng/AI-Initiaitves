@@ -42,7 +42,6 @@ type Row = {
   l3Id: string;
   l3Name: string;
   l2Name: string;
-  l3AiUsd: number;
 };
 
 type GalleryState = {
@@ -170,7 +169,6 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
           l3Id: r.id,
           l3Name: r.l3,
           l2Name: r.l2,
-          l3AiUsd: r.aiUsd,
         });
       }
     }
@@ -197,7 +195,7 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
         allRows.map((r) => ({
           id: r.init.id,
           feasibility: r.init.feasibility,
-          l3AiUsd: r.l3AiUsd,
+          valueUsd: r.init.attributedAiUsd,
           isPlaceholder: r.init.isPlaceholder,
         })),
       ),
@@ -256,7 +254,9 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
     const cmpName = (a: Row, b: Row) =>
       a.init.solutionName.localeCompare(b.init.solutionName);
     const cmpValueDesc = (a: Row, b: Row) => {
-      if (b.l3AiUsd !== a.l3AiUsd) return b.l3AiUsd - a.l3AiUsd;
+      if (b.init.attributedAiUsd !== a.init.attributedAiUsd) {
+        return b.init.attributedAiUsd - a.init.attributedAiUsd;
+      }
       return cmpName(a, b);
     };
     if (state.sort === "name") {
@@ -318,7 +318,6 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
               init={row.init}
               row={row.row}
               l3Name={row.l3Name}
-              l3AiUsd={row.l3AiUsd}
               towerIconKey={tower.iconKey}
               review={reviews[row.init.id]}
               actions={actions}

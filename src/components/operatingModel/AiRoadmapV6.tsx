@@ -14,6 +14,7 @@ import type {
 } from "@/lib/initiatives/selectV6";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
+import { L3_FTE_DATA_MISSING_LABEL } from "@/lib/initiatives/attributeL3AiUsd";
 
 /**
  * Per-tower feasibility roster — v6 sibling of `AiRoadmap.tsx`.
@@ -241,9 +242,18 @@ function RoadmapCardV6({
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-forge-subtle">
         {!redact ? (
-          <span className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5 font-mono tabular-nums text-forge-ink">
-            {formatUsdCompact(row.aiUsd)} AI $
-          </span>
+          init.l3FteDataMissing && init.attributedAiUsd <= 0 ? (
+            <span className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5 font-mono text-[10px] text-forge-body">
+              {L3_FTE_DATA_MISSING_LABEL}
+            </span>
+          ) : (
+            <span
+              className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5 font-mono tabular-nums text-forge-ink"
+              title={`Job Family modeled AI $: ${formatUsdCompact(row.aiUsd, { decimals: 1 })}`}
+            >
+              {formatUsdCompact(init.attributedAiUsd, { decimals: 1 })} Attributed AI $
+            </span>
+          )
         ) : null}
         {init.primaryVendor ? (
           <span className="rounded-full border border-forge-border bg-forge-well px-2 py-0.5">

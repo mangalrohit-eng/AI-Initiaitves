@@ -14,6 +14,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:lead-step": "tsx scripts/leadStepStatusTest.ts",
+    "test:attribute-e2e": "tsx scripts/attributeInitiativeE2e.ts",
     "test:http-smoke": "node scripts/httpSmoke.mjs",
     "test:e2e": "playwright test"
   },

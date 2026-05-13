@@ -134,6 +134,20 @@ export const glossary: GlossaryEntry[] = [
     long: "After the 2x2 splits initiatives into P1 / P2 / P3 / Deprioritized, the plan threshold runs on top: an L5 Activity initiative stays in plan only when its parent L4 Activity Group's full aiUsd clears the threshold. Operates at the same grain as the 2x2 (L4 prize), not the per-L5 attribution, so it doesn't double-jeopardise P2 rows whose per-L5 split is small by definition. Default $1M (matches the 2x2 floor). Below-threshold initiatives are surfaced as opportunistic and addressed inside the tower roadmaps.",
   },
   {
+    id: "attributed-ai-usd",
+    category: "Prioritisation & delivery",
+    term: "Attributed AI $",
+    short: "This AI Solution’s share of the Job Family’s modeled AI run-rate dollars.",
+    long: "Split across sibling solutions on the same L3 Job Family row using summed L4 Activity Group headcount inside each solution’s coverage (empty coverage means the whole Job Family). Sums to the row’s modeled AI $ for program roll-ups. Cross-tower Value ranking uses Attributed AI $; program P1/P2/P3 tiering still uses the full Job Family modeled AI $.",
+  },
+  {
+    id: "job-family-modeled-ai-usd",
+    category: "Prioritisation & delivery",
+    term: "Job Family modeled AI $",
+    short: "Full dial-bearing modeled AI dollars on the L3 Job Family row (the prize).",
+    long: "Pool × AI dial on the aggregated L3 row. Drives the deterministic program 2×2 business-impact axis and the plan threshold filter — not the same number as each initiative’s Attributed AI $ when multiple solutions sit on one row.",
+  },
+  {
     id: "impact-tier",
     category: "Prioritisation & delivery",
     term: "Impact tier",

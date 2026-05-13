@@ -97,10 +97,14 @@ export type ProgramInitiativeRowV6 = {
   /** Parent L3 row's modeled AI $ (the prize). */
   aiUsd: number;
   /**
-   * Even-split share of `aiUsd` across non-placeholder initiatives on the
-   * same L3 row. Sum across the program === `programImpactSummary(...).ai`.
+   * L4-headcount-weighted share of the parent Job Family’s modeled AI run-rate $.
+   * Sum across initiatives on the same L3 equals that row’s `aiUsd`.
    */
   attributedAiUsd: number;
+  /**
+   * True when workforce + pool are absent so modeled Job Family $ is not established.
+   */
+  l3FteDataMissing: boolean;
   /**
    * `display tier` — useful for tooling that needs the legacy 3-tier
    * label. Same value as `tier` here.
@@ -165,9 +169,6 @@ export function selectInitiativesV6ForProgram(
     let towerInitiativeCount = 0;
     for (const row of result.l3Rows) {
       const realInitiatives = row.initiatives.filter((i) => !i.isPlaceholder);
-      const splitCount = realInitiatives.length;
-      const attributedAiUsd =
-        splitCount > 0 ? row.aiUsd / splitCount : row.aiUsd;
       for (const card of realInitiatives) {
         // Brief-first: initiatives without a stamped brief have no card.feasibility.
         // Tier conservatively as Low until curate-brief stamps Buy vs Build/Discover.
@@ -189,7 +190,8 @@ export function selectInitiativesV6ForProgram(
           programTierReason: "",
           tier: null,
           aiUsd: row.aiUsd,
-          attributedAiUsd,
+          attributedAiUsd: card.attributedAiUsd,
+          l3FteDataMissing: card.l3FteDataMissing,
         });
         towerInitiativeCount += 1;
       }

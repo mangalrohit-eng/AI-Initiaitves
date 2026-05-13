@@ -8,6 +8,7 @@ import type {
 } from "@/lib/cross-tower/aiProjects";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
+import { L3_FTE_DATA_MISSING_LABEL } from "@/lib/initiatives/attributeL3AiUsd";
 
 /**
  * Value × Effort 2×2 list view.
@@ -265,10 +266,14 @@ function ProjectRow({
           <span className="truncate">{project.parentL4ActivityGroupName}</span>
         </div>
       </div>
-      {!redact && project.attributedAiUsd > 0 ? (
+      {!redact && project.l3FteDataMissing && project.attributedAiUsd <= 0 ? (
+        <span className="max-w-[10rem] flex-shrink-0 self-center text-right font-mono text-[9px] leading-tight text-forge-subtle">
+          {L3_FTE_DATA_MISSING_LABEL}
+        </span>
+      ) : !redact ? (
         <span
           className="flex-shrink-0 self-center font-mono text-[11px] tabular-nums text-forge-body"
-          aria-label="Modeled L4 prize"
+          aria-label="Attributed AI dollars at run rate"
         >
           {formatUsdCompact(project.attributedAiUsd, { decimals: 1 })}
         </span>

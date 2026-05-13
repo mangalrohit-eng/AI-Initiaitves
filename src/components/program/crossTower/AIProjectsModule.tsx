@@ -15,6 +15,7 @@ import type {
 } from "@/lib/cross-tower/aiProjects";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
+import { L3_FTE_DATA_MISSING_LABEL } from "@/lib/initiatives/attributeL3AiUsd";
 
 /**
  * AI Solutions card grid for the Cross-Tower AI Plan page.
@@ -27,7 +28,7 @@ import { useRedactDollars } from "@/lib/clientMode";
  * Card surfaces (deterministic):
  *   - Solution name + tagline (LLM-curated upstream).
  *   - Tower chip + L3 Job Family chip.
- *   - Modeled $ chip (the row's even-split AI $).
+ *   - Modeled $ chip (Attributed AI $ — L4-headcount-weighted share of the Job Family prize).
  *   - Quadrant + program tier badge.
  *   - Vendor + feasibility chips when present.
  *   - "Open initiative" → deep-dive page that lazily generates the
@@ -224,9 +225,15 @@ function ProjectCard({ project }: { project: AIProjectResolved }) {
       <footer className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-forge-border/60 pt-2 text-[11px] text-forge-subtle">
         <div className="flex flex-wrap items-center gap-2">
           {!redact ? (
-            <span className="rounded-full border border-forge-border bg-forge-well px-1.5 py-0.5 font-mono tabular-nums text-forge-body">
-              {formatUsdCompact(project.attributedAiUsd)}
-            </span>
+            project.l3FteDataMissing && project.attributedAiUsd <= 0 ? (
+              <span className="max-w-[11rem] rounded-full border border-forge-border bg-forge-well px-1.5 py-0.5 font-mono text-[9px] leading-tight text-forge-body">
+                {L3_FTE_DATA_MISSING_LABEL}
+              </span>
+            ) : (
+              <span className="rounded-full border border-forge-border bg-forge-well px-1.5 py-0.5 font-mono tabular-nums text-forge-body">
+                {formatUsdCompact(project.attributedAiUsd)}
+              </span>
+            )
           ) : null}
           {project.feasibility ? (
             <span

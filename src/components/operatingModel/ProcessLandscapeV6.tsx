@@ -22,6 +22,7 @@ import { feasibilityChip } from "@/lib/feasibilityChip";
 import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars, RedactedAmount } from "@/lib/clientMode";
 import { cn } from "@/lib/utils";
+import { L3_FTE_DATA_MISSING_LABEL } from "@/lib/initiatives/attributeL3AiUsd";
 
 /**
  * v6 Step 4 panel — one card per L3 Job Family with 1..N AI Solution
@@ -85,7 +86,7 @@ export function ProcessLandscapeV6({
                   {formatUsdCompact(rows.reduce((s, r) => s + r.aiUsd, 0))}
                 </div>
                 <div className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
-                  Modeled AI $
+                  Job Family modeled AI $
                 </div>
               </div>
             ) : null}
@@ -211,13 +212,21 @@ function L3RowCard({ row }: { row: V6L3Row }) {
         <div className="flex flex-shrink-0 flex-col items-end gap-1">
           {!redact ? (
             <div className="font-display text-lg font-semibold text-accent-green tabular-nums">
-              {row.aiUsd > 0 ? formatUsdCompact(row.aiUsd) : "$—"}
+              {row.l3FteDataMissing && row.aiUsd <= 0 ? (
+                <span className="max-w-[12rem] text-right text-xs font-mono font-normal leading-snug text-forge-body">
+                  {L3_FTE_DATA_MISSING_LABEL}
+                </span>
+              ) : row.aiUsd > 0 ? (
+                formatUsdCompact(row.aiUsd)
+              ) : (
+                "$—"
+              )}
             </div>
           ) : (
             <RedactedAmount className="text-forge-subtle" />
           )}
           <div className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
-            modeled AI $
+            Job Family modeled AI $
           </div>
           <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-well/60 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-forge-subtle">
             <Sparkles className="h-2.5 w-2.5" aria-hidden />
@@ -262,6 +271,7 @@ function L3RowCard({ row }: { row: V6L3Row }) {
 function InitiativeSubcard({ init }: { init: V6InitiativeCard }) {
   const feas = init.isPlaceholder ? null : feasibilityChip(init.feasibility);
   const isClickable = Boolean(init.initiativeHref);
+  const redact = useRedactDollars();
 
   const inner = (
     <div
@@ -320,6 +330,18 @@ function InitiativeSubcard({ init }: { init: V6InitiativeCard }) {
           <p className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-forge-hint">
             covers {init.coversL4RowIds.length} Activity Group
             {init.coversL4RowIds.length === 1 ? "" : "s"}
+          </p>
+        ) : null}
+        {!redact && !init.isPlaceholder ? (
+          <p className="mt-2 font-mono text-[11px] tabular-nums text-forge-body">
+            {init.l3FteDataMissing && init.attributedAiUsd <= 0 ? (
+              <span className="text-forge-subtle">{L3_FTE_DATA_MISSING_LABEL}</span>
+            ) : (
+              <>
+                {formatUsdCompact(init.attributedAiUsd, { decimals: 1 })}{" "}
+                <span className="text-forge-hint">Attributed AI $</span>
+              </>
+            )}
           </p>
         ) : null}
       </div>

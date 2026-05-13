@@ -7,7 +7,7 @@
  * deterministic view-model the cards / Gantt / matrix all consume.
  *
  * Scoring is **Value × Effort** (High/Low buckets):
- *   - Value bucket  → median split of the parent-L3 modeled $.
+ *   - Value bucket  → median split of **Attributed AI $** per initiative.
  *   - Effort bucket → inverse of curator-stamped feasibility
  *                     (High feasibility = Low effort, else High effort).
  *
@@ -67,7 +67,7 @@ export type AIProjectResolved = {
   narrative: string;
   /** Single-initiative payload — always one entry under v6. */
   constituentInitiativeIds: string[];
-  /** Value bucket — median-split off the parent-L3 modeled $. */
+  /** Value bucket — median-split off Attributed AI $ per initiative. */
   valueBucket: ValueBucket | null;
   /** Effort bucket — inverse of `feasibility`. */
   effortBucket: EffortBucket | null;
@@ -77,8 +77,12 @@ export type AIProjectResolved = {
   effortRationale: string;
   /** Resolved 2x2 quadrant — null when buckets unset (legacy stub). */
   quadrant: Quadrant | null;
-  /** Even-split share of the parent-L3 prize across non-placeholder initiatives on the row. */
+  /** Initiative’s share of parent Job Family modeled AI $ (L4-headcount-weighted split). */
   attributedAiUsd: number;
+  /**
+   * True when the parent Job Family had no workforce + pool so modeled $ was not established.
+   */
+  l3FteDataMissing?: boolean;
   /** Project start month (1-indexed) — derived from quadrant + assumptions. */
   startMonth: number;
   /** Build duration in months — deterministic from the program tier. */

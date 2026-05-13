@@ -14,9 +14,9 @@
  * ───────────────────────────────────────────────────────────────────────
  * Per-row $ flow through `rowAnnualCost` + `rowModeledSaving` from
  * `lib/assess/scenarioModel.ts`, exactly as on v5. The tower roll-up is
- * `modeledSavingsForTower` over the L3 rows. Initiative cards do NOT
- * receive their own dollar attribution — modeled $ stays on the L3 row
- * (the dial-bearing layer); initiative cards inherit context only.
+ * `modeledSavingsForTower` over the L3 rows. Each initiative card carries
+ * **Attributed AI $** (`attributedAiUsd`) — an L4-headcount-weighted split
+ * of the parent row’s modeled AI $ — computed once here for tower + program.
  *
  * ───────────────────────────────────────────────────────────────────────
  *   Filtering rules
@@ -40,6 +40,10 @@ import {
   rowModeledSaving,
 } from "@/lib/assess/scenarioModel";
 import { effectiveInitiativeFeasibility } from "@/lib/assess/feasibilityFromSourcing";
+import {
+  attributeAiUsdAcrossInitiatives,
+  computeL3FteDataMissing,
+} from "@/lib/initiatives/attributeL3AiUsd";
 
 // ===========================================================================
 //   View-model types
@@ -93,6 +97,16 @@ export type V6InitiativeCard = {
    * for refresh without erasing the existing entry.
    */
   promptVersion?: string;
+  /**
+   * This solution’s share of the parent Job Family’s modeled AI run-rate $.
+   * Placeholders use 0.
+   */
+  attributedAiUsd: number;
+  /**
+   * True when workforce + pool are absent so modeled $ is not established
+   * (see `L3_FTE_DATA_MISSING_LABEL` in UI).
+   */
+  l3FteDataMissing: boolean;
 };
 
 export type V6L3Row = {
@@ -121,6 +135,10 @@ export type V6L3Row = {
   curationError?: string;
   /** Child L4 Activity Group names (in order) — context chips. */
   childL4Names: string[];
+  /**
+   * True when workforce + pool are absent so modeled $ is not established.
+   */
+  l3FteDataMissing: boolean;
   /** AI Solution cards generated for this row. */
   initiatives: V6InitiativeCard[];
 };
@@ -194,21 +212,36 @@ export function selectInitiativesV6ForTower(
       .map((id) => l4ById.get(id)?.l4)
       .filter((s): s is string => !!s);
 
-    const cards: V6InitiativeCard[] = [];
+    const cardsRaw: V6InitiativeCard[] = [];
     if (row.l3Initiatives && row.l3Initiatives.length > 0) {
       for (const init of row.l3Initiatives) {
-        cards.push(buildCardFromInitiative(init, towerId, row.id));
+        cardsRaw.push(buildCardFromInitiative(init, towerId, row.id));
         initiativesRendered += 1;
       }
     } else if (row.curationStage !== "queued") {
       // Dial > 0, not queued, but the LLM produced no solutions and
       // the row isn't waiting for a refresh — surface a placeholder so
       // the row stays visible and its modeled $ stays attributed.
-      cards.push(buildPlaceholderCard(row));
+      cardsRaw.push(buildPlaceholderCard(row));
       placeholderRows += 1;
     }
     // Queued rows render with an empty `initiatives: []` — the
     // StaleCurationBanner above the list owns the refresh CTA.
+
+    const l3FteDataMissing = computeL3FteDataMissing(row, saving);
+    const attributionMap = attributeAiUsdAcrossInitiatives({
+      rowAiUsd: saving.ai,
+      childL4RowIds: row.childL4RowIds,
+      l4ById,
+      initiatives: cardsRaw,
+    });
+    const cards = cardsRaw.map((c) => ({
+      ...c,
+      attributedAiUsd: c.isPlaceholder
+        ? 0
+        : (attributionMap.get(c.id) ?? 0),
+      l3FteDataMissing,
+    }));
 
     view.push({
       id: row.id,
@@ -228,6 +261,7 @@ export function selectInitiativesV6ForTower(
       curationStage: row.curationStage,
       curationError: row.curationError,
       childL4Names,
+      l3FteDataMissing,
       initiatives: cards,
     });
   }
@@ -278,6 +312,8 @@ function buildCardFromInitiative(
     isPlaceholder: false,
     initiativeHref: `/tower/${towerId}/initiative/${encodeURIComponent(l3RowId)}/${encodeURIComponent(init.id)}`,
     promptVersion: init.promptVersion,
+    attributedAiUsd: 0,
+    l3FteDataMissing: false,
   };
 }
 
@@ -291,5 +327,7 @@ function buildPlaceholderCard(row: L3WorkforceRowV6): V6InitiativeCard {
       "Placeholder — re-run the AI Initiatives refresh from the banner above to generate a Versant-specific solution name and brief.",
     coversL4RowIds: row.childL4RowIds,
     isPlaceholder: true,
+    attributedAiUsd: 0,
+    l3FteDataMissing: false,
   };
 }

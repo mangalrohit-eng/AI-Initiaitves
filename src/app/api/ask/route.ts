@@ -6,6 +6,7 @@
  *     messages: AskRequestMessage[],   // last N turns; current user prompt is the last entry
  *     programDigest: ProgramDigest,    // built client-side from getAssessProgram()
  *     clientMode: boolean              // true → modeled $ stripped from output
+ *                                      (ignored for non–program-admin: always treated as true)
  *   }
  *
  * Response: a streaming `application/x-ndjson` body of `AskStreamEvent`
@@ -14,6 +15,8 @@
  *
  * Behavior:
  *   - Auth: same `forge_session` cookie as other /api routes.
+ *   - Non–program-admin callers: `clientMode` is forced true for generation;
+ *     `programDigest.clientModeRedacted` must be true or the request returns 400.
  *   - Stages emit immediately (`received`, `reading_workshop`, `cross_ref`,
  *     `compiling`, `drafting`) so the ThinkingIndicator never sits static.
  *   - Calls OpenAI via `generateAskAnswer`. On success, emits a single
@@ -24,7 +27,12 @@
  */
 
 import { cookies } from "next/headers";
-import { AUTH_COOKIE_NAME, isValidSessionToken } from "@/lib/auth";
+import {
+  ADMIN_AUTH_COOKIE_NAME,
+  AUTH_COOKIE_NAME,
+  isValidAdminSessionToken,
+  isValidSessionToken,
+} from "@/lib/auth";
 import { encodeEvent } from "@/lib/ask/streamProtocol";
 import {
   AskLLMError,
@@ -89,7 +97,20 @@ export async function POST(req: Request): Promise<Response> {
       headers: { "Content-Type": "application/json" },
     });
   }
-  const clientMode = body.clientMode === true;
+
+  const adminTok = cookies().get(ADMIN_AUTH_COOKIE_NAME)?.value;
+  const isProgramAdmin = await isValidAdminSessionToken(adminTok);
+  if (!isProgramAdmin && !programDigest.clientModeRedacted) {
+    return new Response(
+      JSON.stringify({
+        error:
+          "programDigest must be built in Protected mode for non-admin sessions (clientModeRedacted: true).",
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  const clientMode = isProgramAdmin ? body.clientMode === true : true;
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {

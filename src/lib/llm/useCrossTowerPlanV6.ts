@@ -521,12 +521,12 @@ function quadrantForBuckets(
   all: SelectProgramResultV6["initiatives"],
   row: SelectProgramResultV6["initiatives"][number],
 ): "Quick Win" | "Strategic Bet" | "Fill-in" | "Deprioritize" {
-  const valueScores = all.map((r) => r.aiUsd);
+  const valueScores = all.map((r) => r.attributedAiUsd);
   const valueMedian = median(valueScores);
   const useMedianSplit = all.length >= 2;
   const valueHigh = useMedianSplit
-    ? row.aiUsd >= valueMedian
-    : row.aiUsd >= 1_000_000;
+    ? row.attributedAiUsd >= valueMedian
+    : row.attributedAiUsd >= 1_000_000;
   const effortLow = row.feasibility === "High";
   if (valueHigh && effortLow) return "Quick Win";
   if (valueHigh && !effortLow) return "Strategic Bet";

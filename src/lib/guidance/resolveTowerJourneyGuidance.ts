@@ -82,16 +82,16 @@ export function resolveOffshoreViewGuidance(
     return {
       tier: 1,
       title:
-        "The Step 1 capability map changed since this offshore split was locked — run Refresh AI suggestions and re-review affected rows.",
+        "The Step 1 capability map changed since this offshore split was locked — click Get AI Suggestion and re-review affected rows.",
       staleKind: "l4",
-      actionLabel: "Refresh AI suggestions",
+      actionLabel: "Get AI Suggestion",
       actionKind: "confirm",
     };
   }
   if (unreviewedRowCount > 0) {
     return {
       tier: 1,
-      title: `${unreviewedRowCount} row${unreviewedRowCount === 1 ? "" : "s"} still awaiting a lane decision — accept the AI suggestion or pick another lane for each.`,
+      title: `${unreviewedRowCount} row${unreviewedRowCount === 1 ? "" : "s"} still awaiting a GCC % — click Get AI Suggestion to bulk-classify, or click any L4 box to set it manually.`,
       staleKind: null,
     };
   }

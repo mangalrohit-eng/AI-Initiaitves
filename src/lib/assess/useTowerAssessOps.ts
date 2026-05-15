@@ -336,18 +336,33 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
         return updated;
       });
       // Rebuild L3 offshore pct as the HC-weighted child L4 `gccPct`
-      // mean. Empty (no headcount) groups fall back to the unweighted
-      // mean so a freshly-uploaded map with all-zero HC still rolls up
-      // to a usable derived value.
+      // mean. We ALWAYS derive a fresh L3 structure from `nextL4Rows`
+      // first, then merge any pre-existing L3 metadata (AI impact dials,
+      // curation stage, validated stamps) onto the derived skeleton.
+      //
+      // Why fresh: legacy / seed programs may persist L3 rows that
+      // pre-date the `childL4RowIds` field, or whose children no longer
+      // match the current L4 set after a re-upload. The previous "merge
+      // into existing L3" path would silently bail out (`return l3`) in
+      // those cases, leaving Step 3 reading the pre-cutover dial value
+      // of 0% no matter how many times the tower lead saved a GCC %.
+      // Deriving from L4 truth here makes the rollup self-healing.
       const l4ById = new Map(nextL4Rows.map((r) => [r.id, r] as const));
-      const nextL3Rows = (cur.l3Rows ?? []).map((l3) => {
-        const childIds = l3.childL4RowIds ?? [];
-        if (childIds.length === 0) return l3;
+      const freshL3 = deriveL3Rows(nextL4Rows, towerId);
+      const existingL3ById = new Map(
+        (cur.l3Rows ?? []).map((r) => [r.id, r] as const),
+      );
+      const nextL3Rows = freshL3.map((derived) => {
+        const existing = existingL3ById.get(derived.id);
+        // Roll up gccPct across the (now guaranteed-current) child L4
+        // ids. Empty (no headcount) groups fall back to the unweighted
+        // mean so freshly-uploaded maps with all-zero HC still produce
+        // a usable derived value.
         let pctNumer = 0;
         let weightDen = 0;
         let plainSum = 0;
         let plainN = 0;
-        for (const childId of childIds) {
+        for (const childId of derived.childL4RowIds ?? []) {
           const child = l4ById.get(childId);
           if (!child) continue;
           const pct = clampPct(child.gccPct);
@@ -357,11 +372,19 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
           plainSum += pct;
           plainN += 1;
         }
-        if (plainN === 0) return l3;
         const derivedPct =
-          weightDen > 0 ? pctNumer / weightDen : plainSum / plainN;
+          plainN === 0
+            ? 0
+            : weightDen > 0
+              ? pctNumer / weightDen
+              : plainSum / plainN;
+        // Preserve every non-structural field from the existing row —
+        // AI impact dial, curation stage, validated stamps, etc. —
+        // while structural fields and the derived offshore pct come
+        // from the L4 truth.
         return {
-          ...l3,
+          ...(existing ?? {}),
+          ...derived,
           offshoreAssessmentPct: Math.round(derivedPct),
         };
       });

@@ -9,6 +9,7 @@ import {
   Info,
   Lock,
   RefreshCw,
+  Sparkles,
   Unlock,
   Upload,
   X,
@@ -159,29 +160,6 @@ export function OffshoreViewTowerClient({ towerId, towerName }: Props) {
     [applyGccPct, locked],
   );
 
-  const acceptAllAiSuggestions = React.useCallback(async () => {
-    if (locked) return;
-    const changes = rows
-      .filter((r) => !r.gccPctSource || r.gccPctSource === "seed")
-      .map((r) => ({
-        rowId: r.id,
-        gccPct: clampPct(r.gccPct ?? 0),
-        setBy: "ai" as const,
-        reason: r.gccReason || "Accepted AI-suggested GCC % without edits.",
-      }));
-    if (changes.length === 0) {
-      toast.info({
-        title: "Nothing to accept",
-        description: "Every row has already been reviewed.",
-      });
-      return;
-    }
-    await applyGccPct(changes);
-    toast.success({
-      title: `Accepted AI suggestion for ${changes.length} row${changes.length === 1 ? "" : "s"}`,
-    });
-  }, [applyGccPct, locked, rows, toast]);
-
   // ------------------------------------------------------------------------
   //   Refresh AI — call /api/offshore-plan/classify, apply gccPct + reason
   // ------------------------------------------------------------------------
@@ -210,12 +188,12 @@ export function OffshoreViewTowerClient({ towerId, towerName }: Props) {
       return { updatedRows: changes.length };
     },
     messages: {
-      loadingTitle: `Refreshing AI offshore suggestions for ${towerName}`,
+      loadingTitle: `Getting AI offshore suggestions for ${towerName}`,
       loadingDescription:
-        "Re-classifying every L4 Activity Group against Versant's carve-out rules.",
+        "Classifying every L4 Activity Group against Versant's GCC carve-out rules.",
       successTitle: ({ updatedRows }) =>
         `Updated ${updatedRows} row${updatedRows === 1 ? "" : "s"} with fresh AI suggestions`,
-      errorTitle: "Couldn't refresh AI suggestions",
+      errorTitle: "Couldn't get AI suggestions",
     },
   });
 
@@ -352,9 +330,15 @@ export function OffshoreViewTowerClient({ towerId, towerName }: Props) {
   // ------------------------------------------------------------------------
 
   const guidance = useGuidanceOffshoreView(towerId, towerName);
+  // The journey-guidance "Confirm" CTA points at one of two actions on
+  // this page: re-run the LLM classifier (when the upstream map drifted —
+  // signalled by `staleKind === "l4"`), or lock Step 2 (every other
+  // confirm prompt on this page). Drive that branch off the structured
+  // `staleKind` signal rather than the human-readable label so future
+  // copy changes don't silently break the wiring.
   const onConfirmGuidance =
     guidance.actionKind === "confirm"
-      ? guidance.actionLabel?.toLowerCase().startsWith("refresh")
+      ? guidance.staleKind === "l4"
         ? () => void refreshAiOp.fire()
         : () => void markOffshoreClassificationValidated()
       : undefined;
@@ -398,7 +382,7 @@ export function OffshoreViewTowerClient({ towerId, towerName }: Props) {
               &gt; {towerName} · Offshore View
             </h1>
             <p className="text-xs text-forge-subtle">
-              Step 2 — click any L4 box to set its GCC %. Step 3&rsquo;s offshore $
+              Step 2 — click Get AI Suggestion to bulk-classify, or click any L4 box to set its GCC % manually. Step 3&rsquo;s offshore $
               on{" "}
               <Link
                 href={getTowerHref(towerId, "impact-levers")}
@@ -444,7 +428,6 @@ export function OffshoreViewTowerClient({ towerId, towerName }: Props) {
                 locked={locked}
                 refreshing={refreshAiOp.state === "loading"}
                 onRefresh={() => void refreshAiOp.fire()}
-                onAcceptAllAi={() => void acceptAllAiSuggestions()}
                 onPickFile={() => fileRef.current?.click()}
                 onDownloadCurrent={() => {
                   try {
@@ -561,7 +544,6 @@ function OffshoreActionBar({
   locked,
   refreshing,
   onRefresh,
-  onAcceptAllAi,
   onPickFile,
   onDownloadCurrent,
   onLockToggle,
@@ -573,7 +555,6 @@ function OffshoreActionBar({
   locked: boolean;
   refreshing: boolean;
   onRefresh: () => void;
-  onAcceptAllAi: () => void;
   onPickFile: () => void;
   onDownloadCurrent: () => void;
   onLockToggle: () => void;
@@ -598,29 +579,16 @@ function OffshoreActionBar({
           className="inline-flex items-center gap-1.5 rounded-md border border-accent-purple/35 bg-accent-purple/10 px-2.5 py-1.5 text-xs font-medium text-accent-purple-dark transition hover:border-accent-purple/55 disabled:opacity-60"
           title={
             locked
-              ? "Unlock Step 2 to refresh AI suggestions."
-              : "Re-run the LLM GCC % classifier across every row."
+              ? "Unlock Step 2 to request an AI suggestion."
+              : "Run the LLM GCC % classifier across every row."
           }
         >
-          <RefreshCw
-            className={cn("h-3.5 w-3.5", refreshing && "animate-spin")}
-            aria-hidden
-          />
-          Refresh AI
-        </button>
-        <button
-          type="button"
-          onClick={onAcceptAllAi}
-          disabled={locked}
-          className="inline-flex items-center gap-1.5 rounded-md border border-forge-border bg-forge-well/60 px-2.5 py-1.5 text-xs font-medium text-forge-body transition hover:border-accent-purple/40 hover:text-forge-ink disabled:opacity-60"
-          title={
-            locked
-              ? "Unlock Step 2 to bulk-accept AI suggestions."
-              : "Accept every row's AI-suggested GCC % without edits."
-          }
-        >
-          <CheckCircle2 className="h-3.5 w-3.5 text-accent-teal" aria-hidden />
-          Accept all AI
+          {refreshing ? (
+            <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          )}
+          {refreshing ? "Working…" : "Get AI Suggestion"}
         </button>
         <button
           type="button"
@@ -693,7 +661,7 @@ function StaleClassificationBanner({
         />
         <span>
           The Capability Map was edited after Step 2 was last confirmed —
-          run Refresh AI to re-suggest a GCC % for every row.
+          click Get AI Suggestion to re-suggest a GCC % for every row.
         </span>
       </div>
       <button
@@ -702,11 +670,12 @@ function StaleClassificationBanner({
         disabled={refreshing || locked}
         className="inline-flex items-center gap-1.5 rounded-md border border-accent-amber/40 bg-accent-amber/15 px-2.5 py-1 text-xs font-medium text-accent-amber transition hover:border-accent-amber/60 disabled:opacity-60"
       >
-        <RefreshCw
-          className={cn("h-3.5 w-3.5", refreshing && "animate-spin")}
-          aria-hidden
-        />
-        Refresh AI suggestions
+        {refreshing ? (
+          <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
+        ) : (
+          <Sparkles className="h-3.5 w-3.5" aria-hidden />
+        )}
+        {refreshing ? "Working…" : "Get AI Suggestion"}
       </button>
     </section>
   );

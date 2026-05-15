@@ -9,6 +9,27 @@ import { SaveStatusPill } from "@/components/assess/SaveStatusPill";
 
 const DEBOUNCE_MS = 650;
 
+/**
+ * Module-level session flag — true once `load()` has fetched the
+ * server snapshot and replaced localStorage. Survives provider
+ * remounts (which happen on every route change because each route
+ * segment has its own `AssessSyncProvider`-wrapped layout) but is
+ * cleared on a hard page reload (the module re-evaluates).
+ *
+ * Why this matters: WITHOUT this flag, navigating Step 2 → Step 3
+ * unmounts the Step 2 provider and mounts the Step 3 provider; the
+ * new provider's `load()` would re-fetch the server snapshot and
+ * call `setAssessProgram(d.program)` — silently overwriting any
+ * unsaved local edits (e.g., a GCC % the user just hand-set). With
+ * the flag, only the first provider mount of the session pulls
+ * from the server; later mounts trust the in-memory + localStorage
+ * state and let `subscribe("assessProgram", ...)` push updates.
+ *
+ * The flag is also cleared explicitly by `refetch()` so the user
+ * (or an error-recovery flow) can force a fresh server pull.
+ */
+let SESSION_HAS_LOADED_FROM_SERVER = false;
+
 export type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
 type DbMode = "unknown" | "unconfigured" | "unavailable" | "cloud" | "cloud_empty";
 
@@ -77,7 +98,30 @@ export function AssessSyncProvider({ children }: { children: React.ReactNode }) 
     }, DEBOUNCE_MS);
   }, [canSync, runPut]);
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (opts?: { force?: boolean }) => {
+    // Per-session gate. The very first provider mount fetches from
+    // the server and seeds localStorage; later provider remounts
+    // (triggered by route changes — each route segment wraps its
+    // own AssessSyncProvider) skip the fetch and trust the in-memory
+    // state. This is the fix for: "I edit gccPct on Step 2, navigate
+    // to Step 3, come back to Step 2, and my edits are gone." Before
+    // this gate, `load()` would re-fetch the server's pre-edit
+    // snapshot on every route mount and overwrite the local edits
+    // via `setAssessProgram(d.program)`.
+    //
+    // `opts.force` is set by `refetch()` so error-recovery flows can
+    // still pull a fresh server snapshot on demand. We always have
+    // to seed `canSync` / `dbMode` / `ready` so the provider mounts
+    // into a usable state even when we're skipping the actual fetch.
+    if (SESSION_HAS_LOADED_FROM_SERVER && !opts?.force) {
+      // Fast path — server state has already been merged into
+      // localStorage earlier in the session. We still need to set
+      // the provider flags so children gate on `ready === true`.
+      setCanSync(true);
+      setDbMode("cloud");
+      setReady(true);
+      return;
+    }
     setLoadError(null);
     const r = await clientGetAssess();
     if (!r.ok || !r.data) {
@@ -92,12 +136,14 @@ export function AssessSyncProvider({ children }: { children: React.ReactNode }) 
       setCanSync(false);
       setDbMode("unconfigured");
       setReady(true);
+      SESSION_HAS_LOADED_FROM_SERVER = true;
       return;
     }
     if (d.db === "unavailable") {
       setCanSync(false);
       setDbMode("unavailable");
       setReady(true);
+      SESSION_HAS_LOADED_FROM_SERVER = true;
       return;
     }
     setCanSync(true);
@@ -112,11 +158,14 @@ export function AssessSyncProvider({ children }: { children: React.ReactNode }) 
       setDbMode("cloud_empty");
     }
     setReady(true);
+    SESSION_HAS_LOADED_FROM_SERVER = true;
   }, []);
 
   const refetch = React.useCallback(async () => {
     setReady(false);
-    await load();
+    // Explicit user-initiated refresh — bypass the per-session gate.
+    SESSION_HAS_LOADED_FROM_SERVER = false;
+    await load({ force: true });
   }, [load]);
 
   const flushSave = React.useCallback(async () => {
@@ -177,6 +226,26 @@ export function AssessSyncProvider({ children }: { children: React.ReactNode }) 
       },
     });
   }, [loadError, refetch, toast]);
+
+  // When a save fails, surface a toast as well as the save-status pill.
+  // Silent 403s (e.g., multi-tower drift) leave the user unaware their
+  // Step 2 edits aren't reaching the database; the toast makes it
+  // unmissable and offers a retry path.
+  React.useEffect(() => {
+    if (saveState !== "error" || !lastSaveError || !toast) return;
+    toast.error({
+      id: "assess-save-error",
+      title: "Couldn't save assessment changes",
+      description: lastSaveError,
+      action: {
+        label: "Retry",
+        onClick: () => {
+          void flushSave();
+        },
+      },
+      durationMs: 12000,
+    });
+  }, [saveState, lastSaveError, flushSave, toast]);
 
   const value = React.useMemo<Ctx>(
     () => ({

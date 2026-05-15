@@ -303,11 +303,37 @@ const ROW_CACHE_FIELDS = [
   "curationError",
 ] as const;
 
+/**
+ * Stripped from the diff because they are pure timestamp / provenance
+ * churn that the client legitimately re-stamps on every read
+ * (`finalizeAssessProgramFromRaw` stamps every row missing `gccPct*`
+ * fields with `{ gccPct: 0, gccPctSource: "seed", gccPctSetAt: now() }`).
+ * The `gccPct` numeric and a normalized `gccPctSource` ARE kept in the
+ * diff so real Step 2 edits (`setBy: "user" | "ai" | "upload"`) still
+ * count as a tower mutation; only the seed/timestamp noise is silenced.
+ */
+const ROW_GCC_TIMESTAMP_FIELDS = ["gccPctSetAt", "gccReason"] as const;
+
 function projectRowForDiff(row: unknown): unknown {
   if (!row || typeof row !== "object") return row;
   const out = { ...(row as Record<string, unknown>) };
   for (const k of ROW_CACHE_FIELDS) {
     delete out[k];
+  }
+  for (const k of ROW_GCC_TIMESTAMP_FIELDS) {
+    delete out[k];
+  }
+  // Canonicalize the seed state. The server's stored snapshot may
+  // pre-date the gccPct migration and have no `gccPct*` fields at all;
+  // the client's read-time migration stamps every row with
+  // `gccPct: 0, gccPctSource: "seed"`. Both should diff as equal —
+  // they encode the same semantic ("Step 2 has not been reviewed").
+  const src = out.gccPctSource;
+  const isSeedOrMissing =
+    src == null || src === "seed" || (typeof src === "string" && !src.trim());
+  if (isSeedOrMissing) {
+    delete out.gccPct;
+    delete out.gccPctSource;
   }
   return out;
 }

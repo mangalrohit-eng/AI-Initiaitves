@@ -4,6 +4,7 @@ import type {
   AiInitiativesGuidanceInput,
   CapabilityMapGuidanceInput,
   ImpactLeversGuidanceInput,
+  OffshoreViewGuidanceInput,
   ResolvedJourneyGuidance,
 } from "./types";
 
@@ -45,20 +46,101 @@ export function resolveCapabilityMapGuidance(
   }
   return {
     tier: 2,
-    title: "Open Configure Impact Levers to set offshore and AI for each L4 Activity Group.",
+    title: "Open Step 2 (Offshore View) to confirm which roles move to the GCC and which stay onshore.",
     staleKind: null,
-    actionHref: getTowerHref(towerId, "impact-levers"),
-    actionLabel: "Configure Impact Levers",
+    actionHref: getTowerHref(towerId, "offshore-view"),
+    actionLabel: "Open Offshore View",
   };
 }
 
 /**
- * Step 2 — per-tower impact levers.
+ * Step 2 — per-tower Offshore View. Tier 0 = no capability map yet; 1 = AI
+ * suggestions need review; 2 = some adjustment recommended; 3 = ready to lock.
+ */
+export function resolveOffshoreViewGuidance(
+  input: OffshoreViewGuidanceInput,
+): ResolvedJourneyGuidance {
+  const {
+    rowCount,
+    unreviewedRowCount,
+    unchangedFromAiCount,
+    classificationStale,
+    offshoreViewValidated,
+    towerName,
+    towerId,
+  } = input;
+  if (rowCount === 0) {
+    return {
+      tier: 0,
+      title: `No capability map yet for ${towerName} — upload it on Step 1 before deciding which roles move to the GCC.`,
+      staleKind: null,
+      actionHref: getTowerHref(towerId, "capability-map"),
+      actionLabel: "Open Capability Map",
+    };
+  }
+  if (classificationStale) {
+    return {
+      tier: 1,
+      title:
+        "The Step 1 capability map changed since this offshore split was locked — run Refresh AI suggestions and re-review affected rows.",
+      staleKind: "l4",
+      actionLabel: "Refresh AI suggestions",
+      actionKind: "confirm",
+    };
+  }
+  if (unreviewedRowCount > 0) {
+    return {
+      tier: 1,
+      title: `${unreviewedRowCount} row${unreviewedRowCount === 1 ? "" : "s"} still awaiting a lane decision — accept the AI suggestion or pick another lane for each.`,
+      staleKind: null,
+    };
+  }
+  if (!offshoreViewValidated) {
+    if (unchangedFromAiCount === rowCount) {
+      return {
+        tier: 2,
+        title:
+          "Every row currently sits on the AI-suggested lane. Confirm this matches your operating reality, then lock Step 2 to unblock Impact Levers.",
+        staleKind: null,
+        actionLabel: "Mark Step 2 done",
+        actionKind: "confirm",
+      };
+    }
+    return {
+      tier: 3,
+      title:
+        "All rows reviewed. Lock Step 2 to unblock Impact Levers — offshore $ on Step 3 will be derived from these lanes.",
+      staleKind: null,
+      actionLabel: "Mark Step 2 done",
+      actionKind: "confirm",
+    };
+  }
+  return {
+    tier: 3,
+    title: "Offshore split locked. Open Configure Impact Levers to set the AI dial per L3 Job Family.",
+    staleKind: null,
+    actionHref: getTowerHref(towerId, "impact-levers"),
+    actionLabel: "Open Impact Levers",
+  };
+}
+
+/**
+ * Step 3 — per-tower impact levers.
  */
 export function resolveImpactLeversGuidance(
   input: ImpactLeversGuidanceInput,
 ): ResolvedJourneyGuidance {
   const { rowCount, stale, isTowerLeadComplete, towerName, towerId } = input;
+  if (input.offshoreViewValidated === false) {
+    return {
+      tier: 0,
+      title:
+        "Lock Step 2 (Offshore View) before setting AI dials — offshore $ is derived from your lane decisions.",
+      staleKind: null,
+      actionHref: getTowerHref(towerId, "offshore-view"),
+      actionLabel: "Open Offshore View",
+    };
+  }
   if (rowCount === 0) {
     return {
       tier: 0,
@@ -161,7 +243,7 @@ export function resolveAiInitiativesGuidance(
   return {
     tier: 3,
     title:
-      "Spot-check roadmap rows against your Step 2 dials; change a dial on Configure Impact Levers and reload this view to refresh impact.",
+      "Spot-check roadmap rows against your Step 3 dials; change a dial on Configure Impact Levers and reload this view to refresh impact.",
     staleKind: null,
   };
 }
@@ -178,7 +260,49 @@ export function hubCapabilityMapLine(hasAnyTowerData: boolean): ResolvedJourneyG
   }
   return {
     tier: 2,
-    title: "Open each tower, confirm map and headcount on Step 1, then move to Step 2 — progress is tracked in the grid below.",
+    title: "Open each tower, confirm map and headcount on Step 1, then move to Step 2 (Offshore View) — progress is tracked in the grid below.",
+    staleKind: null,
+  };
+}
+
+export function hubOffshorePlanLine(
+  hasAnyTowerWithRows: boolean,
+  inProgressTower: { name: string; id: string } | null,
+  allLocked: boolean,
+): ResolvedJourneyGuidance {
+  if (!hasAnyTowerWithRows) {
+    return {
+      tier: 0,
+      title:
+        "Confirm at least one tower's capability map & headcount on Step 1 — the Offshore Plan needs an L1–L4 tree before any row can be classified.",
+      staleKind: null,
+      actionHref: "/capability-map",
+      actionLabel: "Open Capability Map",
+    };
+  }
+  if (inProgressTower) {
+    return {
+      tier: 2,
+      title: `${inProgressTower.name} still has L4 rows on the seed value — open its Offshore Plan and classify every row as Retained vs GCC India, then lock Step 2.`,
+      staleKind: null,
+      actionHref: getTowerHref(inProgressTower.id as TowerId, "offshore-view"),
+      actionLabel: `Open ${inProgressTower.name}`,
+    };
+  }
+  if (allLocked) {
+    return {
+      tier: 3,
+      title:
+        "Every tower is locked on Step 2 — move to Step 3 (Configure Impact Levers) to dial AI and offshore impact per L3 Job Family.",
+      staleKind: null,
+      actionHref: "/impact-levers",
+      actionLabel: "Open Impact Levers",
+    };
+  }
+  return {
+    tier: 2,
+    title:
+      "Open each tower's Offshore Plan, classify every L4 to Retained vs GCC India, and mark Step 2 done — Step 3 dials run on this split.",
     staleKind: null,
   };
 }
@@ -198,7 +322,7 @@ export function hubImpactLeversLine(
   if (hasDefaultOnlyTower && nextTower) {
     return {
       tier: 2,
-      title: `${nextTower.name} still has upload-default levers — open that tower on Step 2 and set offshore and AI for each L3.`,
+      title: `${nextTower.name} still has upload-default levers — open that tower on Step 3 (Impact Levers) and set the AI dial for each L3 Job Family.`,
       staleKind: null,
       actionHref: getTowerHref(nextTower.id as TowerId, "impact-levers"),
       actionLabel: `Open ${nextTower.name}`,
@@ -206,7 +330,7 @@ export function hubImpactLeversLine(
   }
   return {
     tier: 3,
-    title: "Review the program roll-up here, then open Step 3 (impact estimate summary) when you are ready to brief leadership.",
+    title: "Review the program roll-up here, then open the impact estimate summary when you are ready to brief leadership.",
     staleKind: null,
     actionHref: "/impact-levers/summary",
     actionLabel: "Open impact estimate",

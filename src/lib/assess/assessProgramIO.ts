@@ -83,6 +83,13 @@ function asL4Row(x: unknown): L4WorkforceRow | null {
     fteOffshore: coalesceNumber(x.fteOffshore, 0),
     contractorOnshore: coalesceNumber(x.contractorOnshore, 0),
     contractorOffshore: coalesceNumber(x.contractorOffshore, 0),
+    // gccPct fields are filled below — initialise to a safe default here
+    // so the migration path can overwrite them without TypeScript
+    // complaining about a partially-built row.
+    gccPct: 0,
+    gccPctSetAt: new Date().toISOString(),
+    gccPctSource: "seed",
+    gccReason: "Awaiting Step 2 review — no offshore signal in imported data.",
   };
   const sp = (() => {
     const n = coalesceNumber(x.annualSpendUsd, NaN);
@@ -103,6 +110,102 @@ function asL4Row(x: unknown): L4WorkforceRow | null {
     return Number.isFinite(n) ? clamp01(n) : undefined;
   })();
   if (ai != null) out.aiImpactAssessmentPct = ai;
+  // Step 2 (Offshore View) GCC % decision. Already-migrated imports
+  // carry `gccPct` + `gccPctSource` + `gccReason`; legacy imports come
+  // through with `offshoreLane` / `offshoreStrictCarveOut` instead and
+  // are translated here using the same mapping as `localStore.ts`
+  // (90% / 60% / 0% / lead's-dial).
+  const persistedPct =
+    typeof x.gccPct === "number" ? clamp01(x.gccPct as number) : null;
+  const persistedSrc =
+    x.gccPctSource === "user" ||
+    x.gccPctSource === "ai" ||
+    x.gccPctSource === "upload" ||
+    x.gccPctSource === "seed"
+      ? (x.gccPctSource as "user" | "ai" | "upload" | "seed")
+      : null;
+  if (persistedPct != null && persistedSrc != null) {
+    out.gccPct = persistedPct;
+    out.gccPctSource = persistedSrc;
+    out.gccPctSetAt =
+      typeof x.gccPctSetAt === "string"
+        ? (x.gccPctSetAt as string)
+        : new Date().toISOString();
+    out.gccReason =
+      typeof x.gccReason === "string" && (x.gccReason as string).trim()
+        ? (x.gccReason as string).trim().slice(0, 200)
+        : "Tower lead set GCC share without a written rationale.";
+    if (out.offshoreAssessmentPct == null) {
+      out.offshoreAssessmentPct = persistedPct;
+    }
+  } else {
+    // Legacy lane / carve-out path — translate to gccPct.
+    const ol = isRecord(x.offshoreLane) ? x.offshoreLane : null;
+    const sc = isRecord(x.offshoreStrictCarveOut)
+      ? x.offshoreStrictCarveOut
+      : null;
+    const olSetAt =
+      ol && typeof ol.setAt === "string" ? (ol.setAt as string) : null;
+    const olSource: "user" | "ai" | "upload" | "seed" =
+      ol?.setBy === "user" ||
+      ol?.setBy === "ai" ||
+      ol?.setBy === "upload"
+        ? (ol.setBy as "user" | "ai" | "upload")
+        : "seed";
+    if (ol?.lane === "GccEligible") {
+      out.gccPct = 90;
+      out.gccReason =
+        "Transactional / repeatable — primary candidate for the India GCC build-out.";
+      out.gccPctSource = olSource;
+      if (olSetAt) out.gccPctSetAt = olSetAt;
+    } else if (ol?.lane === "GccWithOverlay") {
+      out.gccPct = 60;
+      out.gccReason =
+        "GCC with onshore overlay — bulk of work moves; client / judgment touchpoints stay.";
+      out.gccPctSource = olSource;
+      if (olSetAt) out.gccPctSetAt = olSetAt;
+    } else if (ol?.lane === "EditorialCarveOut") {
+      out.gccPct = 0;
+      out.gccReason =
+        "Editorial floor — newsroom / on-air / editorial-standards work stays onshore.";
+      out.gccPctSource = olSource;
+      if (olSetAt) out.gccPctSetAt = olSetAt;
+    } else if (ol?.lane === "OnshoreRetained") {
+      out.gccPct = 0;
+      out.gccReason =
+        sc?.reason === "Talent"
+          ? "Talent retention — specialised onshore expertise we cannot rebuild offshore."
+          : sc?.reason === "SOX"
+            ? "SOX / regulatory control — must execute onshore for audit defensibility."
+            : sc?.reason === "Sales"
+              ? "Sales / client-relationship — direct seller and account ownership stays onshore."
+              : "Strategic, relationship, or executive-judgment work that stays onshore.";
+      out.gccPctSource = olSource;
+      if (olSetAt) out.gccPctSetAt = olSetAt;
+    } else if (sc?.reason === "Editorial") {
+      out.gccPct = 0;
+      out.gccReason =
+        "Editorial floor — newsroom / on-air / editorial-standards work stays onshore.";
+      out.gccPctSource = sc.setBy === "user" ? "user" : "seed";
+    } else if (sc?.reason) {
+      out.gccPct = 0;
+      out.gccReason =
+        sc.reason === "Talent"
+          ? "Talent retention — specialised onshore expertise we cannot rebuild offshore."
+          : sc.reason === "SOX"
+            ? "SOX / regulatory control — must execute onshore for audit defensibility."
+            : "Sales / client-relationship — direct seller and account ownership stays onshore.";
+      out.gccPctSource = sc.setBy === "user" ? "user" : "seed";
+    } else if (out.offshoreAssessmentPct != null) {
+      out.gccPct = out.offshoreAssessmentPct;
+      out.gccReason =
+        "Auto-seeded from legacy offshore dial — review and confirm in Step 2.";
+      out.gccPctSource = "seed";
+    }
+    if (out.offshoreAssessmentPct == null) {
+      out.offshoreAssessmentPct = out.gccPct;
+    }
+  }
   // v6 writes `l5Activities`. Older Postgres rows / JSON exports may carry
   // `l4Activities` from the v4 migration window — accept either so the
   // hierarchy renders cleanly during cutover.
@@ -376,6 +479,10 @@ export function importAssessProgramFromJsonText(
           fteOffshore: r.fteOffshore,
           contractorOnshore: r.contractorOnshore,
           contractorOffshore: r.contractorOffshore,
+          gccPct: r.gccPct,
+          gccPctSetAt: r.gccPctSetAt,
+          gccPctSource: r.gccPctSource,
+          gccReason: r.gccReason,
         };
         if (r.annualSpendUsd != null) next.annualSpendUsd = r.annualSpendUsd;
         if (r.l5Activities && r.l5Activities.length > 0) {

@@ -9,28 +9,27 @@ import type { TowerId } from "@/data/assess/types";
  */
 export type TowerScopedModule =
   | "capability-map"
+  | "offshore-view"
   | "impact-levers"
-  | "ai-initiatives"
-  | "offshore-plan";
+  | "ai-initiatives";
 
 export function getTowerHref(towerId: TowerId, module: TowerScopedModule): string {
   switch (module) {
     case "capability-map":
       return `/capability-map/tower/${towerId}`;
+    case "offshore-view":
+      return `/offshore-view/tower/${towerId}`;
     case "impact-levers":
       return `/impact-levers/tower/${towerId}`;
     case "ai-initiatives":
       return `/tower/${towerId}`;
-    case "offshore-plan":
-      return `/offshore-plan?tower=${towerId}`;
   }
 }
 
 /**
- * Modules surfaced in the per-tower journey stepper.
- *
- * Restricted to tower-scoped modules — Prototypes, Effort Estimate, and
- * Workshops are program-scoped and only appear on the program-home journey.
+ * Modules surfaced in the per-tower journey stepper. The program-level
+ * Cross-Tower AI Plan is NOT in this stepper — it is a peer program-scoped
+ * artifact and lives in program-home navigation.
  */
 export const TOWER_JOURNEY_MODULES: ReadonlyArray<{
   id: TowerScopedModule;
@@ -40,7 +39,7 @@ export const TOWER_JOURNEY_MODULES: ReadonlyArray<{
   active: boolean;
 }> = [
   { id: "capability-map", label: "Capability Map", active: true },
+  { id: "offshore-view", label: "Offshore View", active: true },
   { id: "impact-levers", label: "Impact Levers", active: true },
   { id: "ai-initiatives", label: "AI Initiatives", active: true },
-  { id: "offshore-plan", label: "Offshore Plan", active: false },
 ];

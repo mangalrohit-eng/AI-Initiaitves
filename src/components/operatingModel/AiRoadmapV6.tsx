@@ -43,19 +43,42 @@ type FeasibilityColumn = {
   Icon: typeof Rocket;
 };
 
+type Applicability = "Retained" | "Offshored" | "Both";
+
+const APPLICABILITY_VALUES: Applicability[] = ["Retained", "Offshored", "Both"];
+
 export function AiRoadmapV6({ tower }: { tower: Tower }) {
   const result = useTowerInitiativesV6(tower);
+  const [activeApplicability, setActiveApplicability] = React.useState<
+    Set<Applicability>
+  >(() => new Set(APPLICABILITY_VALUES));
 
-  const grouped: Record<Feasibility, RoadmapItem[]> = { High: [], Low: [] };
+  const allItems: RoadmapItem[] = [];
   for (const row of result.l3Rows) {
     for (const init of row.initiatives) {
       if (init.isPlaceholder) continue;
       if (!init.feasibility) continue;
-      grouped[init.feasibility].push({ init, row });
+      allItems.push({ init, row });
     }
   }
 
+  // Counts across the full set drive the chip badges, regardless of filter.
+  const totalCounts: Record<Applicability, number> = {
+    Retained: 0,
+    Offshored: 0,
+    Both: 0,
+  };
+  for (const item of allItems) totalCounts[item.init.applicability] += 1;
+
+  const filteredItems = allItems.filter((item) =>
+    activeApplicability.has(item.init.applicability),
+  );
+
+  const grouped: Record<Feasibility, RoadmapItem[]> = { High: [], Low: [] };
+  for (const item of filteredItems) grouped[item.init.feasibility!].push(item);
+
   const totalAi = grouped.High.length + grouped.Low.length;
+  const hasAnyApplicability = totalCounts.Retained + totalCounts.Offshored + totalCounts.Both > 0;
 
   if (totalAi === 0) {
     const { queuedRowCount, totalRowCount } = result.diagnostics;
@@ -93,7 +116,7 @@ export function AiRoadmapV6({ tower }: { tower: Tower }) {
       <div className="rounded-2xl border border-dashed border-forge-border bg-forge-well/40 px-5 py-8 text-center text-sm text-forge-subtle">
         No AI Solutions have been scored for feasibility yet. Open{" "}
         <span className="font-semibold text-forge-body">
-          Step 2 (Configure Impact Levers)
+          Step 3 (Configure Impact Levers)
         </span>{" "}
         and raise the AI dial on the Job Families you want surfaced into
         the cross-tower 2x2.
@@ -122,6 +145,8 @@ export function AiRoadmapV6({ tower }: { tower: Tower }) {
     },
   ];
 
+  const allFiltersOff = activeApplicability.size === 0;
+
   return (
     <div className="space-y-3">
       <p className="rounded-xl border border-forge-border bg-forge-well/40 px-3 py-2 text-[11px] leading-relaxed text-forge-subtle">
@@ -133,7 +158,38 @@ export function AiRoadmapV6({ tower }: { tower: Tower }) {
         via the feasibility × business-impact 2x2 — that view reconciles
         sequencing across all 14 towers.
       </p>
-      <div className="grid gap-4 lg:grid-cols-2">
+
+      {hasAnyApplicability ? (
+        <ApplicabilityFilterBar
+          counts={totalCounts}
+          active={activeApplicability}
+          onToggle={(value) => {
+            setActiveApplicability((prev) => {
+              const next = new Set(prev);
+              if (next.has(value)) next.delete(value);
+              else next.add(value);
+              return next;
+            });
+          }}
+          onReset={() => setActiveApplicability(new Set(APPLICABILITY_VALUES))}
+        />
+      ) : null}
+
+      {allFiltersOff ? (
+        <div className="rounded-2xl border border-dashed border-forge-border bg-forge-well/40 px-5 py-8 text-center text-sm text-forge-subtle">
+          No applicability filter is selected. Tap a chip above (or{" "}
+          <button
+            type="button"
+            onClick={() => setActiveApplicability(new Set(APPLICABILITY_VALUES))}
+            className="font-semibold text-accent-purple-dark underline-offset-2 hover:underline"
+          >
+            reset
+          </button>
+          ) to see initiatives again.
+        </div>
+      ) : null}
+
+      <div className={cn("grid gap-4 lg:grid-cols-2", allFiltersOff && "hidden")}>
         {columns.map((col) => {
           const chip = feasibilityChip(col.key);
           const Icon = col.Icon;
@@ -190,6 +246,75 @@ export function AiRoadmapV6({ tower }: { tower: Tower }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+const APPLICABILITY_CHIP_LABEL: Record<Applicability, string> = {
+  Retained: "Retained org",
+  Offshored: "Offshored",
+  Both: "Both",
+};
+
+const APPLICABILITY_CHIP_TOOLTIP: Record<Applicability, string> = {
+  Retained:
+    "Initiatives that target work staying onshore after the GCC build-out (OnshoreRetained / EditorialCarveOut).",
+  Offshored:
+    "Initiatives that target work moving to the GCC (GccEligible / GccWithOverlay).",
+  Both: "Initiatives that span both retained and offshored work — or sit on rows not yet classified.",
+};
+
+function ApplicabilityFilterBar({
+  counts,
+  active,
+  onToggle,
+  onReset,
+}: {
+  counts: Record<Applicability, number>;
+  active: ReadonlySet<Applicability>;
+  onToggle: (value: Applicability) => void;
+  onReset: () => void;
+}) {
+  const showReset = active.size !== APPLICABILITY_VALUES.length;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-forge-border bg-forge-surface/60 px-3 py-2">
+      <span className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
+        &gt; Filter by applicability
+      </span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {APPLICABILITY_VALUES.map((value) => {
+          const isActive = active.has(value);
+          return (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => onToggle(value)}
+              title={APPLICABILITY_CHIP_TOOLTIP[value]}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition",
+                isActive
+                  ? "border-accent-purple/45 bg-accent-purple/10 text-accent-purple-dark"
+                  : "border-forge-border bg-forge-surface text-forge-subtle hover:border-accent-purple/35 hover:text-forge-body",
+              )}
+            >
+              {APPLICABILITY_CHIP_LABEL[value]}
+              <span className="rounded-full bg-forge-well/60 px-1.5 py-0 font-mono text-[10px] tabular-nums text-forge-subtle">
+                {counts[value]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {showReset ? (
+        <button
+          type="button"
+          onClick={onReset}
+          className="ml-auto font-mono text-[10px] text-forge-subtle underline-offset-2 hover:text-accent-purple-dark hover:underline"
+        >
+          reset
+        </button>
+      ) : null}
     </div>
   );
 }

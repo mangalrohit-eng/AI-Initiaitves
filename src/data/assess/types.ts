@@ -31,6 +31,43 @@ export type NotEligibleReason =
 export type L5ItemSource = "canonical" | "llm" | "fallback" | "manual";
 
 /**
+ * Offshore lane assigned to an L4/L3 workforce row in Step 2 (Offshore View).
+ *
+ * Defined here (not in `lib/offshore/selectOffshorePlan.ts`) because both
+ * the workforce row types and the offshore selector depend on it — making
+ * `data/assess/types.ts` the canonical home avoids a circular import. The
+ * selector module re-exports this symbol under its historic name so existing
+ * consumers keep compiling.
+ *
+ *   - `GccEligible`       — transactional, repeatable; primary GCC scope.
+ *   - `GccWithOverlay`    — GCC + onshore overlay touch points.
+ *   - `OnshoreRetained`   — strategic / relationship / executive judgment.
+ *   - `EditorialCarveOut` — newsroom / on-air / talent — editorial floor.
+ */
+/**
+ * Provenance for a row's `gccPct` value. Drives the small chip rendered
+ * next to each L4 tile on the Step 2 capability map, and the
+ * "every-row-reviewed" predicate that gates Step 2 lock + the journey
+ * stepper green check.
+ *
+ *   - `"seed"`   — Auto-seeded on first read (heuristic or legacy lane
+ *                  migration). The lead has NOT confirmed. Counts as
+ *                  "awaiting review" in `countUnreviewedOffshoreRows`.
+ *   - `"ai"`     — Came from the LLM classifier (`/api/offshore-plan/classify`).
+ *                  Counts as reviewed because the lead either accepted the
+ *                  AI suggestion or refreshed it deliberately.
+ *   - `"user"`   — Tower lead set the value explicitly in the L4 popover.
+ *   - `"upload"` — Came from a Step 2 xlsx bulk override.
+ *
+ * Pre-binary lane vocabulary (`GccEligible | GccWithOverlay | OnshoreRetained
+ * | EditorialCarveOut` and the `offshoreStrictCarveOut` reason set) is
+ * gone — every L4 row now carries a single `gccPct` 0-100. The lane-to-pct
+ * migration in `localStore.ts` translates legacy fields to the new shape on
+ * read.
+ */
+export type GccPctSource = "user" | "ai" | "upload" | "seed";
+
+/**
  * @deprecated Renamed to `L5ItemSource` in the 5-layer migration. Retained as
  * an alias so legacy snapshots/imports keep compiling during the transition
  * window.
@@ -284,24 +321,42 @@ export type L4WorkforceRow = {
   /** ISO timestamp the dial rationale pair was last written. */
   dialsRationaleAt?: string;
   /**
-   * Step-5 strict carve-out flag. Set from the Assumptions tab inside the
-   * Offshore Plan page. When present, the row is force-classified into the
-   * corresponding lane regardless of dial value or LLM judgment.
+   * Step 2 (Offshore View) GCC percentage — the share of this L4's total
+   * headcount (FTE + contractor, on/off combined) that migrates to the
+   * primary India GCC. Source of truth for every offshore roll-up:
    *
-   *   - `Editorial` → forces `EditorialCarveOut` lane.
-   *   - `Talent` / `SOX` / `Sales` → force `OnshoreRetained` lane.
+   *   - L3 `offshoreAssessmentPct` recomputes as the HC-weighted mean of
+   *     child L4 `gccPct` on every patch.
+   *   - L2 / L1 / tower aggregates sum `gccFte = round(totalHc * gccPct / 100)`
+   *     across descendants (see `l4Split` + `rollupSplit` in
+   *     `lib/offshore/offshoreSplit.ts`).
+   *   - Step 4 applicability derives from the L3's HC-weighted child mean
+   *     (binary at L4: all retained → Retained-only; all GCC → Offshored-only;
+   *     mixed → Both).
    *
-   * `setBy === "seed"` means the flag was pre-populated from the keyword
-   * heuristic on first mount (the user has not explicitly confirmed); a user
-   * toggle flips it to `setBy === "user"`. Either way the carve-out is honored
-   * by the selector — the distinction is only used for the "pre-seeded"
-   * indicator in the Assumptions tab.
+   * Always present on every row — seeded on first read of a fresh capability
+   * map by `seedGccPctFromHeuristic(row)` and on legacy programs by the
+   * `migrateLanesToGccPct` migration in `localStore.ts`. `gccPctSource`
+   * distinguishes seeded-but-not-reviewed values from explicit lead decisions.
    */
-  offshoreStrictCarveOut?: {
-    reason: "Editorial" | "Talent" | "SOX" | "Sales";
-    setAt: string;
-    setBy: "user" | "seed";
-  };
+  gccPct: number;
+  /** ISO timestamp the `gccPct` value was last written. */
+  gccPctSetAt: string;
+  /** Provenance of `gccPct`. See `GccPctSource`. */
+  gccPctSource: GccPctSource;
+  /**
+   * Short reason string for the row's `gccPct` (<=200 chars). Carries:
+   *
+   *   - The LLM rationale (when `gccPctSource === "ai"`).
+   *   - The tower lead's free-text note (when `gccPctSource === "user"`).
+   *   - The deterministic heuristic phrase from `seedGccPctFromHeuristic`
+   *     (when `gccPctSource === "seed"`).
+   *   - The uploaded reason cell (when `gccPctSource === "upload"`).
+   *
+   * Never empty after migration. Drives the reason chip shown on each L4
+   * tile and the row-level explanation in the L4 popover.
+   */
+  gccReason: string;
 };
 
 /**
@@ -372,6 +427,31 @@ export type L3Initiative = {
    * renders "covers N of M Activity Groups" using this.
    */
   coversL4RowIds?: string[];
+  /**
+   * Whether this initiative applies to retained-onshore work, offshored
+   * work, or both. Derived from the parent L3's child L4 lane mix in
+   * `selectV6.ts` — uses `OnshoreRetained | EditorialCarveOut` for
+   * "Retained", `GccEligible | GccWithOverlay` for "Offshored", and
+   * "Both" when the L3 spans both groups.
+   *
+   * Drives the per-tower Step 4 filter chips and the strategist input
+   * builder's `baseScope` filter. Absent on legacy cached initiatives
+   * generated before Step 2 existed (treated as "Both" at render time).
+   */
+  applicability?: "Retained" | "Offshored" | "Both";
+  /**
+   * Optional cluster id this initiative slots under in the cross-tower
+   * outcome-clusters view (Output 1 of the strategist run). Written by
+   * the strategist API route; surfaced in Step 4 as a small caption with
+   * a deep link to the cross-tower cluster.
+   */
+  clusterId?: string;
+  /**
+   * Human-readable cluster name (e.g. "Audience Intelligence as a
+   * Cross-Portfolio Revenue Multiplier"). Cached alongside `clusterId`
+   * so Step 4 can render the caption without a separate cluster fetch.
+   */
+  clusterName?: string;
   /**
    * Lazy-generated full 4-lens initiative design (work / workforce /
    * workbench / digitalCore / agents / agentOrchestration). Populated by
@@ -504,6 +584,13 @@ export type TowerAssessReview = {
   impactEstimateValidatedAt?: string;
   /** Tower lead marked AI initiatives (Step 4) reviewed for this tower. */
   aiInitiativesValidatedAt?: string;
+  /**
+   * Tower lead marked the Step 2 Offshore View confirmed — every L4 row's
+   * `gccPctSource` is something other than `"seed"`. Gates Step 3 in the
+   * journey guidance so Impact Levers cannot be edited until the offshore
+   * split is locked.
+   */
+  offshoreViewValidatedAt?: string;
 };
 
 /** Per-tower calendar due dates for lead milestones (YYYY-MM-DD). */

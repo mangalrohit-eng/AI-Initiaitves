@@ -47,10 +47,7 @@ import {
   isOffshoreLLMConfigured,
   resolveOffshoreModel,
 } from "@/lib/llm/offshorePlanLLM";
-import type {
-  LLMOffshoreLane,
-  LLMOffshoreRowInput,
-} from "@/lib/llm/prompts/offshorePlan.v1";
+import type { LLMOffshoreRowInput } from "@/lib/llm/prompts/offshorePlan.v1";
 import { PROMPT_VERSION } from "@/lib/llm/prompts/offshorePlan.v1";
 
 export const runtime = "nodejs";
@@ -61,21 +58,28 @@ export const dynamic = "force-dynamic";
 // headroom for future capability-map expansions without re-tuning.
 const MAX_ROWS = 500;
 
-const TOWER_DEFAULTS: Record<string, LLMOffshoreLane | "EditorialCarveOut"> = {
-  finance: "GccEligible",
-  hr: "GccEligible",
-  "research-analytics": "GccWithOverlay",
-  legal: "GccWithOverlay",
-  "corp-services": "GccEligible",
-  "tech-engineering": "GccEligible",
-  "operations-technology": "GccWithOverlay",
-  "ad-sales": "OnshoreRetained",
-  sales: "OnshoreRetained",
-  "marketing-comms": "GccWithOverlay",
-  service: "GccEligible",
-  "editorial-news": "EditorialCarveOut",
-  production: "EditorialCarveOut",
-  "programming-dev": "OnshoreRetained",
+/**
+ * Tower-level default `gccPct` used by the heuristic fallback when the LLM
+ * is unavailable. These are deliberate priors aligned to the Versant
+ * spin-off context — Finance / HR back-office leans 80%; Editorial / Sales
+ * stays onshore; everyone else lands in the middle. Tower lead overrides
+ * always win in the UI — these are only the auto-seed.
+ */
+const TOWER_DEFAULTS: Record<string, number> = {
+  finance: 80,
+  hr: 80,
+  "research-analytics": 50,
+  legal: 50,
+  "corp-services": 75,
+  "tech-engineering": 75,
+  "operations-technology": 40,
+  "ad-sales": 30,
+  sales: 30,
+  "marketing-comms": 50,
+  service: 90,
+  "editorial-news": 0,
+  production: 0,
+  "programming-dev": 25,
 };
 
 type ClassifyBody = {

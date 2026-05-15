@@ -50,19 +50,19 @@ const FLOW: ReadonlyArray<FlowStep> = [
   },
   {
     step: 2,
-    title: "Impact levers",
-    description: "Offshore + AI dials on L4 groups.",
-    href: "/impact-levers",
-    icon: <Sliders className="h-5 w-5" />,
+    title: "Offshore plan",
+    description: "Retained vs GCC India split per L4.",
+    href: "/offshore-view",
+    icon: <Globe2 className="h-5 w-5" />,
     status: "active",
     band: "discover",
   },
   {
     step: 3,
-    title: "Impact roll-up",
-    description: "Program lens by tower and lever.",
-    href: "/impact-levers/summary",
-    icon: <TrendingUp className="h-5 w-5" />,
+    title: "Impact levers",
+    description: "Offshore + AI dials on L4 groups.",
+    href: "/impact-levers",
+    icon: <Sliders className="h-5 w-5" />,
     status: "active",
     band: "discover",
   },
@@ -85,31 +85,11 @@ const FLOW: ReadonlyArray<FlowStep> = [
     status: "active",
     band: "design",
   },
-  {
-    step: 6,
-    title: "Offshore plan",
-    description: "GCC waves, TSA-paced transition.",
-    href: "/offshore-plan",
-    icon: <Globe2 className="h-5 w-5" />,
-    status: "active",
-    band: "design",
-    wip: true,
-  },
 ];
 
-/** lg+ grid placement: row 1 = steps 1–4; row 2 = step 5 under step 4. (case 6 supports full FLOW if step 6 is re-shown.) */
-function flowStepLgGridClass(
-  step: number,
-  flow: ReadonlyArray<FlowStep>,
-): string {
-  const has3 = flow.some((s) => s.step === 3);
+/** lg+ grid placement: row 1 = steps 1–4; row 2 = step 5 under step 4. */
+function flowStepLgGridClass(step: number): string {
   const base = "max-lg:col-auto max-lg:row-auto ";
-  if (step === 5) {
-    return (
-      base +
-      (has3 ? "lg:col-start-4 lg:row-start-2" : "lg:col-start-3 lg:row-start-2")
-    );
-  }
   switch (step) {
     case 1:
       return base + "lg:col-start-1 lg:row-start-1";
@@ -118,15 +98,9 @@ function flowStepLgGridClass(
     case 3:
       return base + "lg:col-start-3 lg:row-start-1";
     case 4:
-      return (
-        base +
-        (has3 ? "lg:col-start-4 lg:row-start-1" : "lg:col-start-3 lg:row-start-1")
-      );
-    case 6:
-      return (
-        base +
-        (has3 ? "lg:col-start-5 lg:row-start-1" : "lg:col-start-4 lg:row-start-1")
-      );
+      return base + "lg:col-start-4 lg:row-start-1";
+    case 5:
+      return base + "lg:col-start-4 lg:row-start-2";
     default:
       return base;
   }
@@ -134,12 +108,7 @@ function flowStepLgGridClass(
 
 export function ProgramHome() {
   const redact = useRedactDollars();
-  const flow = React.useMemo(() => {
-    const base = redact ? FLOW.filter((s) => s.step !== 3) : FLOW;
-    return base.filter((s) => s.step !== 6);
-  }, [redact]);
-  const hasStep3 = flow.some((s) => s.step === 3);
-  const lgCols = hasStep3 ? 4 : 3;
+  const flow = FLOW;
 
   return (
     <PageShell>
@@ -161,11 +130,12 @@ export function ProgramHome() {
             workflow
           </h1>
           <p className="mt-0.5 max-w-3xl text-[11px] leading-snug text-forge-subtle sm:text-xs">
-            Map through tower AI design to the{" "}
+            Five steps from capability map through offshore plan and dials to
+            tower AI design — landing on the{" "}
             <span className="font-semibold text-accent-purple-dark">
               Cross Tower AI Plan
             </span>{" "}
-            (core program output). Offshoring plan is linked below.
+            (core program output).
           </p>
           <p className="mt-1">
             <Link
@@ -180,13 +150,10 @@ export function ProgramHome() {
 
         <ol
           aria-label="Tower-lead workflow"
-          className={
-            "mt-2 min-h-0 flex-1 grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-2 lg:items-stretch lg:gap-2 " +
-            (lgCols === 4 ? "lg:grid-cols-4" : "lg:grid-cols-3")
-          }
+          className="mt-2 min-h-0 flex-1 grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-2 lg:items-stretch lg:gap-2 lg:grid-cols-4"
         >
           {flow.map((step) => {
-            const showFlowChevron = step.step !== 5 && step.step !== 6;
+            const showFlowChevron = step.step !== 5;
 
             if (step.step === 5) {
               return (
@@ -194,7 +161,7 @@ export function ProgramHome() {
                   key={step.step}
                   className={
                     "list-none flex flex-col gap-1 " +
-                    flowStepLgGridClass(step.step, flow)
+                    flowStepLgGridClass(step.step)
                   }
                 >
                   <div
@@ -222,7 +189,7 @@ export function ProgramHome() {
                 key={step.step}
                 className={
                   "list-none flex h-full min-h-0 flex-col " +
-                  flowStepLgGridClass(step.step, flow)
+                  flowStepLgGridClass(step.step)
                 }
               >
                 <FlowStepCard
@@ -247,12 +214,15 @@ export function ProgramHome() {
               Design 4–5
             </span>
           </div>
-          <Link
-            href="/offshore-plan"
-            className="text-[10px] font-medium text-forge-hint underline decoration-forge-border decoration-1 underline-offset-2 hover:text-accent-purple-dark hover:decoration-accent-purple/50 sm:text-[11px]"
-          >
-            Offshoring
-          </Link>
+          {redact ? null : (
+            <Link
+              href="/impact-levers/summary"
+              className="inline-flex items-center gap-1 text-[10px] font-medium text-forge-subtle underline decoration-forge-border decoration-1 underline-offset-2 hover:text-accent-purple-dark hover:decoration-accent-purple/50 sm:text-[11px]"
+            >
+              <TrendingUp className="h-3 w-3 shrink-0" aria-hidden />
+              Impact roll-up
+            </Link>
+          )}
         </div>
       </div>
     </PageShell>

@@ -6,8 +6,10 @@ import type { LucideIcon } from "lucide-react";
 import type { Tower } from "@/data/types";
 import { OperatingModelSection } from "./OperatingModelSection";
 import { AiRoadmapV6 } from "./AiRoadmapV6";
+import { TowerClusterRibbon } from "./TowerClusterRibbon";
 import { SolutionsGallery } from "@/components/towers/SolutionsGallery";
 import { cn } from "@/lib/utils";
+import type { TowerId } from "@/data/assess/types";
 
 type TabId = "gallery" | "capability" | "roadmap";
 
@@ -68,6 +70,7 @@ export function AiInitiativesTabs({ tower }: { tower: Tower }) {
 
   return (
     <div className="space-y-5">
+      <TowerClusterRibbon towerId={tower.id as TowerId} />
       <div
         role="tablist"
         aria-label="AI initiatives view"

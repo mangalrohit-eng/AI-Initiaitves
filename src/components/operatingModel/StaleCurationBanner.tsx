@@ -12,6 +12,7 @@ import { shouldShowIntakeStaleBannerCopy } from "@/lib/assess/towerReadinessInta
 import {
   queuedL3RowIdsForTower,
   runForL3Rows,
+  unstickInterruptedCurationRows,
   type RunV6Summary,
 } from "@/lib/assess/curationPipelineV6";
 import type {
@@ -51,6 +52,14 @@ export function StaleCurationBanner({
     setProgram(getAssessProgram());
     return subscribe("assessProgram", () => setProgram(getAssessProgram()));
   }, []);
+
+  // One-shot recovery on mount: clear any orphaned `running-*` rows from
+  // a previous interrupted run so the Refresh CTA isn't permanently
+  // gated by a stale flag. Mirrors the same recovery in
+  // `RegenerateAiGuidanceToolbar`. Idempotent.
+  React.useEffect(() => {
+    unstickInterruptedCurationRows(towerId);
+  }, [towerId]);
 
   const v6Rows: ReadonlyArray<L3WorkforceRowV6> = React.useMemo(
     () => program.towers[towerId]?.l3Rows ?? [],

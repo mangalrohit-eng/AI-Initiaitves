@@ -309,6 +309,10 @@ export function parseAssessFileBuffer(
       fteOffshore: a.fteOffshore,
       contractorOnshore: a.contractorOnshore,
       contractorOffshore: a.contractorOffshore,
+      gccPct: 0,
+      gccPctSetAt: new Date().toISOString(),
+      gccPctSource: "seed",
+      gccReason: "Awaiting Step 2 review — no offshore signal yet.",
     };
     if (a.hasSpend) out.annualSpendUsd = a.annualSpendUsd;
     return out;

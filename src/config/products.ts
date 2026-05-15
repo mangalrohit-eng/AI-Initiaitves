@@ -71,21 +71,6 @@ const ALL_PRODUCTS: ForgeProduct[] = [
     status: "active",
   },
   {
-    id: "offshore-plan",
-    name: "Offshore Plan",
-    navLabel: "Offshore Plan",
-    tagline:
-      "Accenture-led India GCC in three TSA-paced waves — 24-month org transition with named editorial / SOX / BB- carve-outs.",
-    shortDescription:
-      "The committed offshore proposal: managed-service GCC in Bangalore + Pune (Manila for multi-brand contact), wave roadmap against NBCU TSA expirations, per-tower org transition (today onshore → retained + GCC India), and the named carve-outs (Brian Carovillano editorial veto, Anand Kini SOX gate, BB- covenant savings floor).",
-    path: "/offshore-plan",
-    iconId: "globe-2",
-    order: 30,
-    audience: "both",
-    showInTopNav: false,
-    status: "active",
-  },
-  {
     id: "prototypes",
     name: "Prototypes",
     navLabel: "Prototypes",

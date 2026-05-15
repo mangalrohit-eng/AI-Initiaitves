@@ -39,6 +39,22 @@ export type ImpactLeversGuidanceInput = {
   isTowerLeadComplete: boolean;
   towerName: string;
   towerId: import("@/data/assess/types").TowerId;
+  /** True when Step 2 (Offshore View) has been locked. Gates Step 3 entry. */
+  offshoreViewValidated?: boolean;
+};
+
+export type OffshoreViewGuidanceInput = {
+  rowCount: number;
+  /** Rows with NO `offshoreLane` (lead has not touched them yet). */
+  unreviewedRowCount: number;
+  /** Rows that still match the AI suggestion verbatim (`setBy === "ai"` / `"seed"`). */
+  unchangedFromAiCount: number;
+  /** True when the Step 1 capability map has changed after Step 2 was last locked. */
+  classificationStale: boolean;
+  /** True when Step 2 has been locked by the lead. */
+  offshoreViewValidated: boolean;
+  towerName: string;
+  towerId: import("@/data/assess/types").TowerId;
 };
 
 export type AiInitiativesGuidanceInput = {

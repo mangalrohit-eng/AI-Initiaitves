@@ -1,5 +1,5 @@
 import { AssessSyncProvider } from "@/components/assess/AssessSyncProvider";
 
-export default function OffshorePlanLayout({ children }: { children: React.ReactNode }) {
+export default function OffshoreViewLayout({ children }: { children: React.ReactNode }) {
   return <AssessSyncProvider>{children}</AssessSyncProvider>;
 }

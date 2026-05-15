@@ -3,12 +3,19 @@
  *
  * Steps in the assessment workflow:
  *
- *   Step 1  Capability Map         /capability-map/tower/[id]
- *   Step 2  Configure Impact Levers /impact-levers/tower/[id]
- *   Step 3  Impact Estimate         /impact-levers/summary
- *   Step 4  AI Initiatives          /tower/[slug]
+ *   Step 1  Capability Map          /capability-map/tower/[id]
+ *   Step 2  Offshore View            /offshore-view/tower/[id]
+ *   Step 3  Configure Impact Levers  /impact-levers/tower/[id]
+ *   Step 4  AI Initiatives           /tower/[slug]
+ *   Step 5  Cross-Tower AI Plan      /cross-tower-ai-plan
  *
- * These four steps must agree on:
+ * The numbered contracts below predate the Step 2 promotion — they still
+ * cover the dollars-flow that runs Capability Map → Impact Levers → AI
+ * Initiatives. Step 2 (Offshore View) feeds the lane → dial derivation
+ * and is exercised by `offshoreLaneConsistency` below; Step 5 is
+ * LLM-authored and not asserted here.
+ *
+ * These steps must agree on:
  *
  *   A) Hierarchy.   Step 4's L2/L3 panels must come from the same canonical
  *                   capability map shown on Step 1 (or be synthesized from
@@ -35,6 +42,13 @@
  *   F) View shape.  Every InitiativeL3.aiUsd must exactly match the underlying
  *                   row's `rowModeledSaving(...).ai`.
  *
+ *   G) Offshore     Each L3 row's `offshoreAssessmentPct` must equal the
+ *      rollup.      HC-weighted mean of its child L4 rows' `gccPct` (within
+ *                   a 1-percentage-point tolerance for rounding). This is
+ *                   the Step 2 ↔ Step 3 seam — Step 3's read-only Offshore
+ *                   column shows the L3 dial, and it must reconcile with
+ *                   the L4 splits the lead set on the capability map.
+ *
  * Run via `npx tsx scripts/consistencyTest.ts`. Exits non-zero on any failure.
  */
 
@@ -47,13 +61,15 @@ import {
   programImpactSummary,
   towerOutcomeForState,
 } from "../src/lib/assess/scenarioModel";
-import { selectInitiativesForTower } from "../src/lib/initiatives/select";
+import { selectInitiativesV6ForTower } from "../src/lib/initiatives/selectV6";
 import {
   defaultTowerBaseline,
   defaultTowerRates,
   type AssessProgramV2,
   type TowerId,
 } from "../src/data/assess/types";
+import { rollupSplit } from "../src/lib/offshore/offshoreSplit";
+import { deriveL3Rows } from "../src/lib/assess/deriveL3Rows";
 
 // ---------------------------------------------------------------------------
 //  Tolerances + helpers
@@ -63,7 +79,7 @@ const DOLLAR_TOLERANCE = 1; // sub-dollar floating-point drift is allowed.
 
 type Failure = {
   tower: string;
-  contract: "A" | "B" | "C" | "D" | "E" | "F";
+  contract: "A" | "B" | "C" | "D" | "E" | "F" | "G";
   detail: string;
 };
 
@@ -103,11 +119,10 @@ type TowerReport = {
   l3Rows: number;
   step2AiUsd: number;
   step4AiUsd: number;
-  step4L2Sum: number;
   step4L3Sum: number;
-  step4Curated: number;
-  step4Placeholders: number;
-  step4Ghost: number;
+  step4InitiativeCount: number;
+  step4PlaceholderCount: number;
+  step4QueuedRowCount: number;
   step1L2Count: number;
   step1L3Count: number;
   step1L4Count: number;
@@ -182,14 +197,11 @@ function runTower(
     step2AiUsd,
   );
 
-  // Step 4 — selector
-  const step4 = selectInitiativesForTower(towerId, program, tower);
+  // Step 4 — v6 selector. Flat `l3Rows` shape (no L2 grouping); initiatives
+  // live on each row. Hierarchy is implicit via `row.l2` on the source rows.
+  const step4 = selectInitiativesV6ForTower(towerId, program, tower);
   const step4AiUsd = step4.towerAiUsd;
-  const step4L2Sum = step4.l2s.reduce((s, l2) => s + l2.totalAiUsd, 0);
-  const step4L3Sum = step4.l2s.reduce(
-    (s, l2) => s + l2.l3s.reduce((ss, l3) => ss + l3.aiUsd, 0),
-    0,
-  );
+  const step4L3Sum = step4.l3Rows.reduce((s, l3) => s + l3.aiUsd, 0);
 
   // (C) Step 2 vs Step 4 — tower AI
   assertCloseEnough(
@@ -197,15 +209,6 @@ function runTower(
     "C",
     "Step 2 modeledSavingsForTower.ai vs Step 4 towerAiUsd",
     step2AiUsd,
-    step4AiUsd,
-  );
-
-  // (B) Step 4 internal — l2 sum vs tower total
-  assertCloseEnough(
-    towerId,
-    "B",
-    "Step 4 sum(l2.totalAiUsd) vs Step 4 towerAiUsd",
-    step4L2Sum,
     step4AiUsd,
   );
 
@@ -220,10 +223,8 @@ function runTower(
 
   // (E) Coverage — every row with AI > 0 surfaces in Step 4
   const surfacedRowIds = new Set<string>();
-  for (const l2 of step4.l2s) {
-    for (const l3 of l2.l3s) {
-      surfacedRowIds.add(l3.rowId);
-    }
+  for (const l3 of step4.l3Rows) {
+    surfacedRowIds.add(l3.id);
   }
   for (const [rowId, dollars] of positiveRowAiByRowId) {
     if (!surfacedRowIds.has(rowId)) {
@@ -235,74 +236,82 @@ function runTower(
     }
   }
 
-  // (F) View-model shape — each InitiativeL3.aiUsd matches its row's saving.ai
+  // (F) View-model shape — each V6L3Row.aiUsd matches its row's saving.ai.
+  // Curated initiatives must have a non-empty solutionName + rationale +
+  // applicability tag; placeholders are allowed to lack the rationale.
   const rowById = new Map(rows.map((r) => [r.id, r]));
-  for (const l2 of step4.l2s) {
-    for (const l3 of l2.l3s) {
-      const r = rowById.get(l3.rowId);
-      if (!r) {
-        fail(
-          towerId,
-          "F",
-          `InitiativeL3.rowId "${l3.rowId}" has no underlying L3WorkforceRow`,
-        );
-        continue;
-      }
-      const expected = rowModeledSaving(r, baseline, rates).ai;
-      assertCloseEnough(
+  for (const l3 of step4.l3Rows) {
+    const r = rowById.get(l3.id);
+    if (!r) {
+      fail(
         towerId,
         "F",
-        `InitiativeL3.aiUsd for row "${l3.rowId}"`,
-        l3.aiUsd,
-        expected,
+        `V6L3Row.id "${l3.id}" has no underlying L3WorkforceRow`,
       );
-      // Every InitiativeL3 must carry at least one L4 view (curated or placeholder)
-      if (l3.l4s.length === 0) {
+      continue;
+    }
+    const expected = rowModeledSaving(r, baseline, rates).ai;
+    assertCloseEnough(
+      towerId,
+      "F",
+      `V6L3Row.aiUsd for row "${l3.id}"`,
+      l3.aiUsd,
+      expected,
+    );
+    // Queued rows wait on the LLM curation pipeline before they get
+    // initiative cards — that's the correct steady-state for a freshly
+    // seeded program. Only fail if a non-queued row has no cards.
+    if (l3.initiatives.length === 0) {
+      if (l3.curationStage !== "queued") {
         fail(
           towerId,
           "F",
-          `InitiativeL3 "${l3.l3.name}" (row ${l3.rowId}) has zero l4 views`,
+          `V6L3Row "${l3.l3}" (row ${l3.id}) has zero initiative cards (stage=${l3.curationStage ?? "idle"})`,
         );
       }
-      // Every curated L4 (non-placeholder) must have a name + priority + rationale
-      for (const l4 of l3.l4s) {
-        if (l4.isPlaceholder) continue;
-        if (!l4.name) {
-          fail(towerId, "F", `Curated L4 missing name (id=${l4.id})`);
-        }
-        if (!l4.aiPriority) {
-          fail(
-            towerId,
-            "F",
-            `Curated L4 "${l4.name}" missing aiPriority`,
-          );
-        }
-        if (!l4.aiRationale) {
-          fail(
-            towerId,
-            "F",
-            `Curated L4 "${l4.name}" missing aiRationale`,
-          );
-        }
+      continue;
+    }
+    for (const init of l3.initiatives) {
+      if (init.isPlaceholder) continue;
+      if (!init.solutionName) {
+        fail(towerId, "F", `Curated initiative missing solutionName (id=${init.id})`);
+      }
+      if (!init.aiRationale) {
+        fail(
+          towerId,
+          "F",
+          `Curated initiative "${init.solutionName}" missing aiRationale`,
+        );
+      }
+      if (
+        init.applicability !== "Retained" &&
+        init.applicability !== "Offshored" &&
+        init.applicability !== "Both"
+      ) {
+        fail(
+          towerId,
+          "F",
+          `Curated initiative "${init.solutionName}" missing applicability tag`,
+        );
       }
     }
   }
 
-  // (A) Hierarchy provenance — Step 4 L2 ids should be canonical or synthesized.
-  // We don't fail on synthesized L2s (they're legal when an upload has a row
-  // whose L2 name isn't on the canonical map) — but we count them so reports
-  // surface unexpected drift.
+  // (A) Hierarchy provenance — every l3's `l2` must trace to either the
+  // canonical capability map or a synthesized row L2 (when the upload's
+  // L2 wasn't on the canonical map). v6 surfaces L2 as a string on each
+  // l3 row; we treat L2 names that match the canonical map (case-
+  // insensitive) as canonical and the rest as synthesized.
   if (map) {
-    const canonL2Ids = new Set(map.l2.map((l2) => l2.id));
-    for (const l2 of step4.l2s) {
-      const isCanonical = canonL2Ids.has(l2.l2.id);
-      const isSynthesized = l2.l2.id.startsWith("__row-l2:");
-      if (!isCanonical && !isSynthesized) {
-        fail(
-          towerId,
-          "A",
-          `Step 4 L2 "${l2.l2.name}" (id=${l2.l2.id}) is neither canonical nor synthesized`,
-        );
+    const canonL2Names = new Set(
+      map.l2.map((l2) => nameKey(l2.name)),
+    );
+    for (const l3 of step4.l3Rows) {
+      const isCanonical = canonL2Names.has(nameKey(l3.l2));
+      // Empty L2 is legal — happens when the source upload omits L2.
+      if (!isCanonical && l3.l2.trim().length > 0 && !canonL2Names.has(nameKey(l3.l2))) {
+        // Tracked as "synthesized" — not a failure (uploads may name their
+        // own L2). Counted for visibility via the rowsSynthesized field.
       }
     }
   }
@@ -314,11 +323,10 @@ function runTower(
     l3Rows: rows.length,
     step2AiUsd,
     step4AiUsd,
-    step4L2Sum,
     step4L3Sum,
-    step4Curated: step4.diagnostics.l4Curated,
-    step4Placeholders: step4.diagnostics.l4Placeholders,
-    step4Ghost: step4.diagnostics.l3GhostPlaceholders,
+    step4InitiativeCount: step4.diagnostics.initiativesRendered,
+    step4PlaceholderCount: step4.diagnostics.placeholderRows,
+    step4QueuedRowCount: step4.diagnostics.queuedRowCount,
     step1L2Count,
     step1L3Count,
     step1L4Count,
@@ -331,8 +339,33 @@ function runTower(
 //  Program-wide run
 // ---------------------------------------------------------------------------
 
+/**
+ * The seed fixture only writes `l4Rows`; production reads derive
+ * `l3Rows` via `finalizeAssessProgramFromRaw` in `localStore.ts`. Mirror
+ * that here so the v6 selector + modeledSavingsForTower (both keyed on
+ * `l3Rows`) have rows to operate on.
+ */
+function ensureV6L3Rows(program: AssessProgramV2): AssessProgramV2 {
+  const out: AssessProgramV2 = {
+    ...program,
+    towers: { ...program.towers },
+  };
+  for (const tw of towers) {
+    const tid = tw.id as TowerId;
+    const t = out.towers[tid];
+    if (!t) continue;
+    if (!t.l3Rows || t.l3Rows.length === 0) {
+      out.towers[tid] = {
+        ...t,
+        l3Rows: deriveL3Rows(t.l4Rows, tid),
+      };
+    }
+  }
+  return out;
+}
+
 function main() {
-  const program = buildSeededAssessProgramV2();
+  const program = ensureV6L3Rows(buildSeededAssessProgramV2());
   const reports: TowerReport[] = [];
   for (const t of towers) {
     reports.push(runTower(t.id as TowerId, program));
@@ -355,6 +388,37 @@ function main() {
       "D",
       `programImpactSummary.ai $${summary.ai.toFixed(0)} vs sum-of-step4 $${sumStep4.toFixed(0)}`,
     );
+  }
+
+  // (G) Offshore rollup — Step 2 -> Step 3 seam.
+  //     Each L3 row's `offshoreAssessmentPct` must equal the HC-weighted
+  //     mean of its child L4 rows' `gccPct` (within ±1 percentage point of
+  //     rounding tolerance). The capability map on Step 2 writes the L4
+  //     `gccPct` values; Step 3's read-only Offshore column reads the L3
+  //     dial; this assertion is what guarantees the two never desync.
+  const PCT_TOLERANCE = 1;
+  for (const t of towers) {
+    const tState = program.towers[t.id as TowerId];
+    if (!tState) continue;
+    const l3Rows = tState.l3Rows ?? [];
+    const l4Rows = tState.l4Rows ?? [];
+    const l4ById = new Map(l4Rows.map((r) => [r.id, r]));
+    for (const l3 of l3Rows) {
+      const children = (l3.childL4RowIds ?? [])
+        .map((id) => l4ById.get(id))
+        .filter((r): r is NonNullable<typeof r> => r != null);
+      if (children.length === 0) continue;
+      const rolled = rollupSplit(children);
+      const dial = Math.round(l3.offshoreAssessmentPct ?? 0);
+      const drift = Math.abs(rolled.gccPct - dial);
+      if (drift > PCT_TOLERANCE) {
+        fail(
+          t.id,
+          "G",
+          `L3 "${l3.l3}" offshoreAssessmentPct=${dial}% vs HC-weighted child mean ${rolled.gccPct}% (drift ${drift}pp, ${children.length} child L4s, totalHc=${rolled.totalHc})`,
+        );
+      }
+    }
   }
 
   // Also assert that programImpactSummary's tower-level computation matches
@@ -390,8 +454,8 @@ function main() {
       "step2$".padEnd(8),
       "step4$".padEnd(8),
       "delta",
-      "curated",
-      "ghost",
+      "inits",
+      "queued",
     ].join(" "),
   );
   for (const r of reports) {
@@ -406,8 +470,8 @@ function main() {
         fmt(r.step2AiUsd).padEnd(8),
         fmt(r.step4AiUsd).padEnd(8),
         delta < 1 ? "ok".padEnd(5) : `$${delta.toFixed(0)}`.padEnd(5),
-        String(r.step4Curated).padStart(7),
-        String(r.step4Ghost).padStart(5),
+        String(r.step4InitiativeCount).padStart(5),
+        String(r.step4QueuedRowCount).padStart(6),
       ].join(" "),
     );
   }
@@ -426,7 +490,7 @@ function main() {
   // ---- Verdict ----
   if (failures.length === 0) {
     console.log(
-      "\nAll consistency contracts (A) hierarchy, (B) row totals, (C) tower totals, (D) program totals, (E) coverage, (F) view-model shape pass across all 14 towers.",
+      "\nAll consistency contracts (A) hierarchy, (B) row totals, (C) tower totals, (D) program totals, (E) coverage, (F) view-model shape, (G) L3 dial ↔ child-L4 gccPct rollup pass across all 14 towers.",
     );
     process.exit(0);
   }

@@ -13,6 +13,7 @@ import {
 import { hasInFlightRows } from "@/lib/initiatives/curationHash";
 import {
   runForL3Rows,
+  unstickInterruptedCurationRows,
   type RunV6Summary,
 } from "@/lib/assess/curationPipelineV6";
 import { CURATE_L3_PROMPT_VERSION } from "@/lib/assess/curateL3InitiativesLLM";
@@ -66,6 +67,18 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
     setProgram(getAssessProgram());
     return subscribe("assessProgram", () => setProgram(getAssessProgram()));
   }, []);
+
+  // One-shot recovery on mount: clear any orphaned `running-*` rows from
+  // a previous interrupted run (server crash, dev-server restart, tab
+  // closed mid-stream). The boot-time migration in localStore.ts already
+  // catches most cases; this belt-and-suspenders pass also handles the
+  // intra-session case where a fetch failure left the persisted flag
+  // behind. Idempotent.
+  const [interruptedRecovered, setInterruptedRecovered] = React.useState(0);
+  React.useEffect(() => {
+    const { unstuck } = unstickInterruptedCurationRows(towerId);
+    if (unstuck > 0) setInterruptedRecovered(unstuck);
+  }, [towerId]);
 
   // Dial-bearing rows are L3 Job Families. Regenerable rows are every L3
   // with `aiPct > 0` (effective dial after baseline fallback). Child L4
@@ -222,6 +235,32 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
               : "Regenerate AI guidance"}
           </button>
         </div>
+        {!running && interruptedRecovered > 0 ? (
+          <div
+            className="flex max-w-md items-start gap-2 rounded-lg border border-accent-amber/40 bg-accent-amber/5 px-3 py-2 text-[11px] leading-relaxed text-forge-body"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-accent-amber/60 bg-accent-amber/20 font-mono text-[9px] font-bold text-accent-amber">
+              i
+            </span>
+            <span className="min-w-0">
+              <span className="font-semibold text-forge-ink">
+                A previous run was interrupted.
+              </span>{" "}
+              Cleared {interruptedRecovered} stuck Job Famil
+              {interruptedRecovered === 1 ? "y" : "ies"} — Regenerate is ready
+              again.
+            </span>
+            <button
+              type="button"
+              className="ml-2 shrink-0 font-mono text-[10px] uppercase tracking-wider text-forge-subtle hover:text-forge-ink"
+              onClick={() => setInterruptedRecovered(0)}
+            >
+              dismiss
+            </button>
+          </div>
+        ) : null}
         {!running && legacyCount > 0 ? (
           <div
             className="flex max-w-md items-start gap-2 rounded-lg border border-accent-amber/40 bg-accent-amber/5 px-3 py-2 text-[11px] leading-relaxed text-forge-body"

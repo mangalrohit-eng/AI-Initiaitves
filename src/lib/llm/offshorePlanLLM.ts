@@ -1,5 +1,5 @@
 /**
- * Server-only OpenAI helper for Step-5 offshore-lane classification.
+ * Server-only OpenAI helper for Step 2 offshore `gccPct` classification.
  *
  * Mirrors the inferDefaultsLLM pattern: single batched call (one request, N
  * row classifications back), Chat Completions JSON mode, hard timeout, throws
@@ -11,7 +11,6 @@ import {
   buildOffshoreSystemPrompt,
   buildOffshoreUserPrompt,
   type LLMOffshoreClassifyContext,
-  type LLMOffshoreLane,
   type LLMOffshoreRowInput,
   type LLMOffshoreRowResult,
 } from "@/lib/llm/prompts/offshorePlan.v1";
@@ -49,11 +48,7 @@ export type InferOffshoreLLMOptions = {
 const DEFAULT_TIMEOUT_MS = 45_000;
 const DEFAULT_CHUNK_SIZE = 30;
 const DEFAULT_MAX_CONCURRENCY = 6;
-const VALID_LANES = new Set<LLMOffshoreLane>([
-  "GccEligible",
-  "GccWithOverlay",
-  "OnshoreRetained",
-]);
+const MAX_REASON_CHARS = 200;
 
 export class OffshoreLLMError extends Error {
   constructor(message: string, public readonly cause?: unknown) {
@@ -258,55 +253,56 @@ async function callOpenAIChunk(
       throw new OffshoreLLMError(`Duplicate rowId in chunk response: ${rowId}`);
     }
     seen.add(rowId);
-    const lane = String(raw.lane ?? "") as LLMOffshoreLane;
-    if (!VALID_LANES.has(lane)) {
+    const rawPct = raw.gccPct;
+    const pct =
+      typeof rawPct === "number" && Number.isFinite(rawPct)
+        ? Math.round(rawPct)
+        : null;
+    if (pct == null || pct < 0 || pct > 100) {
       throw new OffshoreLLMError(
-        `Invalid lane "${raw.lane}" for rowId=${rowId}`,
+        `Invalid gccPct "${raw.gccPct}" for rowId=${rowId}; must be integer 0-100`,
       );
     }
-    const justification =
-      typeof raw.justification === "string" && raw.justification.trim()
-        ? raw.justification.trim()
+    const reasonRaw =
+      typeof raw.reason === "string" && raw.reason.trim()
+        ? raw.reason.trim()
         : "";
-    if (!justification) {
-      throw new OffshoreLLMError(`Empty justification for rowId=${rowId}`);
+    if (!reasonRaw) {
+      throw new OffshoreLLMError(`Empty reason for rowId=${rowId}`);
     }
-    out.push({ rowId, lane, justification });
+    const reason = reasonRaw.slice(0, MAX_REASON_CHARS);
+    out.push({ rowId, gccPct: pct, reason });
   }
 
   return { rows: out, tokenUsage };
 }
 
 /**
- * Heuristic fallback. Mirrors the selector's `classifyRow` heuristic so the
- * page renders something useful even when the LLM is unreachable. The
- * caller writes a generic justification per row.
- *
- * INVARIANT (matches selectOffshorePlan.classifyRow): the heuristic NEVER
- * returns EditorialCarveOut. The carve-out lane is reachable only via an
- * explicit user/seeded `offshoreStrictCarveOut` flag — which the route
- * filters out before this function is called. Tower defaults of
- * `EditorialCarveOut` are remapped to `OnshoreRetained` (still
- * conservative, but no longer pins editorial / production rows to zero
- * movable HC when the user has explicitly removed all carve-outs).
+ * Heuristic fallback. Used when the LLM is unreachable so the page always
+ * renders. Maps the tower-level default `gccPct` (caller-supplied) onto
+ * every row, then nudges by the row's existing dial when the lead has
+ * already expressed an offshore intent. The reason text is generic and
+ * marks the row as awaiting LLM regeneration.
  */
 export function buildOffshoreHeuristicFallback(
   rows: LLMOffshoreRowInput[],
-  towerDefaults: Record<string, LLMOffshoreLane | "EditorialCarveOut">,
+  towerDefaults: Record<string, number>,
 ): LLMOffshoreRowResult[] {
   return rows.map((r) => {
-    const rawDefault = towerDefaults[r.towerId] ?? "OnshoreRetained";
-    const towerDefault: LLMOffshoreLane =
-      rawDefault === "EditorialCarveOut"
-        ? "OnshoreRetained"
-        : (rawDefault as LLMOffshoreLane);
-    const dial = r.dialPct ?? -1;
-    let lane: LLMOffshoreLane;
-    if (dial >= 50) lane = "GccEligible";
-    else if (dial >= 25) lane = "GccWithOverlay";
-    else if (dial >= 0 && dial < 15) lane = "OnshoreRetained";
-    else lane = towerDefault;
-    const justification = `Heuristic fallback — Step-2 dial ${dial >= 0 ? `${dial}%` : "unset"} mapped to ${lane}. Click Regenerate when LLM is available for a Versant-specific rationale.`;
-    return { rowId: r.rowId, lane, justification };
+    const towerDefault = clampPct(towerDefaults[r.towerId] ?? 0);
+    const priorDial = r.dialPct;
+    const gccPct =
+      typeof priorDial === "number" && Number.isFinite(priorDial)
+        ? clampPct(priorDial)
+        : towerDefault;
+    const reason = `Heuristic fallback — applied tower default ${towerDefault}% (dial ${priorDial ?? "unset"}%). Click Regenerate when the LLM is available for a Versant-specific rationale.`;
+    return { rowId: r.rowId, gccPct, reason };
   });
+}
+
+function clampPct(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  if (n < 0) return 0;
+  if (n > 100) return 100;
+  return Math.round(n);
 }

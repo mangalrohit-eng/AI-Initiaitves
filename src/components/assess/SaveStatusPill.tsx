@@ -6,11 +6,10 @@ import { CheckCircle2, CircleDot, Loader2, RefreshCw, Wifi } from "lucide-react"
 import { useAssessSync, type SaveState } from "@/components/assess/AssessSyncProvider";
 
 // Routes that mount `AssessSyncProvider` — kept in lockstep with the layouts
-// at `app/{capability-map,impact-levers,assumptions,tower,offshore-plan}/layout.tsx`.
+// at `app/{capability-map,impact-levers,assumptions,tower}/layout.tsx`.
 // The tower routes were added when the AI Initiatives validate/reject feature
-// landed; offshore-plan was added when Step 5's Assumptions tab started
-// writing carve-out flags + GCC location preferences to assessProgram.
-const ASSESS_PATH = /^\/(assess|capability-map|assessment|impact-levers|assumptions|tower|offshore-plan)(\/|$)/;
+// landed.
+const ASSESS_PATH = /^\/(assess|capability-map|assessment|impact-levers|assumptions|tower)(\/|$)/;
 
 /**
  * Compact save-status indicator. Renders only on assess-aware routes and

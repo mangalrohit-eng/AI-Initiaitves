@@ -285,6 +285,48 @@ function writeRowFailure(towerId: TowerId, rowId: string, error: string): void {
 }
 
 /**
+ * Sweep any L3 rows in this tower stuck on a `running-*` curation stage
+ * back to `"failed"` with a clear interrupted message. Used as a one-shot
+ * recovery on toolbar mount: the regenerate pipeline is entirely
+ * client-driven, so a persisted `running-*` flag with no live runner is
+ * by definition orphaned (server crash, dev-server restart, tab closed
+ * mid-stream). Returns the count of rows unstuck.
+ *
+ * Idempotent. Safe to call on every toolbar mount — only touches rows
+ * that are actually orphaned.
+ */
+export function unstickInterruptedCurationRows(
+  towerId: TowerId,
+): { unstuck: number } {
+  const fresh = getAssessProgram().towers[towerId];
+  if (!fresh || !fresh.l3Rows || fresh.l3Rows.length === 0) {
+    return { unstuck: 0 };
+  }
+  const INTERRUPTED_MSG =
+    "Previous regenerate run was interrupted before it finished. Try Regenerate again.";
+  let unstuck = 0;
+  const nextL3Rows = fresh.l3Rows.map((r) => {
+    if (
+      r.curationStage === "running-l5" ||
+      r.curationStage === "running-verdict" ||
+      r.curationStage === "running-curate"
+    ) {
+      unstuck += 1;
+      return {
+        ...r,
+        curationStage: "failed" as const,
+        curationError: r.curationError ?? INTERRUPTED_MSG,
+      };
+    }
+    return r;
+  });
+  if (unstuck > 0) {
+    setTowerAssess(towerId, { l3Rows: nextL3Rows });
+  }
+  return { unstuck };
+}
+
+/**
  * Collect the L3 row ids in a tower whose `curationStage === "queued"`.
  * Used by the StaleCurationBanner CTA to fire `runForL3Rows(towerId,
  * queuedL3Ids)` against the L3-grain pipeline.

@@ -9,6 +9,7 @@ import {
   subscribe,
 } from "@/lib/localStore";
 import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
+import { isOffshoreViewJourneyStepDone } from "@/lib/assess/offshoreViewStepStatus";
 import type { TowerId } from "@/data/assess/types";
 import type { TowerScopedModule } from "@/lib/towerHref";
 
@@ -43,6 +44,7 @@ export function TowerStep4TopChrome({
   const tState = program.towers[towerId];
   const completed: TowerScopedModule[] = [];
   if (isCapabilityMapJourneyStepDone(tState)) completed.push("capability-map");
+  if (isOffshoreViewJourneyStepDone(tState)) completed.push("offshore-view");
   if (tState?.status === "complete") completed.push("impact-levers");
   if (tState?.aiInitiativesValidatedAt) completed.push("ai-initiatives");
 

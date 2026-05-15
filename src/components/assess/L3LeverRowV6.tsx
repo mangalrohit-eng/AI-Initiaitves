@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Cpu, Globe2 } from "lucide-react";
+import Link from "next/link";
+import { Cpu, Globe2, Lock } from "lucide-react";
 import type {
   L3WorkforceRowV6,
   L4WorkforceRow,
@@ -14,6 +15,8 @@ import { rowStarterRationale } from "@/data/assess/rowRationale";
 import { MoneyCounter, formatMoney } from "@/components/ui/MoneyCounter";
 import { PercentSlider } from "@/components/ui/PercentSlider";
 import { RationalePopover } from "@/components/ui/RationalePopover";
+import { getTowerHref } from "@/lib/towerHref";
+import { l4Split, rollupSplit } from "@/lib/offshore/offshoreSplit";
 import { cn } from "@/lib/utils";
 import { useRedactDollars, RedactedAmount } from "@/lib/clientMode";
 
@@ -79,7 +82,6 @@ export function L3LeverRowV6({
 
   const displayedOffshore = row.offshoreAssessmentPct ?? baseline.baselineOffshorePct;
   const displayedAi = row.aiImpactAssessmentPct ?? baseline.baselineAIPct;
-  const offshoreOverridden = row.offshoreAssessmentPct != null;
   const aiOverridden = row.aiImpactAssessmentPct != null;
 
   // Per-row rationales — same priority order as the v5 L4LeverRow.
@@ -99,7 +101,6 @@ export function L3LeverRowV6({
     [towerId, row.l2, row.l3],
   );
   const rationale = {
-    offshore: row.offshoreRationale ?? starter.offshore,
     ai: row.aiImpactRationale ?? starter.ai,
   };
   const rationaleSource = row.dialsRationaleSource;
@@ -166,18 +167,10 @@ export function L3LeverRowV6({
           ) : null}
         </div>
 
-        <LeverColumn
-          icon={<Globe2 className="h-3 w-3 text-accent-purple-dark" aria-hidden />}
-          label="Offshore"
-          hue="purple"
-          value={displayedOffshore}
-          defaultValue={baseline.baselineOffshorePct}
-          isDefault={!offshoreOverridden}
-          rationaleTitle={`Why ${displayedOffshore}% offshore?`}
-          rationaleBody={rationale.offshore}
-          rationaleSource={rationaleSource}
-          onChange={(v) => onPatch({ offshoreAssessmentPct: v })}
-          onClearOverride={() => onPatch({ offshoreAssessmentPct: undefined })}
+        <OffshoreLaneColumn
+          towerId={towerId}
+          derivedPct={displayedOffshore}
+          childL4Rows={childL4Rows}
         />
 
         <LeverColumn
@@ -227,6 +220,119 @@ export function L3LeverRowV6({
 }
 
 type RationaleSource = "llm" | "heuristic" | "starter" | undefined;
+
+/**
+ * Read-only offshore column for Step 3. Under the binary GCC / Retained
+ * model each child L4 carries a single `gccPct` (0-100) — the share of its
+ * HC that migrates to the primary India GCC. We display:
+ *
+ *   - HC-weighted % across the child L4s (derived from `rollupSplit`).
+ *   - Retained / GCC FTE counts and a mini stacked bar.
+ *   - Deep link to Step 2 (Offshore View) to edit.
+ *
+ * Edits live exclusively on Step 2 — the Step 3 page is read-only for the
+ * offshore lever so the tower lead can't accidentally diverge the two views.
+ */
+function OffshoreLaneColumn({
+  towerId,
+  derivedPct,
+  childL4Rows,
+}: {
+  towerId: TowerId;
+  derivedPct: number;
+  childL4Rows: L4WorkforceRow[];
+}) {
+  const split = React.useMemo(() => rollupSplit(childL4Rows), [childL4Rows]);
+  const sharePct = split.gccPct;
+  // Touched-rows count drives the "X of N rows reviewed" footer mini-chip
+  // and tells the lead whether Step 2 is fully through review.
+  const reviewedCount = React.useMemo(
+    () =>
+      childL4Rows.reduce(
+        (n, c) =>
+          c.gccPctSource && c.gccPctSource !== "seed" ? n + 1 : n,
+        0,
+      ),
+    [childL4Rows],
+  );
+  // Render every L4's per-row split so the stacked bar reflects the
+  // actual distribution — handy for L3s where a single child dominates
+  // headcount.
+  const perRowSplits = React.useMemo(
+    () => childL4Rows.map((c) => l4Split(c)),
+    [childL4Rows],
+  );
+  void perRowSplits;
+
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+        <Globe2 className="h-3 w-3 text-accent-purple-dark" aria-hidden />
+        <span className="font-medium text-forge-body">Offshore</span>
+        <span
+          className={cn(
+            "rounded-full border px-1.5 py-0 font-mono text-[9px] uppercase tracking-wider",
+            reviewedCount === childL4Rows.length && childL4Rows.length > 0
+              ? "border-accent-teal/40 bg-accent-teal/10 text-accent-teal"
+              : "border-forge-border bg-forge-well/60 text-forge-hint",
+          )}
+          title="Offshore $ is derived from Step 2 GCC % decisions — edit those in the Offshore View."
+        >
+          <Lock className="-mt-px mr-0.5 inline-block h-2.5 w-2.5" aria-hidden />
+          step 2
+        </span>
+        <Link
+          href={getTowerHref(towerId, "offshore-view")}
+          className="ml-auto font-mono text-[10px] text-forge-subtle underline-offset-2 hover:text-accent-purple-dark hover:underline"
+        >
+          edit
+        </Link>
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-baseline gap-2">
+        <span className="font-display text-lg font-semibold tabular-nums text-forge-ink">
+          {Math.round(derivedPct)}%
+        </span>
+        <span className="font-mono text-[10px] text-forge-hint">
+          to GCC India
+        </span>
+      </div>
+      {split.totalHc > 0 ? (
+        <div
+          className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 font-mono text-[10px] tabular-nums text-forge-hint"
+          title={`Headcount split: ${split.retainedFte} retained · ${split.gccFte} to GCC (${sharePct}% offshore). Sourced from Step 2 GCC % decisions across ${childL4Rows.length} L4 Activity Group${childL4Rows.length === 1 ? "" : "s"}.`}
+        >
+          <span className="text-accent-amber">
+            {split.retainedFte.toLocaleString()} retained
+          </span>
+          <span aria-hidden>·</span>
+          <span className="text-accent-purple-dark">
+            {split.gccFte.toLocaleString()} to GCC
+          </span>
+        </div>
+      ) : null}
+      {split.totalHc > 0 ? (
+        <div
+          className="mt-1 flex h-1 overflow-hidden rounded-full bg-forge-well"
+          aria-hidden
+        >
+          <div
+            className="bg-accent-amber"
+            style={{ width: `${100 - sharePct}%` }}
+          />
+          <div
+            className="bg-accent-purple-dark"
+            style={{ width: `${sharePct}%` }}
+          />
+        </div>
+      ) : null}
+      {childL4Rows.length > 0 ? (
+        <div className="mt-1 font-mono text-[10px] text-forge-hint">
+          {reviewedCount} of {childL4Rows.length} L4 reviewed
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function LeverColumn({
   icon,

@@ -68,3 +68,63 @@ export function downloadCurrentTowerCapabilityMapCsv(towerId: TowerId, fileBase:
     "text/csv;charset=utf-8",
   );
 }
+
+const OFFSHORE_HEADER = [
+  "rowId",
+  "L2",
+  "L3",
+  "L4",
+  "totalHc",
+  "gccPct",
+  "reason",
+] as const;
+
+/**
+ * CSV with one row per L4 plus the current `gccPct` and reason — round-
+ * trips cleanly through `parseOffshoreClassificationXlsx`. Tower leads can
+ * download, edit in Excel, and re-upload via Step 2's
+ * "Upload .csv / .xlsx" affordance.
+ *
+ * `totalHc` is included as a read-only audit column so the lead can see
+ * each row's headcount while sizing the split. The parser ignores it on
+ * round-trip — HC mutations stay in the Capability Map upload.
+ */
+export function buildOffshoreClassificationCsv(rows: L4WorkforceRow[]): string {
+  const lines = [OFFSHORE_HEADER.join(",")];
+  const esc = (x: string) =>
+    x.includes(",") || x.includes('"') ? `"${x.replace(/"/g, '""')}"` : x;
+  for (const r of rows) {
+    const totalHc =
+      (r.fteOnshore || 0) +
+      (r.fteOffshore || 0) +
+      (r.contractorOnshore || 0) +
+      (r.contractorOffshore || 0);
+    const pct = Number.isFinite(r.gccPct) ? Math.round(r.gccPct) : 0;
+    const reason = r.gccReason ?? "";
+    lines.push(
+      [
+        esc(r.id),
+        esc(r.l2),
+        esc(r.l3),
+        esc(r.l4),
+        String(totalHc),
+        String(pct),
+        esc(reason),
+      ].join(","),
+    );
+  }
+  return lines.join("\n");
+}
+
+export function downloadCurrentTowerOffshoreClassificationCsv(
+  towerId: TowerId,
+  fileBase: string,
+): void {
+  const rows = getAssessProgram().towers[towerId]?.l4Rows ?? [];
+  const csv = buildOffshoreClassificationCsv(rows);
+  downloadBlob(
+    `${fileBase.replace(/[^a-z0-9-_]+/gi, "-")}-offshore-classification.csv`,
+    csv,
+    "text/csv;charset=utf-8",
+  );
+}

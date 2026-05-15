@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { llmLoadingCopy } from "@/lib/llm/loadingCopy";
 
 /**
- * Step 2 (Configure Impact Levers) staleness banner.
+ * Step 3 (Configure Impact Levers) staleness banner.
  *
  * Surfaces above the dial cards whenever the tower's offshore + AI dials
  * are sitting at unreviewed defaults — i.e. every row has both dial

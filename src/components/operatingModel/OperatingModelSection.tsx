@@ -169,7 +169,7 @@ function EmptyL3State({
     <div className="rounded-2xl border border-dashed border-forge-border bg-forge-well/40 px-5 py-8 text-center text-sm text-forge-subtle">
       No L3 Job Family has an AI dial above zero on this tower. Open{" "}
       <span className="font-semibold text-forge-body">
-        Step 2 (Configure Impact Levers)
+        Step 3 (Configure Impact Levers)
       </span>{" "}
       and raise the AI dial on the Job Families you want to bring into the AI
       Solutions view.

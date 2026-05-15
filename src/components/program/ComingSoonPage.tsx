@@ -9,8 +9,6 @@ import {
 import { getPortalAudience } from "@/lib/portalAudience";
 
 const WHY_THIS_MATTERS: Record<string, string> = {
-  "offshore-plan":
-    "Versant inherits the BB- credit rating with $2.75B debt and a quarterly $0.375 dividend commitment. Offshoring with the right editorial / news / political-brand carve-outs is the cleanest near-term lever to reset the cost base before the NBCU TSA expires — and this module turns the configured impact levers into a defensible plan.",
   prototypes:
     "Versant leadership and the board move faster on AI when they can experience an agent, not just read about it. This module ships clickable prototypes for the highest-impact initiatives — Reconciliation Agent for Finance close, Editorial Standards co-pilot for News, ad sales pipeline scoring on the new direct-to-advertiser model — so each tower's headline initiative has working evidence.",
   "delivery-plan":
@@ -20,10 +18,6 @@ const WHY_THIS_MATTERS: Record<string, string> = {
 };
 
 const WHAT_TODAY: Record<string, { label: string; href: string }[]> = {
-  "offshore-plan": [
-    { label: "Set offshore dials per L4 Activity Group in Configure Impact Levers", href: "/impact-levers" },
-    { label: "Review the impact estimate", href: "/impact-levers/summary" },
-  ],
   prototypes: [
     { label: "See the AI initiatives by tower", href: "/towers" },
     { label: "Confirm priority levers in Configure Impact Levers", href: "/impact-levers" },

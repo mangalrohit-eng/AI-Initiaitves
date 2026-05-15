@@ -3,7 +3,12 @@
 import * as React from "react";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
-import type { L3WorkforceRow, TowerId } from "@/data/assess/types";
+import type {
+  GccPctSource,
+  L3WorkforceRow,
+  L4WorkforceRow,
+  TowerId,
+} from "@/data/assess/types";
 import { defaultTowerBaseline, defaultTowerState } from "@/data/assess/types";
 import {
   applyTowerStarterDefaults,
@@ -15,6 +20,7 @@ import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
 import { markRowsQueuedOnUpload } from "@/lib/initiatives/curationHash";
 import { resolveRowDescriptions } from "@/data/capabilityMap/descriptions";
 import { deriveL3Rows } from "@/lib/assess/deriveL3Rows";
+import { clampPct, totalRowHc } from "@/lib/offshore/offshoreSplit";
 import { stepCompletionNudge } from "@/lib/program/stepCompletionNudges";
 import {
   getAssessProgram,
@@ -264,12 +270,16 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
       headcountConfirmedAt: undefined,
       offshoreConfirmedAt: undefined,
       aiConfirmedAt: undefined,
+      // Reopening Step 1 invalidates the Step 2 offshore split too — the
+      // lanes may no longer cover every row after a map edit, and the
+      // tower lead must re-confirm.
+      offshoreViewValidatedAt: undefined,
     });
     if (sync?.canSync) await sync.flushSave();
     toast.info({
       title: "Capability map unlocked for editing",
       description:
-        "Step 2 (Impact Levers) is also back to pending sign-off — re-confirm once headcount and dial choices are workshop-ready.",
+        "Step 2 (Offshore View) and Step 3 (Impact Levers) are also back to pending sign-off — re-confirm once the map and GCC % decisions are workshop-ready.",
     });
   }, [sync, toast, towerId]);
 
@@ -277,6 +287,133 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
   const markL1L3TreeValidated = markL1L5TreeValidated;
   /** @deprecated Renamed to `clearL1L5TreeValidation` in the 5-layer migration. */
   const clearL1L3TreeValidation = clearL1L5TreeValidation;
+
+  // -------------------------------------------------------------------------
+  //   Step 2 — Offshore View ops
+  // -------------------------------------------------------------------------
+
+  /**
+   * Apply one or more `gccPct` decisions in a single atomic write. Each
+   * change writes `r.gccPct` + provenance + reason, and ALSO mirrors the
+   * new value into `r.offshoreAssessmentPct` so legacy roll-up math in
+   * `scenarioModel.computeRowOffshore` (which still reads the dial)
+   * continues to reconcile to Step 2 line-by-line.
+   *
+   * Also recomputes the parent L3 row's `offshoreAssessmentPct` as the
+   * HC-weighted mean of its child L4 `gccPct`, so Step 3 (Impact Levers)
+   * shows the right derived offshore $ without further refactor.
+   */
+  const applyGccPct = React.useCallback(
+    async (
+      changes: ReadonlyArray<{
+        rowId: string;
+        gccPct: number;
+        setBy: GccPctSource;
+        reason: string;
+      }>,
+    ) => {
+      if (changes.length === 0) return;
+      const cur = getAssessProgram().towers[towerId];
+      if (!cur) return;
+      const byId = new Map(changes.map((c) => [c.rowId, c] as const));
+      const now = new Date().toISOString();
+      const nextL4Rows: L4WorkforceRow[] = cur.l4Rows.map((r) => {
+        const change = byId.get(r.id);
+        if (!change) return r;
+        const pct = clampPct(change.gccPct);
+        const reason = change.reason.trim().slice(0, 200);
+        const updated: L4WorkforceRow = {
+          ...r,
+          gccPct: pct,
+          gccPctSetAt: now,
+          gccPctSource: change.setBy,
+          gccReason:
+            reason.length > 0
+              ? reason
+              : r.gccReason || "Tower lead set GCC share without a written rationale.",
+          offshoreAssessmentPct: pct,
+        };
+        return updated;
+      });
+      // Rebuild L3 offshore pct as the HC-weighted child L4 `gccPct`
+      // mean. Empty (no headcount) groups fall back to the unweighted
+      // mean so a freshly-uploaded map with all-zero HC still rolls up
+      // to a usable derived value.
+      const l4ById = new Map(nextL4Rows.map((r) => [r.id, r] as const));
+      const nextL3Rows = (cur.l3Rows ?? []).map((l3) => {
+        const childIds = l3.childL4RowIds ?? [];
+        if (childIds.length === 0) return l3;
+        let pctNumer = 0;
+        let weightDen = 0;
+        let plainSum = 0;
+        let plainN = 0;
+        for (const childId of childIds) {
+          const child = l4ById.get(childId);
+          if (!child) continue;
+          const pct = clampPct(child.gccPct);
+          const w = totalRowHc(child);
+          pctNumer += pct * (w || 1);
+          weightDen += w || 1;
+          plainSum += pct;
+          plainN += 1;
+        }
+        if (plainN === 0) return l3;
+        const derivedPct =
+          weightDen > 0 ? pctNumer / weightDen : plainSum / plainN;
+        return {
+          ...l3,
+          offshoreAssessmentPct: Math.round(derivedPct),
+        };
+      });
+      setTowerAssess(towerId, { l4Rows: nextL4Rows, l3Rows: nextL3Rows });
+      if (sync?.canSync) await sync.flushSave();
+    },
+    [sync, towerId],
+  );
+
+  /**
+   * Bulk-apply a single `gccPct` value to every row in the tower. Used by
+   * the Step 2 "Reset to AI suggestion" / "Mark every row at 0% (retained)
+   * / 100% (GCC)" toolbar actions. Same semantics as `applyGccPct` over
+   * the full row set.
+   */
+  const applyGccPctBulk = React.useCallback(
+    async (gccPct: number, setBy: GccPctSource, reason: string) => {
+      const cur = getAssessProgram().towers[towerId];
+      if (!cur || cur.l4Rows.length === 0) return;
+      const changes = cur.l4Rows.map((r) => ({
+        rowId: r.id,
+        gccPct,
+        setBy,
+        reason,
+      }));
+      await applyGccPct(changes);
+    },
+    [applyGccPct, towerId],
+  );
+
+  const markOffshoreClassificationValidated = React.useCallback(async () => {
+    setTowerAssess(towerId, {
+      offshoreViewValidatedAt: new Date().toISOString(),
+    });
+    if (sync?.canSync) await sync.flushSave();
+    toast.success({
+      title: `Step 2 locked for ${towerName}`,
+      description:
+        "Offshore split confirmed — Impact Levers now derives offshore $ from your GCC % decisions.",
+      durationMs: 6500,
+    });
+  }, [sync, toast, towerId, towerName]);
+
+  const clearOffshoreClassificationValidation = React.useCallback(async () => {
+    setTowerAssess(towerId, { offshoreViewValidatedAt: undefined });
+    if (sync?.canSync) await sync.flushSave();
+    toast.info({
+      title: "Offshore View unlocked for editing",
+      description:
+        "GCC % decisions are editable again — re-confirm Step 2 once the split matches your operating reality.",
+    });
+  }, [sync, toast, towerId]);
 
   return {
     program,
@@ -295,6 +432,10 @@ export function useTowerAssessOps(towerId: TowerId, towerName: string) {
     doUnmarkComplete,
     markL1L5TreeValidated,
     clearL1L5TreeValidation,
+    applyGccPct,
+    applyGccPctBulk,
+    markOffshoreClassificationValidated,
+    clearOffshoreClassificationValidation,
     /** @deprecated Renamed to `markL1L5TreeValidated` in the 5-layer migration. */
     markL1L3TreeValidated,
     /** @deprecated Renamed to `clearL1L5TreeValidation` in the 5-layer migration. */

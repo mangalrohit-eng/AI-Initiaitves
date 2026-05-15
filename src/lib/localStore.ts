@@ -1,6 +1,7 @@
 // Typed, SSR-safe wrapper over localStorage for all P1 collaboration state.
 import type {
   AssessProgramV2,
+  GccPctSource,
   GlobalAssessAssumptions,
   InitiativeReview,
   InitiativeReviewSnapshot,
@@ -27,6 +28,168 @@ import {
 import { resolveRowDescriptions } from "@/data/capabilityMap/descriptions";
 import { mergeLeadDeadlines, parseLeadDeadlines } from "@/lib/program/leadDeadlines";
 import { parseAiReadinessIntakeFromUnknown } from "@/lib/assess/towerReadinessIntake";
+import { clampPct } from "@/lib/offshore/offshoreSplit";
+
+/**
+ * Derive a `gccPct` triple from the legacy four-lane / strict-carve-out
+ * fields. Used by the read-time migration so pre-binary snapshots keep
+ * rendering the right offshore split without forcing tower leads to redo
+ * Step 2 from scratch.
+ *
+ * Mapping (kept stable so the strategist cache hash invalidates cleanly):
+ *
+ *   - `offshoreLane === "GccEligible"`        → 90% GCC, "ai" source.
+ *   - `offshoreLane === "GccWithOverlay"`     → 60% GCC, "ai" source.
+ *   - `offshoreLane === "OnshoreRetained"`    → 0%  GCC, reason carries
+ *                                               the carve-out reason if any.
+ *   - `offshoreLane === "EditorialCarveOut"`  → 0%  GCC, "Editorial floor".
+ *   - No lane, strict carve-out is `Editorial` → 0%, "Editorial floor".
+ *   - No lane, strict carve-out is set         → 0%, carve-out reason.
+ *   - No lane, no carve-out, legacy dial set  → dial%, "seed" source,
+ *                                               "Auto-seeded from legacy
+ *                                               offshore dial — review."
+ *   - Nothing at all                          → 0%, "seed", awaiting review.
+ *
+ * The returned `setBy` defaults to `"seed"` when the lane was itself
+ * auto-seeded (legacy programs that never touched Step 2). When the lane
+ * was set by the lead (`setBy === "user"`, `"ai"`, `"upload"`) the
+ * provenance is preserved through the migration — the lead doesn't lose
+ * their explicit confirmation just because the schema changed.
+ */
+function gccPctFromLegacyRow(x: Record<string, unknown>): {
+  gccPct: number;
+  gccPctSource: GccPctSource;
+  gccPctSetAt: string;
+  gccReason: string;
+} {
+  const now = new Date().toISOString();
+  // Read legacy lane block (lane + setBy + setAt).
+  const ol =
+    x.offshoreLane && typeof x.offshoreLane === "object"
+      ? (x.offshoreLane as Record<string, unknown>)
+      : null;
+  const validLaneSetBy =
+    ol?.setBy === "user" || ol?.setBy === "ai" || ol?.setBy === "upload";
+  const laneSource: GccPctSource = validLaneSetBy
+    ? (ol!.setBy as "user" | "ai" | "upload")
+    : "seed";
+  const setAt =
+    ol && typeof ol.setAt === "string" ? (ol.setAt as string) : now;
+
+  // Read legacy strict carve-out block (Editorial | Talent | SOX | Sales).
+  const sc =
+    x.offshoreStrictCarveOut && typeof x.offshoreStrictCarveOut === "object"
+      ? (x.offshoreStrictCarveOut as Record<string, unknown>)
+      : null;
+  const carveReason =
+    sc?.reason === "Editorial" ||
+    sc?.reason === "Talent" ||
+    sc?.reason === "SOX" ||
+    sc?.reason === "Sales"
+      ? (sc.reason as "Editorial" | "Talent" | "SOX" | "Sales")
+      : null;
+  const carveSource: GccPctSource =
+    sc?.setBy === "user" ? "user" : "seed";
+
+  // Lane path — the lead's explicit Step 2 decision under the old schema.
+  if (ol?.lane === "GccEligible") {
+    return {
+      gccPct: 90,
+      gccPctSource: laneSource,
+      gccPctSetAt: setAt,
+      gccReason:
+        "Transactional / repeatable work — primary candidate for the India GCC build-out.",
+    };
+  }
+  if (ol?.lane === "GccWithOverlay") {
+    return {
+      gccPct: 60,
+      gccPctSource: laneSource,
+      gccPctSetAt: setAt,
+      gccReason:
+        "GCC with onshore overlay — bulk of work moves; client / judgment touchpoints stay.",
+    };
+  }
+  if (ol?.lane === "EditorialCarveOut") {
+    return {
+      gccPct: 0,
+      gccPctSource: laneSource,
+      gccPctSetAt: setAt,
+      gccReason:
+        "Editorial floor — newsroom / on-air / editorial-standards work stays onshore.",
+    };
+  }
+  if (ol?.lane === "OnshoreRetained") {
+    let reason =
+      "Strategic, relationship, or executive-judgment work that stays onshore.";
+    if (carveReason === "Talent") {
+      reason =
+        "Talent retention — specialised onshore expertise we cannot rebuild offshore.";
+    } else if (carveReason === "SOX") {
+      reason =
+        "SOX / regulatory control — must execute onshore for audit defensibility.";
+    } else if (carveReason === "Sales") {
+      reason =
+        "Sales / client-relationship — direct seller and account ownership stays onshore.";
+    }
+    return {
+      gccPct: 0,
+      gccPctSource: laneSource,
+      gccPctSetAt: setAt,
+      gccReason: reason,
+    };
+  }
+
+  // No explicit lane — fall through to strict carve-out, then legacy dial.
+  if (carveReason === "Editorial") {
+    return {
+      gccPct: 0,
+      gccPctSource: carveSource,
+      gccPctSetAt:
+        sc && typeof sc.setAt === "string" ? (sc.setAt as string) : now,
+      gccReason:
+        "Editorial floor — newsroom / on-air / editorial-standards work stays onshore.",
+    };
+  }
+  if (carveReason) {
+    const reason =
+      carveReason === "Talent"
+        ? "Talent retention — specialised onshore expertise we cannot rebuild offshore."
+        : carveReason === "SOX"
+          ? "SOX / regulatory control — must execute onshore for audit defensibility."
+          : "Sales / client-relationship — direct seller and account ownership stays onshore.";
+    return {
+      gccPct: 0,
+      gccPctSource: carveSource,
+      gccPctSetAt:
+        sc && typeof sc.setAt === "string" ? (sc.setAt as string) : now,
+      gccReason: reason,
+    };
+  }
+
+  // Legacy offshore dial — auto-seed and mark for review.
+  const legacyDial =
+    typeof x.offshoreAssessmentPct === "number"
+      ? clampPct(x.offshoreAssessmentPct as number)
+      : null;
+  if (legacyDial != null) {
+    return {
+      gccPct: legacyDial,
+      gccPctSource: "seed",
+      gccPctSetAt: now,
+      gccReason:
+        "Auto-seeded from legacy offshore dial — review and confirm in Step 2.",
+    };
+  }
+
+  // No signal at all — awaiting review.
+  return {
+    gccPct: 0,
+    gccPctSource: "seed",
+    gccPctSetAt: now,
+    gccReason: "Awaiting Step 2 review — no offshore signal in legacy data.",
+  };
+}
 //
 // Conventions:
 //   - Every key is prefixed `forge.` to avoid collisions with other apps.
@@ -525,11 +688,18 @@ function groupLegacyL4RowsToL3(
       fteOffshore: a.fteOffshore,
       contractorOnshore: a.contractorOnshore,
       contractorOffshore: a.contractorOffshore,
+      gccPct: 0,
+      gccPctSetAt: new Date().toISOString(),
+      gccPctSource: "seed",
+      gccReason: "Auto-seeded from legacy capability map — review and confirm in Step 2.",
     };
     if (a.hasSpend) out.annualSpendUsd = a.annualSpendUsd;
     const off = offWeighted ?? offFallback;
     const ai = aiWeighted ?? aiFallback;
-    if (off != null) out.offshoreAssessmentPct = clamp01Pct(off);
+    if (off != null) {
+      out.offshoreAssessmentPct = clamp01Pct(off);
+      out.gccPct = clamp01Pct(off);
+    }
     if (ai != null) out.aiImpactAssessmentPct = clamp01Pct(ai);
     if (a.activities.length > 0) out.l5Activities = a.activities;
     return out;
@@ -721,6 +891,13 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
             fteOffshore: numOr(x.fteOffshore, 0),
             contractorOnshore: numOr(x.contractorOnshore, 0),
             contractorOffshore: numOr(x.contractorOffshore, 0),
+            // Placeholders — `gccPctFromLegacyRow` overwrites these below
+            // for legacy snapshots, and the already-migrated branch
+            // reads them straight off `x` when present.
+            gccPct: 0,
+            gccPctSetAt: new Date().toISOString(),
+            gccPctSource: "seed",
+            gccReason: "Awaiting Step 2 review — no offshore signal in legacy data.",
           };
           const sp = optNum(x.annualSpendUsd);
           if (sp != null && sp > 0) out.annualSpendUsd = sp;
@@ -792,6 +969,49 @@ function migrateAssessProgram(raw: unknown): AssessProgramV2 {
           }
           if (typeof x.dialsRationaleAt === "string") {
             out.dialsRationaleAt = x.dialsRationaleAt;
+          }
+          // Binary GCC model — every L4 carries a `gccPct` (0-100), the
+          // share of its HC that migrates to the primary India GCC. We
+          // accept already-migrated snapshots verbatim and rebuild from
+          // legacy lane / strict-carve-out / dial fields for everyone
+          // else. `gccPctFromLegacyRow` keeps the lead's explicit Step 2
+          // decisions (lane `setBy: "user" | "ai" | "upload"`) intact —
+          // only the rows that were auto-seeded under the old schema
+          // come back with `gccPctSource: "seed"` and need re-review.
+          const persistedGccPct =
+            typeof x.gccPct === "number" ? clampPct(x.gccPct as number) : null;
+          const persistedSource =
+            x.gccPctSource === "user" ||
+            x.gccPctSource === "ai" ||
+            x.gccPctSource === "upload" ||
+            x.gccPctSource === "seed"
+              ? (x.gccPctSource as GccPctSource)
+              : null;
+          if (persistedGccPct != null && persistedSource != null) {
+            out.gccPct = persistedGccPct;
+            out.gccPctSource = persistedSource;
+            out.gccPctSetAt =
+              typeof x.gccPctSetAt === "string"
+                ? (x.gccPctSetAt as string)
+                : new Date().toISOString();
+            out.gccReason =
+              typeof x.gccReason === "string" && (x.gccReason as string).trim()
+                ? (x.gccReason as string).trim().slice(0, 200)
+                : "Tower lead set GCC share without a written rationale.";
+            // Mirror into the legacy dial so unmigrated read-paths
+            // (scenarioModel.computeRowOffshore) still reconcile.
+            if (out.offshoreAssessmentPct == null) {
+              out.offshoreAssessmentPct = persistedGccPct;
+            }
+          } else {
+            const seeded = gccPctFromLegacyRow(x);
+            out.gccPct = seeded.gccPct;
+            out.gccPctSource = seeded.gccPctSource;
+            out.gccPctSetAt = seeded.gccPctSetAt;
+            out.gccReason = seeded.gccReason;
+            if (out.offshoreAssessmentPct == null) {
+              out.offshoreAssessmentPct = seeded.gccPct;
+            }
           }
           return out;
         })
@@ -986,10 +1206,69 @@ function migrateBackfillStep1Validated(program: AssessProgramV2): AssessProgramV
   return touched ? { ...program, towers } : program;
 }
 
+/**
+ * Read-time recovery: when a regenerate run is interrupted mid-flight
+ * (server crash, network drop, dev-server restart, browser tab closed
+ * during streaming, navigation away mid-run), the affected L3 rows are
+ * left with `curationStage` stuck on `"running-l5"` /
+ * `"running-verdict"` / `"running-curate"`. The toolbar's `inFlight`
+ * guard then disables both "Regenerate AI guidance" (Step 4) and
+ * "Refresh AI guidance" (StaleCurationBanner) forever — no live tab is
+ * actually doing the work, but the persisted flag never clears.
+ *
+ * Curation pipelines are entirely client-driven from the toolbar
+ * components. There is no other tab finishing the run — if the persisted
+ * state shows a `running-*` row at app boot, that work is *already*
+ * orphaned. Sweep it to `"failed"` with a clear interrupted message so
+ * the next render reads `inFlight === false` and the user can re-fire.
+ *
+ * Idempotent (only touches `running-*` rows). Pure / side-effect free.
+ */
+function migrateUnstickInterruptedCuration(
+  program: AssessProgramV2,
+): AssessProgramV2 {
+  const INTERRUPTED_MSG =
+    "Previous regenerate run was interrupted before it finished. Try Regenerate again.";
+  let touched = false;
+  const towers: AssessProgramV2["towers"] = {};
+  for (const [k, t] of Object.entries(program.towers)) {
+    if (!t) continue;
+    if (!t.l3Rows || t.l3Rows.length === 0) {
+      towers[k as TowerId] = t;
+      continue;
+    }
+    let towerTouched = false;
+    const nextL3Rows = t.l3Rows.map((r) => {
+      if (
+        r.curationStage === "running-l5" ||
+        r.curationStage === "running-verdict" ||
+        r.curationStage === "running-curate"
+      ) {
+        towerTouched = true;
+        return {
+          ...r,
+          curationStage: "failed" as const,
+          curationError: r.curationError ?? INTERRUPTED_MSG,
+        };
+      }
+      return r;
+    });
+    if (towerTouched) {
+      towers[k as TowerId] = { ...t, l3Rows: nextL3Rows };
+      touched = true;
+    } else {
+      towers[k as TowerId] = t;
+    }
+  }
+  return touched ? { ...program, towers } : program;
+}
+
 function finalizeAssessProgramFromRaw(raw: unknown): AssessProgramV2 {
   return migrateBootstrapCurationHash(
     migrateBackfillStep1Validated(
-      migrateBuggySeedComplete(migrateAssessProgram(raw)),
+      migrateUnstickInterruptedCuration(
+        migrateBuggySeedComplete(migrateAssessProgram(raw)),
+      ),
     ),
   );
 }
@@ -1009,7 +1288,9 @@ export function applyClientBootstrapMigrations(
   p: AssessProgramV2,
 ): AssessProgramV2 {
   return migrateBootstrapCurationHash(
-    migrateBackfillStep1Validated(migrateBuggySeedComplete(p)),
+    migrateBackfillStep1Validated(
+      migrateUnstickInterruptedCuration(migrateBuggySeedComplete(p)),
+    ),
   );
 }
 

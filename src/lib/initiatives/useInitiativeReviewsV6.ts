@@ -244,5 +244,9 @@ function buildAllRejectedV6Placeholder(rowId: string): V6InitiativeCard {
     isPlaceholder: true,
     attributedAiUsd: 0,
     l3FteDataMissing: false,
+    // Rejected placeholders span the full row, so applicability defaults
+    // to "Both" — the row's underlying L4s may straddle retained and
+    // offshored work.
+    applicability: "Both",
   };
 }

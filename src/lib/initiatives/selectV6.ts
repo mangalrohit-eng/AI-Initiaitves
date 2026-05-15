@@ -32,9 +32,11 @@ import type {
   AssessProgramV2,
   L3Initiative,
   L3WorkforceRowV6,
+  L4WorkforceRow,
   TowerId,
 } from "@/data/assess/types";
 import { defaultTowerBaseline, defaultTowerRates } from "@/data/assess/types";
+import { clampPct } from "@/lib/offshore/offshoreSplit";
 import {
   modeledSavingsForTower,
   rowModeledSaving,
@@ -44,6 +46,61 @@ import {
   attributeAiUsdAcrossInitiatives,
   computeL3FteDataMissing,
 } from "@/lib/initiatives/attributeL3AiUsd";
+
+/**
+ * Per-L4 binary disposition under the GCC / Retained model: an L4 with
+ * `gccPct >= 50` is "Offshored" for the purpose of Step 4 applicability,
+ * otherwise "Retained". The threshold is deliberately 50 (not 100) so a
+ * 70%/30% split row reads as Offshored (the majority lands in the GCC)
+ * and a 30%/70% row reads as Retained.
+ *
+ * Rolling up to the L3 grain: if every covered L4 lands on the same side
+ * → that's the L3's applicability. If they split → "Both" so the filter
+ * chip surfaces the initiative under either selection.
+ */
+const GCC_PCT_BINARY_THRESHOLD = 50;
+
+function l4DispositionFromGccPct(
+  row: Pick<L4WorkforceRow, "gccPct">,
+): "Retained" | "Offshored" {
+  return clampPct(row.gccPct) >= GCC_PCT_BINARY_THRESHOLD
+    ? "Offshored"
+    : "Retained";
+}
+
+/**
+ * Derive applicability for an initiative from the gccPct mix of the L4
+ * rows it covers. Covered rows are `init.coversL4RowIds` when set,
+ * otherwise the entire L3 row's `childL4RowIds`.
+ *
+ *   - "Retained"  → every covered L4 has `gccPct < 50` (predominantly stays).
+ *   - "Offshored" → every covered L4 has `gccPct >= 50` (predominantly moves).
+ *   - "Both"      → covered L4s split across the 50% threshold, OR none of
+ *                   the covered L4s exist (defensive default — keeps the
+ *                   initiative visible under any filter chip).
+ */
+export function deriveInitiativeApplicability(
+  init: Pick<L3Initiative, "coversL4RowIds"> | null,
+  l3Row: L3WorkforceRowV6,
+  l4ById: ReadonlyMap<string, L4WorkforceRow>,
+): "Retained" | "Offshored" | "Both" {
+  const coverIds =
+    init?.coversL4RowIds && init.coversL4RowIds.length > 0
+      ? init.coversL4RowIds
+      : l3Row.childL4RowIds;
+  let retained = 0;
+  let offshored = 0;
+  for (const id of coverIds) {
+    const child = l4ById.get(id);
+    if (!child) continue;
+    const disposition = l4DispositionFromGccPct(child);
+    if (disposition === "Retained") retained += 1;
+    else offshored += 1;
+  }
+  if (retained > 0 && offshored === 0) return "Retained";
+  if (offshored > 0 && retained === 0) return "Offshored";
+  return "Both";
+}
 
 // ===========================================================================
 //   View-model types
@@ -80,6 +137,19 @@ export type V6InitiativeCard = {
    * renders "covers N of M Activity Groups" using this.
    */
   coversL4RowIds: string[];
+  /**
+   * Applicability tag derived from the parent L3's child L4 lane mix at
+   * Step 2 lock time. Drives the per-tower Step 4 filter chips and the
+   * Cross-Tower strategist input builder's `baseScope` filter.
+   *
+   *   - "Retained"  → every covered L4 sits in OnshoreRetained / EditorialCarveOut.
+   *   - "Offshored" → every covered L4 sits in GccEligible / GccWithOverlay.
+   *   - "Both"     → covered L4s span both groups (default for unscored rows).
+   */
+  applicability: "Retained" | "Offshored" | "Both";
+  /** Optional cross-tower cluster name (set after the strategist run). */
+  clusterId?: string;
+  clusterName?: string;
   /** True when synthesized for ghost-row prevention (no real initiative). */
   isPlaceholder: boolean;
   /**
@@ -215,14 +285,16 @@ export function selectInitiativesV6ForTower(
     const cardsRaw: V6InitiativeCard[] = [];
     if (row.l3Initiatives && row.l3Initiatives.length > 0) {
       for (const init of row.l3Initiatives) {
-        cardsRaw.push(buildCardFromInitiative(init, towerId, row.id));
+        cardsRaw.push(
+          buildCardFromInitiative(init, towerId, row.id, row, l4ById),
+        );
         initiativesRendered += 1;
       }
     } else if (row.curationStage !== "queued") {
       // Dial > 0, not queued, but the LLM produced no solutions and
       // the row isn't waiting for a refresh — surface a placeholder so
       // the row stays visible and its modeled $ stays attributed.
-      cardsRaw.push(buildPlaceholderCard(row));
+      cardsRaw.push(buildPlaceholderCard(row, l4ById));
       placeholderRows += 1;
     }
     // Queued rows render with an empty `initiatives: []` — the
@@ -298,6 +370,8 @@ function buildCardFromInitiative(
   init: L3Initiative,
   towerId: TowerId,
   l3RowId: string,
+  l3Row: L3WorkforceRowV6,
+  l4ById: ReadonlyMap<string, L4WorkforceRow>,
 ): V6InitiativeCard {
   return {
     id: init.id,
@@ -309,6 +383,10 @@ function buildCardFromInitiative(
     primaryVendor: init.primaryVendor,
     iconKey: init.iconKey,
     coversL4RowIds: init.coversL4RowIds ?? [],
+    applicability:
+      init.applicability ?? deriveInitiativeApplicability(init, l3Row, l4ById),
+    clusterId: init.clusterId,
+    clusterName: init.clusterName,
     isPlaceholder: false,
     initiativeHref: `/tower/${towerId}/initiative/${encodeURIComponent(l3RowId)}/${encodeURIComponent(init.id)}`,
     promptVersion: init.promptVersion,
@@ -317,7 +395,10 @@ function buildCardFromInitiative(
   };
 }
 
-function buildPlaceholderCard(row: L3WorkforceRowV6): V6InitiativeCard {
+function buildPlaceholderCard(
+  row: L3WorkforceRowV6,
+  l4ById: ReadonlyMap<string, L4WorkforceRow>,
+): V6InitiativeCard {
   return {
     id: `${row.id}-placeholder`,
     solutionName: "AI Solutions pending discovery",
@@ -326,6 +407,7 @@ function buildPlaceholderCard(row: L3WorkforceRowV6): V6InitiativeCard {
     aiRationale:
       "Placeholder — re-run the AI Initiatives refresh from the banner above to generate a Versant-specific solution name and brief.",
     coversL4RowIds: row.childL4RowIds,
+    applicability: deriveInitiativeApplicability(null, row, l4ById),
     isPlaceholder: true,
     attributedAiUsd: 0,
     l3FteDataMissing: false,

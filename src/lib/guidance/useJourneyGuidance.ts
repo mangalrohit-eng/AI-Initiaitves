@@ -16,12 +16,19 @@ import { useInitiativeReviewsV6 } from "@/lib/initiatives/useInitiativeReviewsV6
 import {
   hubCapabilityMapLine,
   hubImpactLeversLine,
+  hubOffshorePlanLine,
   impactEstimateSummaryLine,
   resolveAiInitiativesGuidance,
   resolveCapabilityMapGuidance,
   resolveImpactLeversGuidance,
+  resolveOffshoreViewGuidance,
   towersPageLine,
 } from "./resolveTowerJourneyGuidance";
+import {
+  countUnreviewedOffshoreRows,
+  isClassificationStale,
+  isOffshoreClassificationLocked,
+} from "@/lib/assess/offshoreViewStepStatus";
 import type { ResolvedJourneyGuidance } from "./types";
 import { resolveProgramHomeGuidance } from "./programResume";
 
@@ -78,10 +85,47 @@ export function useGuidanceImpactLevers(
     const rows = program.towers[towerId]?.l4Rows ?? [];
     const stale = getTowerStaleState(program.towers[towerId]);
     const isTowerLeadComplete = program.towers[towerId]?.status === "complete";
+    const offshoreViewValidated =
+      program.towers[towerId]?.offshoreViewValidatedAt != null;
     return resolveImpactLeversGuidance({
       rowCount: rows.length,
       stale,
       isTowerLeadComplete: !!isTowerLeadComplete,
+      towerName,
+      towerId,
+      offshoreViewValidated,
+    });
+  }, [program, towerId, towerName]);
+}
+
+export function useGuidanceOffshoreView(
+  towerId: TowerId,
+  towerName: string,
+): ResolvedJourneyGuidance {
+  const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
+  return React.useMemo(() => {
+    const tower = program.towers[towerId];
+    const rows = tower?.l4Rows ?? [];
+    let unreviewedRowCount = 0;
+    let unchangedFromAiCount = 0;
+    for (const r of rows) {
+      const src = r.gccPctSource;
+      if (!src || src === "seed") {
+        unreviewedRowCount += 1;
+        continue;
+      }
+      if (src === "ai") unchangedFromAiCount += 1;
+    }
+    return resolveOffshoreViewGuidance({
+      rowCount: rows.length,
+      unreviewedRowCount,
+      unchangedFromAiCount,
+      classificationStale: isClassificationStale(tower),
+      offshoreViewValidated: tower?.offshoreViewValidatedAt != null,
       towerName,
       towerId,
     });
@@ -146,6 +190,53 @@ export function useGuidanceCapabilityMapHub(): ResolvedJourneyGuidance {
     );
     return hubCapabilityMapLine(hasAny);
   }, [program]);
+}
+
+export function useGuidanceOffshoreHub(): ResolvedJourneyGuidance {
+  const [program, setProgram] = React.useState(() => getAssessProgramHydrationSnapshot());
+  const [mine, setMine] = React.useState<TowerId[]>([]);
+  React.useEffect(() => {
+    setProgram(getAssessProgram());
+    return subscribe("assessProgram", () => setProgram(getAssessProgram()));
+  }, []);
+  React.useEffect(() => {
+    setMine(getMyTowers());
+    return subscribe("myTowers", () => setMine(getMyTowers()));
+  }, []);
+  return React.useMemo(() => {
+    const minePicked = mine.length > 0;
+    const mineSet = new Set(mine);
+    const orderedTowers = minePicked
+      ? [
+          ...towers.filter((t) => mineSet.has(t.id as TowerId)),
+          ...towers.filter((t) => !mineSet.has(t.id as TowerId)),
+        ]
+      : [...towers];
+    const towersWithRows = orderedTowers.filter(
+      (t) => (program.towers[t.id as TowerId]?.l4Rows.length ?? 0) > 0,
+    );
+    const hasAnyTowerWithRows = towersWithRows.length > 0;
+    const allLocked =
+      hasAnyTowerWithRows &&
+      towersWithRows.every((t) =>
+        isOffshoreClassificationLocked(program.towers[t.id as TowerId]),
+      );
+    // First tower with at least one unreviewed (seed-source) row that is
+    // not already locked — the natural "next" the lead should open.
+    const inProgressTower =
+      towersWithRows.find((t) => {
+        const ts = program.towers[t.id as TowerId];
+        if (!ts || isOffshoreClassificationLocked(ts)) return false;
+        return countUnreviewedOffshoreRows(ts) > 0;
+      }) ?? null;
+    return hubOffshorePlanLine(
+      hasAnyTowerWithRows,
+      inProgressTower
+        ? { name: inProgressTower.name, id: inProgressTower.id }
+        : null,
+      allLocked,
+    );
+  }, [program, mine]);
 }
 
 export function useGuidanceImpactHub(): ResolvedJourneyGuidance {

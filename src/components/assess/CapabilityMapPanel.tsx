@@ -30,6 +30,41 @@ type Props = {
    * footprint.
    */
   isPreview?: boolean;
+  /**
+   * Render mode. "explore" (default) is Step 1 — every L4 click toggles
+   * the L5 band, every box surfaces a single headcount chip. "offshore"
+   * is Step 2 — the L5 band is hidden, every box surfaces a Retained /
+   * GCC split chip, and L4 clicks call `onL4Click` (drives a popover in
+   * the Step 2 client) instead of toggling the L5 expansion set.
+   */
+  mode?: "explore" | "offshore";
+  /**
+   * Required for `mode === "offshore"`. Keyed by `L4WorkforceRow.id`
+   * (= `MapViewL4.id` post-`inferCapabilityViewFromRows`). The panel
+   * sums these into the L1 / L2 / L3 banner chips, so the same map
+   * powers every tier without re-walking the row set.
+   */
+  offshoreSplitByL4Id?: ReadonlyMap<
+    string,
+    { gccFte: number; retainedFte: number; totalHc: number; gccPct: number }
+  >;
+  /**
+   * Fired when an L4 box is clicked in offshore mode. The caller is
+   * responsible for opening / closing the GCC % editor popover.
+   */
+  onL4Click?: (l4Id: string) => void;
+  /**
+   * The L4 row id whose popover is currently open. Drives the L4 box's
+   * active ring + `aria-pressed` in offshore mode. `null` / undefined
+   * means no popover is open.
+   */
+  activeL4Id?: string | null;
+  /**
+   * Hide the master "Show all L5 Activities" toggle. Set implicitly in
+   * offshore mode (the L5 band never renders there), but exposed
+   * separately so future modes can suppress it independently.
+   */
+  hideL5Toggle?: boolean;
 };
 
 /**
@@ -88,7 +123,14 @@ export function CapabilityMapPanel({
   view,
   rows,
   isPreview = false,
+  mode = "explore",
+  offshoreSplitByL4Id,
+  onL4Click,
+  activeL4Id = null,
+  hideL5Toggle = false,
 }: Props) {
+  const offshoreMode = mode === "offshore";
+  const showMasterToggle = !offshoreMode && !hideL5Toggle;
   // Every L4 Activity Group id in the view — drives the master toggle and
   // the "all active" check.
   const allL4Ids = React.useMemo(
@@ -189,6 +231,79 @@ export function CapabilityMapPanel({
     return sum;
   }, [hcByRowId, isPreview]);
 
+  // -------------------------------------------------------------------------
+  //   Offshore-mode split aggregation (mirror of the headcount roll-up).
+  //
+  //   `offshoreSplitByL4Id` is keyed by L4 row id (= MapViewL4.id). L4 is the
+  //   source of truth; L3 / L2 / L1 sum their children. When the map is
+  //   absent or empty, every helper returns null so the banner chips fall
+  //   back to the standard headcount cluster (e.g. when this panel is
+  //   reused in explore mode).
+  // -------------------------------------------------------------------------
+  type SplitTotals = { retained: number; gcc: number };
+
+  const l4Split = React.useCallback(
+    (l4: MapViewL4): SplitTotals | null => {
+      if (!offshoreMode) return null;
+      if (!offshoreSplitByL4Id) return null;
+      const s = offshoreSplitByL4Id.get(l4.id);
+      if (!s) return null;
+      return { retained: s.retainedFte, gcc: s.gccFte };
+    },
+    [offshoreMode, offshoreSplitByL4Id],
+  );
+
+  const l3Split = React.useCallback(
+    (l3: MapViewL3): SplitTotals | null => {
+      if (!offshoreMode) return null;
+      let any = false;
+      let retained = 0;
+      let gcc = 0;
+      for (const l4 of l3.l4) {
+        const s = l4Split(l4);
+        if (s != null) {
+          any = true;
+          retained += s.retained;
+          gcc += s.gcc;
+        }
+      }
+      return any ? { retained, gcc } : null;
+    },
+    [offshoreMode, l4Split],
+  );
+
+  const l2Split = React.useCallback(
+    (l2: MapViewL2): SplitTotals | null => {
+      if (!offshoreMode) return null;
+      let any = false;
+      let retained = 0;
+      let gcc = 0;
+      for (const l3 of l2.l3) {
+        const s = l3Split(l3);
+        if (s != null) {
+          any = true;
+          retained += s.retained;
+          gcc += s.gcc;
+        }
+      }
+      return any ? { retained, gcc } : null;
+    },
+    [offshoreMode, l3Split],
+  );
+
+  const towerSplit = React.useMemo<SplitTotals | null>(() => {
+    if (!offshoreMode || !offshoreSplitByL4Id || offshoreSplitByL4Id.size === 0) {
+      return null;
+    }
+    let retained = 0;
+    let gcc = 0;
+    offshoreSplitByL4Id.forEach((v) => {
+      retained += v.retainedFte;
+      gcc += v.gccFte;
+    });
+    return { retained, gcc };
+  }, [offshoreMode, offshoreSplitByL4Id]);
+
   // Active state is keyed by L4 Activity Group id (the dial-bearing
   // rung). Clicking an L4 toggles its membership; the L5 band inside the
   // L4's L2 section reveals every L5 Activity under each active L4.
@@ -221,9 +336,15 @@ export function CapabilityMapPanel({
       {/* Top line: total L5 Activity count, fit-mode toggle, master L5 toggle. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] tabular-nums text-forge-hint">
-            {totalL5} L5 Activities
-          </span>
+          {offshoreMode ? (
+            <span className="font-mono text-[11px] tabular-nums text-forge-hint">
+              Click any L4 box to set its GCC %
+            </span>
+          ) : (
+            <span className="font-mono text-[11px] tabular-nums text-forge-hint">
+              {totalL5} L5 Activities
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {view.l2.length > 0 ? (
@@ -252,7 +373,7 @@ export function CapabilityMapPanel({
               {fitMode ? "Allow horizontal scroll" : "Fit to one page"}
             </button>
           ) : null}
-          {allL4Ids.length > 0 ? (
+          {allL4Ids.length > 0 && showMasterToggle ? (
             <button
               type="button"
               onClick={masterToggle}
@@ -291,7 +412,12 @@ export function CapabilityMapPanel({
       {isPreview ? <PreviewBanner totalL5={totalL5} /> : null}
 
       {/* L1 banner — full width, deepest purple wash. */}
-      <L1Banner name={view.l1Name} hc={towerHeadcount} fitMode={fitMode} />
+      <L1Banner
+        name={view.l1Name}
+        hc={towerHeadcount}
+        split={towerSplit}
+        fitMode={fitMode}
+      />
 
       {/* Single horizontal tier — all L2 groups sit on one row. Each
           group owns its L2 header bar and the L3 columns directly below
@@ -312,11 +438,17 @@ export function CapabilityMapPanel({
               key={l2.name}
               l2={l2}
               hc={l2Headcount(l2)}
+              split={l2Split(l2)}
               active={active}
               onToggleL4={toggleL4}
               l3HeadcountFn={l3Headcount}
               l4HeadcountFn={l4Headcount}
+              l3SplitFn={l3Split}
+              l4SplitFn={l4Split}
               fitMode={fitMode}
+              offshoreMode={offshoreMode}
+              onL4Click={onL4Click}
+              activeL4Id={activeL4Id}
             />
           ))}
         </div>
@@ -460,6 +592,66 @@ function ScrollableTier({
 const CHIP_HC_TITLE =
   "Headcount (FTE + contractor, onshore + offshore)";
 
+const CHIP_SPLIT_TITLE =
+  "Retained (onshore) | GCC India — derived from each L4 row's gccPct";
+
+/**
+ * Two-segment chip used in offshore mode in place of `HeadcountCluster`.
+ * Left half (amber) = retained / onshore FTE. Right half (purple) = GCC
+ * India FTE. Variant ladder mirrors `HeadcountCluster` so the chip slots
+ * into the same flex row as the headcount chip without altering any
+ * surrounding layout.
+ */
+function SplitChip({
+  retained,
+  gcc,
+  variant,
+  title = CHIP_SPLIT_TITLE,
+}: {
+  retained: number;
+  gcc: number;
+  variant: "banner" | "section" | "chip";
+  title?: string;
+}) {
+  const banner = variant === "banner";
+  const section = variant === "section";
+  const textClass = cn(
+    "font-mono font-semibold tabular-nums",
+    banner
+      ? "text-sm"
+      : section
+        ? "text-[11px]"
+        : "text-[9px] font-medium",
+  );
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 tabular-nums rounded-md border",
+        banner && "border-accent-purple/40 bg-forge-surface/70 px-2 py-0.5",
+        section && "border-accent-purple/35 bg-forge-surface/60 px-1.5 py-0.5",
+        !banner && !section && "border-forge-border/60 bg-forge-surface/40 px-1 py-px",
+      )}
+      title={title}
+    >
+      <span className={cn(textClass, "text-accent-amber")}>
+        {retained.toLocaleString()}
+      </span>
+      <span
+        aria-hidden
+        className={cn(
+          "select-none text-forge-hint",
+          banner ? "text-xs" : "text-[10px]",
+        )}
+      >
+        ·
+      </span>
+      <span className={cn(textClass, "text-accent-purple-dark")}>
+        {gcc.toLocaleString()}
+      </span>
+    </span>
+  );
+}
+
 function HeadcountCluster({
   hc,
   title,
@@ -525,10 +717,12 @@ function PreviewBanner({ totalL5 }: { totalL5: number }) {
 function L1Banner({
   name,
   hc,
+  split,
   fitMode,
 }: {
   name: string;
   hc: number | null;
+  split: { retained: number; gcc: number } | null;
   fitMode: boolean;
 }) {
   // In fit mode the L1 badge and inline FTE cluster are hidden, so the
@@ -537,7 +731,9 @@ function L1Banner({
   // the total — the panel caption explicitly tells them they can.
   const hoverTitle =
     fitMode && hc != null
-      ? `${name} — total headcount across this tower: ${hc.toLocaleString()} (FTE + contractor, onshore + offshore)`
+      ? split != null
+        ? `${name} — ${split.retained.toLocaleString()} retained · ${split.gcc.toLocaleString()} GCC India (HC-weighted across this tower)`
+        : `${name} — total headcount across this tower: ${hc.toLocaleString()} (FTE + contractor, onshore + offshore)`
       : undefined;
   return (
     <div
@@ -559,12 +755,21 @@ function L1Banner({
           {name}
         </span>
       </div>
-      {!fitMode && hc != null ? (
-        <HeadcountCluster
-          hc={hc}
-          variant="banner"
-          title="Total headcount across this tower (FTE + contractor, onshore + offshore)"
-        />
+      {!fitMode ? (
+        split != null ? (
+          <SplitChip
+            retained={split.retained}
+            gcc={split.gcc}
+            variant="banner"
+            title={`${name} — ${split.retained.toLocaleString()} retained · ${split.gcc.toLocaleString()} GCC India (HC-weighted across this tower)`}
+          />
+        ) : hc != null ? (
+          <HeadcountCluster
+            hc={hc}
+            variant="banner"
+            title="Total headcount across this tower (FTE + contractor, onshore + offshore)"
+          />
+        ) : null
       ) : null}
     </div>
   );
@@ -573,23 +778,40 @@ function L1Banner({
 function L2Group({
   l2,
   hc,
+  split,
   active,
   onToggleL4,
   l3HeadcountFn,
   l4HeadcountFn,
+  l3SplitFn,
+  l4SplitFn,
   fitMode,
+  offshoreMode,
+  onL4Click,
+  activeL4Id,
 }: {
   l2: MapViewL2;
   hc: number | null;
+  split: { retained: number; gcc: number } | null;
   active: Set<string>;
   onToggleL4: (id: string) => void;
   l3HeadcountFn: (l3: MapViewL3) => number | null;
   l4HeadcountFn: (l4: MapViewL4) => number | null;
+  l3SplitFn: (l3: MapViewL3) => { retained: number; gcc: number } | null;
+  l4SplitFn: (l4: MapViewL4) => { retained: number; gcc: number } | null;
   fitMode: boolean;
+  offshoreMode: boolean;
+  onL4Click?: (l4Id: string) => void;
+  activeL4Id: string | null;
 }) {
+  // In offshore mode the L5 band never opens (L4 click goes to the GCC %
+  // editor popover), so we skip the active-set walk and never render the
+  // band — its scaffolding is dead code in that mode.
   const anyL4ActiveInL2 = React.useMemo(
-    () => l2.l3.some((l3) => l3.l4.some((l4) => active.has(l4.id))),
-    [l2, active],
+    () =>
+      !offshoreMode &&
+      l2.l3.some((l3) => l3.l4.some((l4) => active.has(l4.id))),
+    [l2, active, offshoreMode],
   );
 
   return (
@@ -606,7 +828,7 @@ function L2Group({
       )}
       style={fitMode ? { flexGrow: l2.l3.length } : undefined}
     >
-      <L2HeaderBar name={l2.name} hc={hc} fitMode={fitMode} />
+      <L2HeaderBar name={l2.name} hc={hc} split={split} fitMode={fitMode} />
 
       {/* L3 row: columns laid out horizontally. In scroll mode columns
           are fixed 200px wide; in fit mode they share width via
@@ -623,17 +845,23 @@ function L2Group({
             key={l3.name}
             l3={l3}
             hc={l3HeadcountFn(l3)}
+            split={l3SplitFn(l3)}
             active={active}
             onToggleL4={onToggleL4}
             l4HeadcountFn={l4HeadcountFn}
+            l4SplitFn={l4SplitFn}
             fitMode={fitMode}
+            offshoreMode={offshoreMode}
+            onL4Click={onL4Click}
+            activeL4Id={activeL4Id}
           />
         ))}
       </div>
 
       {/* L5 band: only when at least one L4 inside this L2 group is
           active. Same column structure as the main band so chips line
-          up under their parent L4 column. */}
+          up under their parent L4 column. Offshore mode skips this
+          entirely. */}
       {anyL4ActiveInL2 ? (
         <>
           <BandDivider />
@@ -661,18 +889,24 @@ function L2Group({
 function L2HeaderBar({
   name,
   hc,
+  split,
   fitMode,
 }: {
   name: string;
   hc: number | null;
+  split: { retained: number; gcc: number } | null;
   fitMode: boolean;
 }) {
   // Mirror L1Banner: in fit mode the L2 badge + inline FTE cluster are
-  // hidden, so we promote the headcount info onto the bar's parent
-  // title so hover still surfaces the value.
+  // hidden, so we promote the headcount / split info onto the bar's
+  // parent title so hover still surfaces the value.
   const hoverTitle =
-    fitMode && hc != null
-      ? `${name} — total headcount across this Job Grouping: ${hc.toLocaleString()} (FTE + contractor, onshore + offshore)`
+    fitMode
+      ? split != null
+        ? `${name} — ${split.retained.toLocaleString()} retained · ${split.gcc.toLocaleString()} GCC India (HC-weighted across this Job Grouping)`
+        : hc != null
+          ? `${name} — total headcount across this Job Grouping: ${hc.toLocaleString()} (FTE + contractor, onshore + offshore)`
+          : undefined
       : undefined;
   return (
     <div
@@ -696,12 +930,21 @@ function L2HeaderBar({
           {name}
         </span>
       </div>
-      {!fitMode && hc != null ? (
-        <HeadcountCluster
-          hc={hc}
-          variant="section"
-          title="Total headcount across this Job Grouping (FTE + contractor, onshore + offshore)"
-        />
+      {!fitMode ? (
+        split != null ? (
+          <SplitChip
+            retained={split.retained}
+            gcc={split.gcc}
+            variant="section"
+            title={`${name} — ${split.retained.toLocaleString()} retained · ${split.gcc.toLocaleString()} GCC India (HC-weighted across this Job Grouping)`}
+          />
+        ) : hc != null ? (
+          <HeadcountCluster
+            hc={hc}
+            variant="section"
+            title="Total headcount across this Job Grouping (FTE + contractor, onshore + offshore)"
+          />
+        ) : null
       ) : null}
     </div>
   );
@@ -710,17 +953,27 @@ function L2HeaderBar({
 function L3Column({
   l3,
   hc,
+  split,
   active,
   onToggleL4,
   l4HeadcountFn,
+  l4SplitFn,
   fitMode,
+  offshoreMode,
+  onL4Click,
+  activeL4Id,
 }: {
   l3: MapViewL3;
   hc: number | null;
+  split: { retained: number; gcc: number } | null;
   active: Set<string>;
   onToggleL4: (id: string) => void;
   l4HeadcountFn: (l4: MapViewL4) => number | null;
+  l4SplitFn: (l4: MapViewL4) => { retained: number; gcc: number } | null;
   fitMode: boolean;
+  offshoreMode: boolean;
+  onL4Click?: (l4Id: string) => void;
+  activeL4Id: string | null;
 }) {
   return (
     <div
@@ -737,42 +990,62 @@ function L3Column({
         tier="l3"
         name={l3.name}
         hc={hc}
+        split={split}
         title={
-          hc != null
-            ? `${l3.name} — ${hc.toLocaleString()} headcount`
-            : l3.name
+          split != null
+            ? `${l3.name} — ${split.retained.toLocaleString()} retained · ${split.gcc.toLocaleString()} GCC India`
+            : hc != null
+              ? `${l3.name} — ${hc.toLocaleString()} headcount`
+              : l3.name
         }
         data-l3={l3.name}
         fitMode={fitMode}
         ariaLabel={
-          hc != null
-            ? `L3 ${l3.name}, ${hc.toLocaleString()} headcount`
-            : `L3 ${l3.name}`
+          split != null
+            ? `L3 ${l3.name}, ${split.retained.toLocaleString()} retained, ${split.gcc.toLocaleString()} to GCC`
+            : hc != null
+              ? `L3 ${l3.name}, ${hc.toLocaleString()} headcount`
+              : `L3 ${l3.name}`
         }
       />
       {l3.l4.map((l4) => {
-        const isActive = active.has(l4.id);
         const l4Hc = l4HeadcountFn(l4);
+        const l4SplitVal = l4SplitFn(l4);
+        const isActive = offshoreMode
+          ? activeL4Id === l4.id
+          : active.has(l4.id);
+        const onClick = offshoreMode
+          ? onL4Click
+            ? () => onL4Click(l4.id)
+            : undefined
+          : () => onToggleL4(l4.id);
+        const title = offshoreMode
+          ? l4SplitVal != null
+            ? `${l4.name} — ${l4SplitVal.retained.toLocaleString()} retained · ${l4SplitVal.gcc.toLocaleString()} GCC India — click to edit GCC %`
+            : `${l4.name} — click to set GCC %`
+          : l4Hc != null
+            ? `${l4.name} — ${l4Hc.toLocaleString()} headcount`
+            : l4.name;
+        const ariaLabel = offshoreMode
+          ? l4SplitVal != null
+            ? `L4 ${l4.name}, ${l4SplitVal.retained.toLocaleString()} retained, ${l4SplitVal.gcc.toLocaleString()} to GCC${isActive ? ", editing" : ""}`
+            : `L4 ${l4.name}${isActive ? ", editing" : ""}`
+          : l4Hc != null
+            ? `L4 ${l4.name}, ${l4Hc.toLocaleString()} headcount${isActive ? ", expanded" : ""}`
+            : `L4 ${l4.name}${isActive ? ", expanded" : ""}`;
         return (
           <Box
             key={l4.id}
             tier="l4"
             name={l4.name}
             hc={l4Hc}
-            title={
-              l4Hc != null
-                ? `${l4.name} — ${l4Hc.toLocaleString()} headcount`
-                : l4.name
-            }
+            split={l4SplitVal}
+            title={title}
             isActive={isActive}
-            onClick={() => onToggleL4(l4.id)}
+            onClick={onClick}
             data-l4={l4.id}
             fitMode={fitMode}
-            ariaLabel={
-              l4Hc != null
-                ? `L4 ${l4.name}, ${l4Hc.toLocaleString()} headcount${isActive ? ", expanded" : ""}`
-                : `L4 ${l4.name}${isActive ? ", expanded" : ""}`
-            }
+            ariaLabel={ariaLabel}
             ariaPressed={isActive}
           />
         );
@@ -929,6 +1202,13 @@ type BoxBaseProps = {
   name: string;
   title: string;
   hc: number | null;
+  /**
+   * Optional retained / GCC split. When provided (offshore mode), the
+   * inline chip is rendered as a two-segment SplitChip in place of the
+   * HeadcountCluster. `hc` is still used for the row's secondary
+   * tooltip context but never rendered when `split` is present.
+   */
+  split?: { retained: number; gcc: number } | null;
   isActive?: boolean;
   ariaLabel?: string;
   ariaPressed?: boolean;
@@ -963,6 +1243,7 @@ function Box(props: BoxBaseProps) {
     name,
     title,
     hc,
+    split,
     isActive,
     ariaLabel,
     ariaPressed,
@@ -1037,17 +1318,25 @@ function Box(props: BoxBaseProps) {
         : tier === "l5" ? "l5"
           : null;
 
-  // Per-row inline headcount chip is suppressed in fit mode — the chip
-  // would steal the box's text area at narrow column widths and break
-  // the line-clamp budget. The L1 / L2 banner totals stay visible, and
-  // the per-L4 number remains in the `title` tooltip on hover.
-  const showInlineHc = hc != null && !fitMode;
+  // Per-row inline chip is suppressed in fit mode — the chip would steal
+  // the box's text area at narrow column widths and break the line-clamp
+  // budget. The L1 / L2 banner totals stay visible, and the per-L4
+  // number remains in the `title` tooltip on hover. Offshore mode prefers
+  // the SplitChip (retained / GCC) over the single-value HC cluster.
+  const showInlineSplit = split != null && !fitMode;
+  const showInlineHc = !showInlineSplit && hc != null && !fitMode;
 
   const inner = (
     <>
       {badgeTier ? <TierBadge tier={badgeTier} /> : null}
       <span className={nameClass}>{name}</span>
-      {showInlineHc ? (
+      {showInlineSplit ? (
+        <SplitChip
+          retained={(split as { retained: number; gcc: number }).retained}
+          gcc={(split as { retained: number; gcc: number }).gcc}
+          variant="chip"
+        />
+      ) : showInlineHc ? (
         <HeadcountCluster hc={hc as number} variant="chip" title={CHIP_HC_TITLE} />
       ) : null}
     </>

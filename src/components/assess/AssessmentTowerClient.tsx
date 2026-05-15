@@ -36,6 +36,7 @@ import type {
 } from "@/data/assess/types";
 import { getTowerHref } from "@/lib/towerHref";
 import { isCapabilityMapJourneyStepDone } from "@/lib/assess/capabilityMapStepStatus";
+import { isOffshoreViewJourneyStepDone } from "@/lib/assess/offshoreViewStepStatus";
 import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import { useAsyncOp } from "@/lib/feedback/useAsyncOp";
 import { llmLoadingCopy } from "@/lib/llm/loadingCopy";
@@ -73,9 +74,12 @@ export function AssessmentTowerClient({ towerId, towerName }: Props) {
     doUnmarkComplete,
   } = ops;
 
-  const completedModules: ReadonlyArray<"capability-map" | "impact-levers"> = (() => {
-    const arr: Array<"capability-map" | "impact-levers"> = [];
+  const completedModules: ReadonlyArray<
+    "capability-map" | "offshore-view" | "impact-levers"
+  > = (() => {
+    const arr: Array<"capability-map" | "offshore-view" | "impact-levers"> = [];
     if (isCapabilityMapJourneyStepDone(tState)) arr.push("capability-map");
+    if (isOffshoreViewJourneyStepDone(tState)) arr.push("offshore-view");
     if (isComplete) arr.push("impact-levers");
     return arr;
   })();

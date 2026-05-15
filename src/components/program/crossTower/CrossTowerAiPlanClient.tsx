@@ -46,6 +46,11 @@ import { ProjectsRoadmapModule } from "./ProjectsRoadmapModule";
 import { ProgramArchitecturePanel } from "./ProgramArchitecturePanel";
 import { ProgramRisksPanel } from "./ProgramRisksPanel";
 import { AssumptionsTab } from "./AssumptionsTab";
+import { OutcomeClustersTab } from "./OutcomeClustersTab";
+import { OrchestrationLayerTab } from "./OrchestrationLayerTab";
+import { BaseScopeSelector } from "@/components/program/BaseScopeSelector";
+import { useBaseScope } from "@/lib/scope/baseScope";
+import { useStrategistOutputs } from "@/lib/llm/useStrategistOutputs";
 import {
   buildDeckPayload,
   writeDeckPayloadToLocalStorage,
@@ -107,6 +112,12 @@ export function CrossTowerAiPlanClient() {
   const exportMenuRef = React.useRef<HTMLDivElement>(null);
   const exportMenuTriggerRef = React.useRef<HTMLButtonElement>(null);
 
+  // Program-level base scope (All of Versant vs Retained org only).
+  // Drives the strategist run only — KPIs / projects / matrix below
+  // continue to honour the existing per-view tower / phase filters.
+  const [baseScope] = useBaseScope();
+  const strategistApi = useStrategistOutputs(baseScope);
+
   const isLoading = state.status === "loading";
   const isError = state.status === "error";
   const isReady = state.status === "ready";
@@ -159,28 +170,66 @@ export function CrossTowerAiPlanClient() {
     return subscribe("assessProgram", sync);
   }, [state.generatedAt, state.status, state.synthesis]);
 
-  // Debounce regenerate clicks; force regeneration when the user clicks on
-  // an unchanged scenario (they're asking for a *new* narrative for the
-  // same input). When stale, let the cache-key naturally invalidate.
+  // The top "Regenerate plan" button drives TWO independent pipelines:
+  //
+  //   1. `regenerate(...)`  → /api/cross-tower-ai-plan/generate
+  //                            (KPIs, ranked projects, value × effort 2x2,
+  //                            roadmap, value buildup, architecture)
+  //   2. `strategistApi.generate(...)` → /api/cross-tower-ai-plan/strategist
+  //                            (Outcome Clusters tab, Discrete Initiatives,
+  //                            Orchestration & Data Layer tab)
+  //
+  // Both consume the same upstream substrate (capability map + offshore
+  // split + readiness intake) but emit different artifacts, so we fan
+  // them out in parallel on every Regenerate click. Without this the
+  // Outcome Clusters / Orchestration tabs silently stay empty after the
+  // user clicks Regenerate.
+  const strategistStatus = strategistApi.state.status;
+  const strategistGeneratedAt = strategistApi.state.generatedAt;
+  const strategistIsStale = strategistApi.isStale;
+  const strategistGenerate = strategistApi.generate;
+  const strategistIsLoading = strategistStatus === "loading";
+  const strategistIsFirstRun =
+    strategistStatus !== "loading" && strategistGeneratedAt == null;
+
+  // Composite flags drive the button mode + caption so it tells the
+  // truth about *both* pipelines instead of just the deterministic one.
+  const anyLoading = isLoading || strategistIsLoading;
+  const anyFirstRun = isFirstRun || strategistIsFirstRun;
+  const anyStale = isStale || strategistIsStale;
+
   const [debouncing, setDebouncing] = React.useState(false);
   const handleRegenerate = React.useCallback(async () => {
-    if (isLoading || debouncing || hydrating || state.hydratingFromDb) return;
+    if (anyLoading || debouncing || hydrating || state.hydratingFromDb) return;
     setDebouncing(true);
     try {
-      await regenerate({
-        forceRegenerate: !isFirstRun && !isStale,
-      });
+      // Force regeneration when the user clicks on an unchanged scenario
+      // (asking for a *new* narrative for the same input). When stale,
+      // let the cache-key naturally invalidate. Each pipeline computes
+      // its own force flag from its own first-run / stale signals.
+      const planForce = !isFirstRun && !isStale;
+      const strategistForce = !strategistIsFirstRun && !strategistIsStale;
+      // Settle both before clearing the debounce. `Promise.allSettled`
+      // means a failure in one (e.g. strategist outage) doesn't strand
+      // the other's success state.
+      await Promise.allSettled([
+        regenerate({ forceRegenerate: planForce }),
+        strategistGenerate({ forceRegenerate: strategistForce }),
+      ]);
     } finally {
       setTimeout(() => setDebouncing(false), 600);
     }
   }, [
-    isLoading,
+    anyLoading,
     debouncing,
     hydrating,
     state.hydratingFromDb,
     regenerate,
     isFirstRun,
     isStale,
+    strategistGenerate,
+    strategistIsFirstRun,
+    strategistIsStale,
   ]);
 
   const [selectedTowerIds, setSelectedTowerIds] = React.useState<TowerId[]>(
@@ -385,6 +434,27 @@ export function CrossTowerAiPlanClient() {
         ),
       },
       {
+        id: "outcome-clusters",
+        label: "Outcome Clusters",
+        content: (
+          <OutcomeClustersTab
+            scope={baseScope}
+            api={strategistApi}
+            onJumpToOrchestration={() => setActiveTabId("orchestration")}
+          />
+        ),
+      },
+      {
+        id: "orchestration",
+        label: "Orchestration & Data Layer",
+        content: (
+          <OrchestrationLayerTab
+            scope={baseScope}
+            api={strategistApi}
+          />
+        ),
+      },
+      {
         id: "overview",
         label: "Overview",
         content: (
@@ -473,16 +543,16 @@ export function CrossTowerAiPlanClient() {
     ],
     [
       assumptions,
-      debouncing,
+      baseScope,
       filteredBuildup,
       filteredKpis,
       filteredProgram,
       filteredProjects,
-      isLoading,
       isStale,
       openProject,
       program,
       state.synthesis,
+      strategistApi,
       update,
       reset,
       viewFiltersActive,
@@ -605,14 +675,18 @@ export function CrossTowerAiPlanClient() {
               </div>
               <RegenerateAction
                 state={state}
-                isLoading={isLoading || debouncing}
+                isLoading={anyLoading || debouncing}
                 hydratingFromDb={state.hydratingFromDb}
                 persistenceMode={state.persistenceMode}
-                isFirstRun={isFirstRun}
-                isStale={isStale}
+                isFirstRun={anyFirstRun}
+                isStale={anyStale}
                 onClick={handleRegenerate}
               />
             </div>
+            <BaseScopeSelector />
+            <p className="max-w-xs text-right text-[10.5px] leading-snug text-forge-hint">
+              Base scope drives the Outcome Clusters and Orchestration tabs.
+            </p>
             {exportError ? (
               <p className="max-w-sm text-right text-[11px] text-accent-red">
                 {exportError}

@@ -5,10 +5,13 @@ import {
   ArrowDownAZ,
   Building2,
   Compass,
+  Globe2,
   Layers,
+  MapPin,
   Rocket,
   Search,
   SlidersHorizontal,
+  Sparkles,
   Target,
   X,
 } from "lucide-react";
@@ -30,6 +33,19 @@ import { cn } from "@/lib/utils";
 
 type SortKey = "value-desc" | "feasibility-then-value" | "name";
 type FeasibilityFilter = "all" | "high" | "low";
+/**
+ * Applicability scope filter for the gallery. Inclusive interpretation:
+ *   - `all`       — no filter (default).
+ *   - `retained`  — initiatives that touch the retained / onshore org
+ *                   (`applicability === "Retained" || "Both"`).
+ *   - `gcc`       — initiatives that touch the GCC / offshore org
+ *                   (`applicability === "Offshored" || "Both"`).
+ *
+ * "Both" rows surface under either segment because the work spans both
+ * orgs by definition — hiding them would understate each segment lead's
+ * roster.
+ */
+type ApplicabilityFilter = "all" | "retained" | "gcc";
 
 type Row = {
   init: V6InitiativeCard;
@@ -47,6 +63,7 @@ type Row = {
 type GalleryState = {
   sort: SortKey;
   feasibility: FeasibilityFilter;
+  applicability: ApplicabilityFilter;
   jobFamilies: string[];
   vendors: string[];
   quadrants: Quadrant[];
@@ -63,6 +80,7 @@ function defaultState(): GalleryState {
   return {
     sort: "feasibility-then-value",
     feasibility: "all",
+    applicability: "all",
     jobFamilies: [],
     vendors: [],
     quadrants: [],
@@ -105,6 +123,32 @@ const FEASIBILITY_OPTIONS: ReadonlyArray<{
   { id: "all", label: "All" },
   { id: "high", label: "Proven pattern", Icon: Rocket },
   { id: "low", label: "New build", Icon: Compass },
+];
+
+const APPLICABILITY_OPTIONS: ReadonlyArray<{
+  id: ApplicabilityFilter;
+  label: string;
+  hint: string;
+  Icon?: React.ComponentType<{ className?: string }>;
+}> = [
+  {
+    id: "all",
+    label: "All orgs",
+    hint: "Show every initiative regardless of which org the underlying work belongs to.",
+    Icon: Sparkles,
+  },
+  {
+    id: "retained",
+    label: "Retained only",
+    hint: "Only initiatives that target work staying onshore (OnshoreRetained / EditorialCarveOut). Includes 'Both' rows.",
+    Icon: MapPin,
+  },
+  {
+    id: "gcc",
+    label: "GCC only",
+    hint: "Only initiatives that target work moving to the India GCC (GccEligible / GccWithOverlay). Includes 'Both' rows.",
+    Icon: Globe2,
+  },
 ];
 
 /**
@@ -230,6 +274,15 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
       if (state.feasibility === "low" && row.init.feasibility === "High") {
         return false;
       }
+      // Applicability scope (org filter): inclusive — "Both" rows surface
+      // under either segment because the work spans both orgs.
+      if (state.applicability === "retained") {
+        const a = row.init.applicability;
+        if (a !== "Retained" && a !== "Both") return false;
+      } else if (state.applicability === "gcc") {
+        const a = row.init.applicability;
+        if (a !== "Offshored" && a !== "Both") return false;
+      }
       if (jfSet.size > 0 && !jfSet.has(row.l3Name)) return false;
       if (venSet.size > 0) {
         const rowVendors = splitVendors(row.init.primaryVendor);
@@ -277,6 +330,7 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
   const totalShown = sorted.length;
   const hasActiveFilters =
     state.feasibility !== "all" ||
+    state.applicability !== "all" ||
     state.jobFamilies.length > 0 ||
     state.vendors.length > 0 ||
     state.quadrants.length > 0 ||
@@ -286,6 +340,7 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
     setState((s) => ({
       ...s,
       feasibility: "all",
+      applicability: "all",
       jobFamilies: [],
       vendors: [],
       quadrants: [],
@@ -357,6 +412,7 @@ function Toolbar({
   return (
     <div className="space-y-3 rounded-2xl border border-forge-border bg-forge-surface/50 p-3">
       <div className="flex flex-wrap items-center gap-2">
+        <ApplicabilityToggle state={state} setState={setState} />
         <FeasibilityToggle state={state} setState={setState} />
         <MultiSelectFilter
           label="Job Family"
@@ -439,6 +495,56 @@ function Toolbar({
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Org-scope segmented control: All orgs / Retained only / GCC only.
+ *
+ * Backed by `init.applicability` which `deriveInitiativeApplicability`
+ * computes from the Step 2 lane mix on the L4 children of the L3 row
+ * that owns each initiative. Inclusive interpretation — `Both` rows
+ * surface under either segment so neither lead misses cross-org work.
+ *
+ * Sits adjacent to `FeasibilityToggle` in the toolbar; mirrors that
+ * component's pill styling so the two segmented controls read as a
+ * pair (org filter + ship-readiness filter).
+ */
+function ApplicabilityToggle({
+  state,
+  setState,
+}: {
+  state: GalleryState;
+  setState: React.Dispatch<React.SetStateAction<GalleryState>>;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Filter by org applicability"
+      className="inline-flex rounded-full border border-forge-border bg-forge-well/40 p-0.5"
+    >
+      {APPLICABILITY_OPTIONS.map(({ id, label, hint, Icon }) => {
+        const active = state.applicability === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setState((s) => ({ ...s, applicability: id }))}
+            title={hint}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition",
+              active
+                ? "bg-accent-purple/15 text-accent-purple-light"
+                : "text-forge-body hover:bg-forge-well",
+            )}
+            aria-pressed={active}
+          >
+            {Icon ? <Icon className="h-3.5 w-3.5" aria-hidden /> : null}
+            <span>{label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

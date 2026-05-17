@@ -1,5 +1,7 @@
 import type {
   AssessProgramV2,
+  IntakeStatusEntry,
+  IntakeStatusEvidenceField,
   L4WorkforceRow,
   TowerAiReadinessIntake,
   TowerAssessState,
@@ -218,4 +220,108 @@ export function validateIntakeTemplateQuestionCells(
     }
   }
   return { ok: true };
+}
+
+// ===========================================================================
+//   Intake-driven status classification helpers
+// ===========================================================================
+
+/**
+ * UI-facing labels for the tri-state classification. Single source of
+ * truth shared across `SolutionsGallery` (filter toggle), `SolutionCardV2`
+ * (status pill), the deep-dive evidence block, and the cross-tower
+ * `AIProjectsModule` so the wording never drifts.
+ */
+export const INTAKE_STATUS_LABELS: Record<
+  IntakeStatusEntry["status"],
+  string
+> = {
+  done: "Done",
+  "in-progress": "In Progress",
+  "not-done": "Not Done",
+};
+
+/**
+ * Tailwind class fragments for the three states. Mirrors the existing
+ * priority palette from `versant-forge` rules:
+ *   - Done       → Accent Green (#00C853) — "already running per intake"
+ *   - In Progress → Accent Amber (#FFB300) — "piloted / actively kicking off"
+ *   - Not Done   → muted forge-subtle — "no evidence in the intake"
+ *
+ * The `dot` / `chip` tokens are used by `IntakeStatusPill`; the `toggle`
+ * token is used by the segmented control in the gallery toolbars.
+ */
+export const INTAKE_STATUS_COLORS: Record<
+  IntakeStatusEntry["status"],
+  { dot: string; chip: string; toggle: string }
+> = {
+  done: {
+    dot: "bg-accent-green",
+    chip: "border-accent-green/40 bg-accent-green/10 text-accent-green",
+    toggle: "bg-accent-green/15 text-accent-green",
+  },
+  "in-progress": {
+    dot: "bg-accent-amber",
+    chip: "border-accent-amber/40 bg-accent-amber/10 text-accent-amber",
+    toggle: "bg-accent-amber/15 text-accent-amber",
+  },
+  "not-done": {
+    dot: "bg-forge-hint",
+    chip: "border-forge-border bg-forge-well/50 text-forge-subtle",
+    toggle: "bg-forge-well text-forge-body",
+  },
+};
+
+const INTAKE_FIELD_LABELS: Record<IntakeStatusEvidenceField, string> = {
+  currentAiTools: "Current AI or automation tools",
+  experimentsLearnings: "AI experiments and learnings",
+  readyNow: "Ready now / low risk",
+};
+
+/** Human label for an intake field — used as the source caption on evidence panels. */
+export function intakeFieldLabel(field: IntakeStatusEvidenceField): string {
+  return INTAKE_FIELD_LABELS[field];
+}
+
+/**
+ * Normalize a string for verbatim-substring matching. Lowercase,
+ * collapse all whitespace (including newlines) to single spaces, and
+ * fold smart punctuation (curly quotes, em/en-dashes, ellipsis) to
+ * ASCII equivalents so the LLM's punctuation choices don't break the
+ * anti-fabrication check. Used by both the validator and the deep-dive
+ * highlighter so both stay in sync.
+ */
+export function normalizeForEvidenceMatch(s: string): string {
+  if (!s) return "";
+  return s
+    .toLowerCase()
+    .replace(/[\u2018\u2019\u02BC\u201A\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u2033]/g, '"')
+    // Fold every dash variant the LLM might emit to ASCII `-` so en-dashes,
+    // em-dashes, non-breaking hyphens, and minus signs all match the source.
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\u00AD]/g, "-")
+    .replace(/\u2026/g, "...")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * True when the intake was re-imported AFTER the initiative was
+ * classified — UI surfaces a "stale — re-running on next refresh"
+ * caption next to the pill.
+ *
+ * Accepts either the full intake object or just the latest `importedAt`
+ * ISO string so callers can pass `result.intakeMeta.importedAt` from the
+ * V6 selector without round-tripping the whole intake.
+ */
+export function intakeStatusIsStale(
+  intakeStatus: IntakeStatusEntry | undefined,
+  latest: TowerAiReadinessIntake | string | null | undefined,
+): boolean {
+  if (!intakeStatus || !latest) return false;
+  if (!intakeStatus.intakeImportedAt) return false;
+  const latestImportedAt =
+    typeof latest === "string" ? latest : latest.importedAt;
+  if (!latestImportedAt) return false;
+  return intakeStatus.intakeImportedAt < latestImportedAt;
 }

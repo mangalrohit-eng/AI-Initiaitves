@@ -157,9 +157,17 @@ export async function runForL3Rows(
     onProgress?.({ rowId: r.rowId, stage: "running-curate" });
   }
 
-  const towerIntakeDigest = buildTowerReadinessDigest(
-    getAssessProgram().towers[opts.towerId]?.aiReadinessIntake,
-  );
+  const intake = getAssessProgram().towers[opts.towerId]?.aiReadinessIntake;
+  const towerIntakeDigest = buildTowerReadinessDigest(intake);
+  const intakeFields = intake
+    ? {
+        currentAiTools: intake.currentAiTools,
+        experimentsLearnings: intake.experimentsLearnings,
+        readyNow: intake.readyNow,
+        noGoAreas: intake.noGoAreas,
+      }
+    : undefined;
+  const intakeImportedAt = intake?.importedAt;
 
   /**
    * Per-row atomic stamp — re-reads the latest program inside
@@ -189,6 +197,7 @@ export async function runForL3Rows(
             ? { coversL4RowIds: p.coversL4RowIds }
             : {}),
           ...(p.promptVersion ? { promptVersion: p.promptVersion } : {}),
+          ...(p.intakeStatus ? { intakeStatus: p.intakeStatus } : {}),
           source: itemSource,
           generatedAt,
         }));
@@ -209,6 +218,8 @@ export async function runForL3Rows(
 
   const apiRes = await streamCurateL3Initiatives(opts.towerId, inputs, {
     towerIntakeDigest,
+    intakeFields,
+    intakeImportedAt,
     signal: opts.signal,
     onRow: (ev) => {
       stampRow(ev);

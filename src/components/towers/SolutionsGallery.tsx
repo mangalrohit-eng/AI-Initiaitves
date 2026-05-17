@@ -4,9 +4,13 @@ import * as React from "react";
 import {
   ArrowDownAZ,
   Building2,
+  CheckCircle2,
+  Circle,
+  ClipboardList,
   Compass,
   Globe2,
   Layers,
+  Loader2,
   MapPin,
   Rocket,
   Search,
@@ -15,7 +19,9 @@ import {
   Target,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import type { Tower } from "@/data/types";
+import type { IntakeStatusEntry } from "@/data/assess/types";
 import { useInitiativeReviewsV6 } from "@/lib/initiatives/useInitiativeReviewsV6";
 import type {
   V6InitiativeCard,
@@ -29,10 +35,21 @@ import {
   QUADRANT_LABELS,
   type Quadrant,
 } from "@/lib/initiatives/quadrant";
+import {
+  INTAKE_STATUS_COLORS,
+  INTAKE_STATUS_LABELS,
+} from "@/lib/assess/towerReadinessIntake";
 import { cn } from "@/lib/utils";
 
 type SortKey = "value-desc" | "feasibility-then-value" | "name";
 type FeasibilityFilter = "all" | "high" | "low";
+
+/**
+ * Done / In Progress / Not Done filter — matches against
+ * `init.intakeStatus?.status`. Absent `intakeStatus` is treated as
+ * "not-done" so the segment counts always sum to the gallery total.
+ */
+type IntakeStatusFilter = "all" | IntakeStatusEntry["status"];
 /**
  * Applicability scope filter for the gallery. Inclusive interpretation:
  *   - `all`       — no filter (default).
@@ -64,13 +81,19 @@ type GalleryState = {
   sort: SortKey;
   feasibility: FeasibilityFilter;
   applicability: ApplicabilityFilter;
+  intakeStatus: IntakeStatusFilter;
   jobFamilies: string[];
   vendors: string[];
   quadrants: Quadrant[];
   query: string;
 };
 
-const STATE_VERSION = 2;
+/**
+ * Bumped from `2` → `3` when the `intakeStatus` filter was introduced.
+ * Stale localStorage payloads from v2 are dropped so users don't end up
+ * with a missing key reading `undefined` and a broken segmented control.
+ */
+const STATE_VERSION = 3;
 
 function storageKey(towerId: string): string {
   return `solutions-gallery-state-v${STATE_VERSION}-${towerId}`;
@@ -81,6 +104,7 @@ function defaultState(): GalleryState {
     sort: "feasibility-then-value",
     feasibility: "all",
     applicability: "all",
+    intakeStatus: "all",
     jobFamilies: [],
     vendors: [],
     quadrants: [],
@@ -283,6 +307,10 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
         const a = row.init.applicability;
         if (a !== "Offshored" && a !== "Both") return false;
       }
+      if (state.intakeStatus !== "all") {
+        const rowStatus = row.init.intakeStatus?.status ?? "not-done";
+        if (rowStatus !== state.intakeStatus) return false;
+      }
       if (jfSet.size > 0 && !jfSet.has(row.l3Name)) return false;
       if (venSet.size > 0) {
         const rowVendors = splitVendors(row.init.primaryVendor);
@@ -301,6 +329,24 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
       return true;
     });
   }, [allRows, state, quadrantById]);
+
+  /**
+   * Tower-wide counts for the Done / In Progress / Not Done segmented
+   * control. Counts are computed off `allRows` (the unfiltered gallery)
+   * so the badge numbers reflect the total available, not the
+   * already-filtered subset.
+   */
+  const intakeStatusCounts = React.useMemo(() => {
+    const counts = { done: 0, "in-progress": 0, "not-done": 0 } as Record<
+      IntakeStatusEntry["status"],
+      number
+    >;
+    for (const r of allRows) {
+      const s = r.init.intakeStatus?.status ?? "not-done";
+      counts[s] += 1;
+    }
+    return counts;
+  }, [allRows]);
 
   const sorted = React.useMemo(() => {
     const arr = [...filtered];
@@ -331,6 +377,7 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
   const hasActiveFilters =
     state.feasibility !== "all" ||
     state.applicability !== "all" ||
+    state.intakeStatus !== "all" ||
     state.jobFamilies.length > 0 ||
     state.vendors.length > 0 ||
     state.quadrants.length > 0 ||
@@ -341,6 +388,7 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
       ...s,
       feasibility: "all",
       applicability: "all",
+      intakeStatus: "all",
       jobFamilies: [],
       vendors: [],
       quadrants: [],
@@ -357,6 +405,8 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
         allJobFamilies={allJobFamilies}
         allVendors={allVendors}
         quadrantCounts={quadrantCounts}
+        intakeStatusCounts={intakeStatusCounts}
+        intakeMeta={result.intakeMeta}
         hasActiveFilters={hasActiveFilters}
         onClearAll={clearAll}
       />
@@ -376,6 +426,7 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
               towerIconKey={tower.iconKey}
               review={reviews[row.init.id]}
               actions={actions}
+              towerIntake={result.intakeMeta.importedAt ?? undefined}
             />
           ))}
         </div>
@@ -396,6 +447,8 @@ function Toolbar({
   allJobFamilies,
   allVendors,
   quadrantCounts,
+  intakeStatusCounts,
+  intakeMeta,
   hasActiveFilters,
   onClearAll,
 }: {
@@ -406,6 +459,8 @@ function Toolbar({
   allJobFamilies: string[];
   allVendors: string[];
   quadrantCounts: Record<Quadrant, number>;
+  intakeStatusCounts: Record<IntakeStatusEntry["status"], number>;
+  intakeMeta: { present: boolean; importedAt: string | null };
   hasActiveFilters: boolean;
   onClearAll: () => void;
 }) {
@@ -414,6 +469,15 @@ function Toolbar({
       <div className="flex flex-wrap items-center gap-2">
         <ApplicabilityToggle state={state} setState={setState} />
         <FeasibilityToggle state={state} setState={setState} />
+        {intakeMeta.present ? (
+          <IntakeStatusToggle
+            state={state}
+            setState={setState}
+            counts={intakeStatusCounts}
+          />
+        ) : (
+          <IntakeStatusMissingHint />
+        )}
         <MultiSelectFilter
           label="Job Family"
           triggerIcon={Layers}
@@ -546,6 +610,119 @@ function ApplicabilityToggle({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Intake-status segmented control — All / Done / In Progress / Not Done
+ * with live counts. Mirrors the `FeasibilityToggle` pill rhythm so the
+ * three workshop-critical filters (org, ship-readiness, intake state)
+ * read as a horizontal triad.
+ *
+ * Counts live next to each label rather than as a separate badge so a
+ * lead can scan "we have 4 Done, 6 In Progress" at a glance without
+ * opening the toggle. Active-state tinting comes from
+ * `INTAKE_STATUS_COLORS` so the colors stay in lockstep with the per-
+ * card `IntakeStatusPill`.
+ */
+function IntakeStatusToggle({
+  state,
+  setState,
+  counts,
+}: {
+  state: GalleryState;
+  setState: React.Dispatch<React.SetStateAction<GalleryState>>;
+  counts: Record<IntakeStatusEntry["status"], number>;
+}) {
+  const options: ReadonlyArray<{
+    id: IntakeStatusFilter;
+    label: string;
+    Icon: React.ComponentType<{ className?: string }>;
+    activeClass: string;
+    count?: number;
+  }> = [
+    {
+      id: "all",
+      label: "All",
+      Icon: ClipboardList,
+      activeClass: "bg-accent-purple/15 text-accent-purple-light",
+    },
+    {
+      id: "done",
+      label: INTAKE_STATUS_LABELS.done,
+      Icon: CheckCircle2,
+      activeClass: INTAKE_STATUS_COLORS.done.toggle,
+      count: counts.done,
+    },
+    {
+      id: "in-progress",
+      label: INTAKE_STATUS_LABELS["in-progress"],
+      Icon: Loader2,
+      activeClass: INTAKE_STATUS_COLORS["in-progress"].toggle,
+      count: counts["in-progress"],
+    },
+    {
+      id: "not-done",
+      label: INTAKE_STATUS_LABELS["not-done"],
+      Icon: Circle,
+      activeClass: INTAKE_STATUS_COLORS["not-done"].toggle,
+      count: counts["not-done"],
+    },
+  ];
+  return (
+    <div
+      role="group"
+      aria-label="Filter by AI Readiness Intake status"
+      className="inline-flex rounded-full border border-forge-border bg-forge-well/40 p-0.5"
+    >
+      {options.map(({ id, label, Icon, activeClass, count }) => {
+        const active = state.intakeStatus === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setState((s) => ({ ...s, intakeStatus: id }))}
+            title={
+              id === "all"
+                ? "Show every solution regardless of intake-driven status."
+                : `${label} per the imported Tower AI Readiness questionnaire`
+            }
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition",
+              active ? activeClass : "text-forge-body hover:bg-forge-well",
+            )}
+            aria-pressed={active}
+          >
+            <Icon className="h-3.5 w-3.5" aria-hidden />
+            <span>{label}</span>
+            {typeof count === "number" ? (
+              <span className="font-mono text-[10px] text-forge-hint">
+                {count}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Inline hint surfaced in place of `IntakeStatusToggle` when no intake
+ * has been imported (or the import is below `intakeHasMinimumSubstance`).
+ * Links to the `#workshop-tools` drawer where `TowerReadinessIntakePanel`
+ * lives, matching the existing intake-import affordance pattern.
+ */
+function IntakeStatusMissingHint() {
+  return (
+    <Link
+      href="#workshop-tools"
+      className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-accent-purple/40 bg-accent-purple/5 px-3 py-1 text-[11px] text-accent-purple-dark transition hover:border-accent-purple hover:bg-accent-purple/10"
+      title="Import the Tower AI Readiness questionnaire to see Done / In Progress / Not Done"
+    >
+      <ClipboardList className="h-3.5 w-3.5" aria-hidden />
+      <span>Import intake to see Done / In Progress</span>
+    </Link>
   );
 }
 

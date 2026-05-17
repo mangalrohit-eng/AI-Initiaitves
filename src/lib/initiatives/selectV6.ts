@@ -30,6 +30,7 @@
 import type { Feasibility, Tower } from "@/data/types";
 import type {
   AssessProgramV2,
+  IntakeStatusEntry,
   L3Initiative,
   L3WorkforceRowV6,
   L4WorkforceRow,
@@ -46,6 +47,7 @@ import {
   attributeAiUsdAcrossInitiatives,
   computeL3FteDataMissing,
 } from "@/lib/initiatives/attributeL3AiUsd";
+import { intakeHasMinimumSubstance } from "@/lib/assess/towerReadinessIntake";
 
 /**
  * Per-L4 binary disposition under the GCC / Retained model: an L4 with
@@ -177,6 +179,14 @@ export type V6InitiativeCard = {
    * (see `L3_FTE_DATA_MISSING_LABEL` in UI).
    */
   l3FteDataMissing: boolean;
+  /**
+   * Intake-driven Done / In Progress / Not Done classification carried
+   * straight off `L3Initiative.intakeStatus`. `undefined` when the
+   * intake is missing/insufficient or the initiative is a placeholder /
+   * fallback / manual entry — UI treats `undefined` as "not-done" for
+   * filtering and never renders an evidence pill.
+   */
+  intakeStatus?: IntakeStatusEntry;
 };
 
 export type V6L3Row = {
@@ -233,6 +243,18 @@ export type SelectInitiativesV6Result = {
     totalRowCount: number;
     /** Total real (non-placeholder) initiative cards rendered. */
     initiativesRendered: number;
+  };
+  /**
+   * Tower-level intake snapshot — surfaced so the gallery toolbar can
+   * decide whether to render the Done / In Progress / Not Done filter
+   * without importing the assess store directly.
+   *
+   *   - `present`     — `intakeHasMinimumSubstance(tower.aiReadinessIntake)`.
+   *   - `importedAt`  — ISO of the latest import (null when absent).
+   */
+  intakeMeta: {
+    present: boolean;
+    importedAt: string | null;
   };
 };
 
@@ -346,6 +368,12 @@ export function selectInitiativesV6ForTower(
     (r) => r.curationStage === "queued",
   ).length;
 
+  const aiReadinessIntake = towerState?.aiReadinessIntake;
+  const intakeMeta = {
+    present: intakeHasMinimumSubstance(aiReadinessIntake),
+    importedAt: aiReadinessIntake?.importedAt ?? null,
+  };
+
   return {
     towerId,
     towerAiUsd: towerSummary.ai,
@@ -359,6 +387,7 @@ export function selectInitiativesV6ForTower(
       totalRowCount: l3Rows.length,
       initiativesRendered,
     },
+    intakeMeta,
   };
 }
 
@@ -392,6 +421,7 @@ function buildCardFromInitiative(
     promptVersion: init.promptVersion,
     attributedAiUsd: 0,
     l3FteDataMissing: false,
+    ...(init.intakeStatus ? { intakeStatus: init.intakeStatus } : {}),
   };
 }
 

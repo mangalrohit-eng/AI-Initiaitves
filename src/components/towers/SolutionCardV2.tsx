@@ -3,7 +3,10 @@
 import * as React from "react";
 import Link from "next/link";
 import { ArrowUpRight, Building2, Layers } from "lucide-react";
-import type { InitiativeReview } from "@/data/assess/types";
+import type {
+  InitiativeReview,
+  TowerAiReadinessIntake,
+} from "@/data/assess/types";
 import type {
   V6InitiativeCard,
   V6L3Row,
@@ -14,6 +17,11 @@ import { formatUsdCompact } from "@/lib/format";
 import { useRedactDollars } from "@/lib/clientMode";
 import { SolutionIcon } from "@/components/towers/SolutionIcon";
 import { InitiativeReviewActionsV6 } from "@/components/towers/InitiativeReviewActionsV6";
+import {
+  IntakeStatusEvidencePanel,
+  IntakeStatusPill,
+} from "@/components/towers/IntakeStatusPill";
+import { intakeStatusIsStale } from "@/lib/assess/towerReadinessIntake";
 import { cn } from "@/lib/utils";
 import { L3_FTE_DATA_MISSING_LABEL } from "@/lib/initiatives/attributeL3AiUsd";
 
@@ -47,6 +55,7 @@ export function SolutionCardV2({
   towerIconKey,
   review,
   actions,
+  towerIntake,
 }: {
   init: V6InitiativeCard;
   /** V6 L3 row — needed by the validate/reject snapshot. */
@@ -63,11 +72,21 @@ export function SolutionCardV2({
   review?: InitiativeReview;
   /** Approve / reject / restore actions from `useInitiativeReviewsV6`. */
   actions: UseInitiativeReviewsV6Result["actions"];
+  /**
+   * Either the tower's current `aiReadinessIntake` OR just the latest
+   * `importedAt` ISO string — used only for the staleness check on the
+   * `IntakeStatusPill`. Optional so the card stays usable outside the
+   * gallery (e.g. in storybook / preview surfaces).
+   */
+  towerIntake?: TowerAiReadinessIntake | string | null;
 }) {
   const redact = useRedactDollars();
   const feas = init.isPlaceholder ? null : feasibilityChip(init.feasibility);
   const interactive = !!init.initiativeHref;
   const rejected = review?.status === "rejected";
+  const intakeStatus = init.intakeStatus;
+  const intakeStatusStale = intakeStatusIsStale(intakeStatus, towerIntake);
+  const [intakeEvidenceOpen, setIntakeEvidenceOpen] = React.useState(false);
 
   const Frame = (
     <div
@@ -114,6 +133,15 @@ export function SolutionCardV2({
                 {init.primaryVendor}
               </span>
             ) : null}
+            {intakeStatus ? (
+              <IntakeStatusPill
+                intakeStatus={intakeStatus}
+                expanded={intakeEvidenceOpen}
+                onToggle={() => setIntakeEvidenceOpen((v) => !v)}
+                stale={intakeStatusStale}
+                ariaIdSuffix={init.id}
+              />
+            ) : null}
             {init.coversL4RowIds.length > 0 ? (
               <span
                 className="inline-flex items-center gap-1 rounded-full border border-forge-border/60 px-1.5 py-0 font-mono text-[10px] text-forge-subtle"
@@ -143,6 +171,13 @@ export function SolutionCardV2({
         <p className="text-[11px] leading-relaxed text-forge-subtle">
           {init.aiRationale}
         </p>
+      ) : null}
+      {intakeStatus && intakeEvidenceOpen ? (
+        <IntakeStatusEvidencePanel
+          intakeStatus={intakeStatus}
+          ariaIdSuffix={init.id}
+          stale={intakeStatusStale}
+        />
       ) : null}
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-forge-border/60 pt-3 text-[11px] text-forge-subtle">
         <span className="inline-flex min-w-0 items-center gap-1.5 truncate font-mono uppercase tracking-[0.16em] text-forge-hint">

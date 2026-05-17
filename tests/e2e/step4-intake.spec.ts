@@ -60,4 +60,30 @@ test.describe("Step 4 AI readiness questionnaire UX", () => {
     });
     await expect(page.getByRole("button", { name: /Import \.xlsx/i })).toBeVisible();
   });
+
+  test("intake-status filter is hidden and inline hint is shown when no intake imported", async ({
+    page,
+  }) => {
+    await page.goto(TOWER_PATH, {
+      waitUntil: "domcontentloaded",
+      timeout: 90_000,
+    });
+    // Fresh profile — questionnaire has not been imported, so the
+    // SolutionsGallery toolbar should NOT render the segmented status
+    // filter ("Filter by AI Readiness Intake status"). Instead, the
+    // dashed inline hint should be visible and link to #workshop-tools.
+    const statusToggle = page.getByRole("group", {
+      name: /Filter by AI Readiness Intake status/i,
+    });
+    await expect(statusToggle).toHaveCount(0);
+
+    const importHint = page.getByRole("link", {
+      name: /Import intake to see Done \/ In Progress/i,
+    });
+    await expect(importHint.first()).toBeVisible({ timeout: 20_000 });
+    await expect(importHint.first()).toHaveAttribute(
+      "href",
+      /#workshop-tools$/,
+    );
+  });
 });

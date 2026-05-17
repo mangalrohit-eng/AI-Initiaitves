@@ -27,7 +27,11 @@
  */
 import type { ProgramTier, ImpactTier } from "@/data/types";
 import type { Feasibility } from "@/data/types";
-import type { AssessProgramV2, TowerId } from "@/data/assess/types";
+import type {
+  AssessProgramV2,
+  IntakeStatusEntry,
+  TowerId,
+} from "@/data/assess/types";
 import { towers } from "@/data/towers";
 import { selectInitiativesV6ForTower } from "@/lib/initiatives/selectV6";
 import { tierFromProgramTier, type Tier } from "@/lib/priority";
@@ -112,6 +116,12 @@ export type ProgramInitiativeRowV6 = {
   aiPriority?: string;
   /** Compatibility bridge — most surfaces only need a single string, not a Process. */
   impactTier?: ImpactTier;
+  /**
+   * Intake-driven Done / In Progress / Not Done classification carried
+   * from the underlying `L3Initiative.intakeStatus`. `undefined` when
+   * the originating tower has no intake or the initiative is a placeholder.
+   */
+  intakeStatus?: IntakeStatusEntry;
 };
 
 /**
@@ -185,6 +195,7 @@ export function selectInitiativesV6ForProgram(
           aiRationale: card.aiRationale,
           primaryVendor: card.primaryVendor,
           feasibility: feasibilityForTier,
+          ...(card.intakeStatus ? { intakeStatus: card.intakeStatus } : {}),
           // Tier is stamped in the second pass once we have the full sample.
           programTier: "Deprioritized",
           programTierReason: "",

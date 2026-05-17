@@ -62,9 +62,13 @@ import {
   isLLMConfigured,
   type CurateL3LLMRowInput,
   type CurateL3LLMRowOutcome,
+  type IntakeContextForValidator,
 } from "@/lib/assess/curateL3InitiativesLLM";
 import type { TowerId } from "@/data/assess/types";
-import { TOWER_READINESS_MAX_DIGEST_CHARS } from "@/lib/assess/towerReadinessIntake";
+import {
+  TOWER_READINESS_MAX_DIGEST_CHARS,
+  TOWER_READINESS_MAX_FIELD_CHARS,
+} from "@/lib/assess/towerReadinessIntake";
 import {
   CURATE_L3_STREAM_CONTENT_TYPE,
   encodeL3StreamEvent,
@@ -86,6 +90,8 @@ type Body = {
   towerId?: unknown;
   rows?: unknown;
   towerIntakeDigest?: unknown;
+  intakeFields?: unknown;
+  intakeImportedAt?: unknown;
 };
 
 function wantsStream(req: Request): boolean {
@@ -185,10 +191,64 @@ export async function POST(req: Request) {
     ? digestRaw.slice(0, TOWER_READINESS_MAX_DIGEST_CHARS)
     : undefined;
 
+  const intakeContext = parseIntakeContext(
+    body.intakeFields,
+    body.intakeImportedAt,
+  );
+
   if (streaming) {
-    return runStreamingCuration(req, towerId, rows, towerIntakeDigest);
+    return runStreamingCuration(
+      req,
+      towerId,
+      rows,
+      towerIntakeDigest,
+      intakeContext,
+    );
   }
-  return runJsonCuration(towerId, rows, towerIntakeDigest);
+  return runJsonCuration(towerId, rows, towerIntakeDigest, intakeContext);
+}
+
+/**
+ * Coerce the wire-format `intakeFields` + `intakeImportedAt` into the
+ * structured `IntakeContextForValidator` consumed by the post-LLM
+ * `sanitizeIntakeStatus` validator. Returns `undefined` when either side
+ * is missing — the validator then drops any `intakeStatus` block the
+ * model emits, keeping the no-intake mode strict.
+ */
+function parseIntakeContext(
+  rawFields: unknown,
+  rawImportedAt: unknown,
+): IntakeContextForValidator | undefined {
+  if (!rawFields || typeof rawFields !== "object") return undefined;
+  const importedAt =
+    typeof rawImportedAt === "string" && rawImportedAt.trim()
+      ? rawImportedAt.trim()
+      : "";
+  if (!importedAt) return undefined;
+  const f = rawFields as Record<string, unknown>;
+  const cap = (raw: unknown): string => {
+    if (typeof raw !== "string") return "";
+    const t = raw.trim();
+    return t.length > TOWER_READINESS_MAX_FIELD_CHARS
+      ? t.slice(0, TOWER_READINESS_MAX_FIELD_CHARS)
+      : t;
+  };
+  const currentAiTools = cap(f.currentAiTools);
+  const experimentsLearnings = cap(f.experimentsLearnings);
+  const readyNow = cap(f.readyNow);
+  const noGoAreas = cap(f.noGoAreas);
+  if (
+    !currentAiTools &&
+    !experimentsLearnings &&
+    !readyNow &&
+    !noGoAreas
+  ) {
+    return undefined;
+  }
+  return {
+    fields: { currentAiTools, experimentsLearnings, readyNow, noGoAreas },
+    importedAt,
+  };
 }
 
 // ===========================================================================
@@ -199,6 +259,7 @@ async function runJsonCuration(
   towerId: TowerId,
   rows: CurateL3LLMRowInput[],
   towerIntakeDigest: string | undefined,
+  intake: IntakeContextForValidator | undefined,
 ): Promise<Response> {
   const llmConfigured = isLLMConfigured();
   let warning: string | undefined;
@@ -207,6 +268,7 @@ async function runJsonCuration(
     try {
       outcomes = await curateL3InitiativesPerRow(towerId, rows, {
         towerIntakeDigest,
+        intake,
       });
     } catch (e) {
       warning =
@@ -263,6 +325,7 @@ function runStreamingCuration(
   towerId: TowerId,
   rows: CurateL3LLMRowInput[],
   towerIntakeDigest: string | undefined,
+  intake: IntakeContextForValidator | undefined,
 ): Response {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -304,6 +367,7 @@ function runStreamingCuration(
         try {
           await curateL3InitiativesPerRow(towerId, rows, {
             towerIntakeDigest,
+            intake,
             signal: req.signal,
             onRowComplete: (outcome) => {
               const input = rows.find((r) => r.rowId === outcome.rowId);

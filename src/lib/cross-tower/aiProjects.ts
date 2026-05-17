@@ -15,7 +15,7 @@
  */
 
 import type { Feasibility, ProgramTier } from "@/data/types";
-import type { TowerId } from "@/data/assess/types";
+import type { IntakeStatusEntry, TowerId } from "@/data/assess/types";
 
 // ---------------------------------------------------------------------------
 //   Shared enums
@@ -116,4 +116,11 @@ export type AIProjectResolved = {
    * documents without it still parse.
    */
   programTier?: ProgramTier;
+  /**
+   * Intake-driven Done / In Progress / Not Done classification carried
+   * from `L3Initiative.intakeStatus`. `undefined` for placeholders /
+   * fallback initiatives or when the originating tower has no
+   * questionnaire — UI treats undefined as "not-done" for filtering.
+   */
+  intakeStatus?: IntakeStatusEntry;
 };

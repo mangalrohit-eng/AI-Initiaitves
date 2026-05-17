@@ -147,6 +147,7 @@ export function composeProjectsV6(
       tagline: row.tagline,
       l3FamilyName: row.l3Name,
       deepDiveHref: `/tower/${row.towerId}/initiative/${encodeURIComponent(row.l3RowId)}/${encodeURIComponent(row.id)}`,
+      ...(row.intakeStatus ? { intakeStatus: row.intakeStatus } : {}),
     };
   });
 

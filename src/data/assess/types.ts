@@ -471,6 +471,54 @@ export type L3Initiative = {
   promptVersion?: string;
   /** ISO timestamp the initiative was generated (or last regenerated). */
   generatedAt: string;
+  /**
+   * Intake-driven Done / In Progress / Not Done classification. Derived
+   * by the per-L3 curator LLM from `TowerAiReadinessIntake` and
+   * verified server-side against a verbatim-substring check before
+   * persistence (any quote that doesn't appear in the named intake field
+   * is downgraded to "not-done" with empty evidence — anti-fabrication
+   * backstop).
+   *
+   * `undefined` when the intake is missing / below substance threshold,
+   * or when the source is `manual` / `fallback`. UI treats `undefined`
+   * as `not-done` for filtering and never renders an evidence pill.
+   *
+   * Orthogonal to `InitiativeReview` (the lead's manual approve/reject
+   * decision) — both axes coexist on every card.
+   */
+  intakeStatus?: IntakeStatusEntry;
+};
+
+/**
+ * Intake fields permitted to back a positive (`done` / `in-progress`)
+ * classification. Restricted to fields that describe CURRENT or ACTIVE
+ * state: forward-looking instinct (`biggestImpact`) and exclusion text
+ * (`noGoAreas`) are intentionally excluded so the LLM cannot upgrade an
+ * initiative on sentiment alone.
+ */
+export type IntakeStatusEvidenceField =
+  | "currentAiTools"
+  | "experimentsLearnings"
+  | "readyNow";
+
+export type IntakeStatusEntry = {
+  status: "done" | "in-progress" | "not-done";
+  /**
+   * Verbatim 15-60 word quote from the named `evidenceField`. Empty
+   * string when `status === "not-done"`. The validator enforces a
+   * normalized substring check against `intake[evidenceField]` and
+   * downgrades to `not-done` with empty evidence if it fails.
+   */
+  evidence: string;
+  evidenceField: IntakeStatusEvidenceField;
+  /** ISO — server-stamped at validation time, never trusted from the LLM. */
+  classifiedAt: string;
+  /**
+   * Mirrors `TowerAiReadinessIntake.importedAt` at classification time
+   * so the UI can detect stale classifications when the lead re-imports
+   * the questionnaire.
+   */
+  intakeImportedAt: string;
 };
 
 /**

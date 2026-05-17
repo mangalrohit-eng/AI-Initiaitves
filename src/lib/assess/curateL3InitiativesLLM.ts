@@ -55,8 +55,17 @@
  */
 
 import type { Feasibility } from "@/data/types";
-import type { L3WorkforceRowV6, TowerId } from "@/data/assess/types";
-import { TOWER_READINESS_MAX_DIGEST_CHARS } from "@/lib/assess/towerReadinessIntake";
+import type {
+  IntakeStatusEntry,
+  IntakeStatusEvidenceField,
+  L3WorkforceRowV6,
+  TowerAiReadinessIntake,
+  TowerId,
+} from "@/data/assess/types";
+import {
+  TOWER_READINESS_MAX_DIGEST_CHARS,
+  normalizeForEvidenceMatch,
+} from "@/lib/assess/towerReadinessIntake";
 import {
   ALLOWED_VENDORS,
   VERSANT_DEFAULT_REASONING_EFFORT,
@@ -87,11 +96,30 @@ const VENDOR_TBD = "TBD — subject to discovery";
  * cache and surface a one-click "refresh to apply" affordance without
  * erasing the existing entry.
  *
- * `2026-05-descriptive` = descriptive 5-10 word naming + iconKey
- * (replaces the brand-codename rules from `2026-04-codename` and prior
- * unversioned snapshots).
+ * `2026-05-descriptive` = descriptive 5-10 word naming + iconKey.
+ * `2026-05-intake-status` = adds the per-initiative Done / In Progress /
+ * Not Done classification with an intake-field-anchored evidence quote
+ * (server-side verbatim-substring verifier prevents fabrication).
  */
-export const CURATE_L3_PROMPT_VERSION = "2026-05-descriptive";
+export const CURATE_L3_PROMPT_VERSION = "2026-05-intake-status";
+
+/**
+ * Subset of the readiness intake threaded into the per-row LLM call so
+ * the post-validator can do a verbatim-substring check on the evidence
+ * quote AND apply the negative `noGoAreas` gate. The curator already
+ * receives the bounded digest as plain text in the system prompt; this
+ * structured payload is only used by `parseAndValidate` server-side.
+ */
+export type IntakeContextForValidator = {
+  fields: Pick<
+    TowerAiReadinessIntake,
+    | "currentAiTools"
+    | "experimentsLearnings"
+    | "readyNow"
+    | "noGoAreas"
+  >;
+  importedAt: string;
+};
 
 /** Bounded concurrency for the per-row fan-out in `curateL3InitiativesPerRow`. */
 export const MAX_CONCURRENT_L3_CALLS = 4;
@@ -150,6 +178,15 @@ export type CurateL3LLMOptions = {
   timeoutMs?: number;
   /** Tower AI readiness questionnaire digest — same cap as `towerReadinessIntake`. */
   towerIntakeDigest?: string;
+  /**
+   * Structured intake fields for the post-LLM `intakeStatus` validator.
+   * When present, the validator runs the verbatim-substring evidence
+   * check + the negative `noGoAreas` gate and stamps `intakeImportedAt`
+   * on every accepted classification. When absent, the LLM is told (via
+   * the digest's absence) to omit the `intakeStatus` block; the
+   * validator drops anything the model emits anyway.
+   */
+  intake?: IntakeContextForValidator;
   /** Caller-supplied AbortSignal; combined with the per-call timeout. */
   signal?: AbortSignal;
   /**
@@ -234,7 +271,7 @@ async function callLLMForOneRow(
     signal: options.signal,
   });
 
-  return parseAndValidate(result.parsed, row);
+  return parseAndValidate(result.parsed, row, options.intake);
 }
 
 // ===========================================================================
@@ -349,6 +386,11 @@ function buildSystemPrompt(
     "",
     `primaryVendor MUST be chosen from the ALLOWED VENDORS list above (case-sensitive). For compound stacks, separate with " + ". If no allow-list vendor fits, RETURN THE EXACT STRING "${VENDOR_TBD}" (em dash) — never invent a vendor.`,
     "",
+    "===========================================================================",
+    "INTAKE STATUS (the optional `intakeStatus` block on each initiative)",
+    "===========================================================================",
+    intakeStatusPromptSection(Boolean(towerIntakeDigest && towerIntakeDigest.trim().length > 0)),
+    "",
     "Return STRICT JSON ONLY in this exact shape:",
     '{',
     '  "rowId": "<echo input rowId>",',
@@ -360,7 +402,12 @@ function buildSystemPrompt(
     '      "feasibility": "High" | "Low",',
     '      "iconKey": "<one PascalCase key from the allowlist>",',
     '      "primaryVendor": "<allow-list value or TBD>" | null,',
-    '      "coversL4RowIds": ["<l4 row id>", ...]',
+    '      "coversL4RowIds": ["<l4 row id>", ...],',
+    '      "intakeStatus": {',
+    '        "status": "done" | "in-progress" | "not-done",',
+    '        "evidence": "<verbatim 15-60 word slice of the named evidenceField; empty string when status is not-done>",',
+    '        "evidenceField": "currentAiTools" | "experimentsLearnings" | "readyNow"',
+    '      }',
     '    }',
     '  ]',
     '}',
@@ -369,6 +416,45 @@ function buildSystemPrompt(
   ];
 
   return sections.join("\n") + digestBlock;
+}
+
+/**
+ * Builds the "INTAKE STATUS" block of the system prompt. Two paths:
+ *
+ *   - **digest present** — the LLM has the questionnaire above, so we
+ *     give it the precedence-ordered classification rules and the
+ *     anti-fabrication backstop description.
+ *   - **digest absent** — instruct the model to OMIT the `intakeStatus`
+ *     block entirely. The validator double-checks by dropping any
+ *     `intakeStatus` it sees when the caller didn't supply intake
+ *     fields, so the model's compliance is not load-bearing.
+ */
+function intakeStatusPromptSection(hasIntakeDigest: boolean): string {
+  if (!hasIntakeDigest) {
+    return [
+      "No intake questionnaire was provided for this tower. OMIT the `intakeStatus` block entirely from every initiative — do not invent a status without source evidence.",
+    ].join("\n");
+  }
+  return [
+    "Use ONLY the questionnaire above. Classify each initiative against what the tower lead has said is currently running, piloted, or queued — never against your own priors. The post-LLM validator checks every quote against the questionnaire text and downgrades to `not-done` with empty evidence on any mismatch.",
+    "",
+    "PRECEDENCE-ORDERED RULES (apply top-down):",
+    "  1. NEGATIVE GATE — `noGoAreas`. If the L3 Job Family or this candidate solution falls inside the questionnaire's `Do not go` text, status MUST be `not-done`. `noGoAreas` is NEVER a valid `evidenceField`. Do not use `noGoAreas` text as evidence.",
+    "  2. `done` — only when `Current AI or automation tools` describes the EXACT capability already running in production (e.g. 'we use BlackLine for Finance close' → a Finance reconciliation initiative anchored on BlackLine is `done`). The validator will require the quote to appear verbatim in `currentAiTools`.",
+    "  3. `in-progress` — only when ONE of:",
+    "       (a) `AI experiments and learnings` describes a real pilot / POC / lab work targeting this capability, OR",
+    "       (b) `Ready now / low risk` explicitly names this capability AND the wording indicates ACTIVE WORK HAS STARTED (e.g. 'we have started piloting X', 'kickoff this quarter'). Mere willingness ('we'd be open to trying X', 'low risk for us') does NOT qualify — that is `not-done`.",
+    "  4. `not-done` — the default. Mandatory whenever rules (1)–(3) do not clearly hold. NEVER fabricate evidence to upgrade.",
+    "",
+    "QUOTE SHAPE (when status is `done` or `in-progress`):",
+    "  - 15-60 words, drawn VERBATIM as a contiguous slice of the named `evidenceField` text.",
+    "  - Do NOT paraphrase, ellide, or join non-contiguous fragments. Preserve the lead's exact wording — the validator's substring check is normalized for whitespace and curly-vs-ASCII punctuation only.",
+    "",
+    "FORWARD-LOOKING EXCLUSION:",
+    "  - `Biggest impact instincts` describes what the lead THINKS would matter; it is NOT evidence of current state and is NEVER a valid `evidenceField`. The schema does not even include it as a value.",
+    "",
+    "When status is `not-done`, set `evidence` to the empty string and `evidenceField` to `\"currentAiTools\"` (placeholder; ignored).",
+  ].join("\n");
 }
 
 function buildUserPrompt(row: CurateL3LLMRowInput): string {
@@ -581,9 +667,132 @@ export function buildL3InitiativeId(
   return `${towerId}::${l3RowId}::${slugifySolutionName(solutionName)}`;
 }
 
+/**
+ * Cap the verbatim quote at 60 words / 600 chars after the substring
+ * check passes. Keeps the persisted evidence proportional and the deep-
+ * dive panel readable; the LLM is instructed to stay under 60 words but
+ * we trim defensively in case it wanders.
+ */
+const MAX_EVIDENCE_WORDS = 60;
+const MAX_EVIDENCE_CHARS = 600;
+
+const VALID_EVIDENCE_FIELDS: ReadonlySet<IntakeStatusEvidenceField> =
+  new Set<IntakeStatusEvidenceField>([
+    "currentAiTools",
+    "experimentsLearnings",
+    "readyNow",
+  ]);
+
+function clampEvidence(s: string): string {
+  const trimmed = s.trim();
+  if (!trimmed) return "";
+  const words = trimmed.split(/\s+/);
+  let truncated =
+    words.length > MAX_EVIDENCE_WORDS
+      ? `${words.slice(0, MAX_EVIDENCE_WORDS).join(" ")}…`
+      : trimmed;
+  if (truncated.length > MAX_EVIDENCE_CHARS) {
+    truncated = `${truncated.slice(0, MAX_EVIDENCE_CHARS - 1)}…`;
+  }
+  return truncated;
+}
+
+/**
+ * Server-side validator for the LLM-emitted `intakeStatus` block. The
+ * only path that produces a "done" or "in-progress" classification.
+ *
+ *   - Drops the block entirely when no intake context is supplied
+ *     (caller had no questionnaire) — UI treats undefined as "not-done".
+ *   - Coerces the status / evidenceField enums; out-of-list values
+ *     (`biggestImpact`, `noGoAreas`, anything else) are rejected.
+ *   - For `done` / `in-progress`: runs `normalizeForEvidenceMatch` on
+ *     both sides and checks the quote is a contiguous substring of the
+ *     named intake field. Mismatches are downgraded to `not-done` with
+ *     empty evidence — anti-fabrication backstop.
+ *   - Negative `noGoAreas` gate: any positive classification whose L3
+ *     terms appear inside the normalized `noGoAreas` text is downgraded.
+ *   - Stamps `classifiedAt` and `intakeImportedAt` server-side; LLM
+ *     timestamps (if any) are ignored.
+ */
+export function sanitizeIntakeStatus(
+  raw: unknown,
+  l3Label: string,
+  intake: IntakeContextForValidator | undefined,
+): IntakeStatusEntry | undefined {
+  if (!intake) return undefined;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+  const r = raw as Record<string, unknown>;
+
+  let status: IntakeStatusEntry["status"];
+  if (r.status === "done") status = "done";
+  else if (r.status === "in-progress") status = "in-progress";
+  else status = "not-done";
+
+  const fieldRaw = typeof r.evidenceField === "string" ? r.evidenceField : "";
+  const evidenceField: IntakeStatusEvidenceField = VALID_EVIDENCE_FIELDS.has(
+    fieldRaw as IntakeStatusEvidenceField,
+  )
+    ? (fieldRaw as IntakeStatusEvidenceField)
+    : "currentAiTools";
+
+  const evidenceRaw = typeof r.evidence === "string" ? r.evidence : "";
+
+  const buildNotDone = (): IntakeStatusEntry => ({
+    status: "not-done",
+    evidence: "",
+    evidenceField: "currentAiTools",
+    classifiedAt: new Date().toISOString(),
+    intakeImportedAt: intake.importedAt,
+  });
+
+  if (status === "not-done") {
+    return buildNotDone();
+  }
+
+  if (!evidenceRaw.trim()) {
+    return buildNotDone();
+  }
+
+  const intakeFieldText =
+    evidenceField === "currentAiTools"
+      ? intake.fields.currentAiTools
+      : evidenceField === "experimentsLearnings"
+        ? intake.fields.experimentsLearnings
+        : intake.fields.readyNow;
+  const normalizedField = normalizeForEvidenceMatch(intakeFieldText);
+  const normalizedQuote = normalizeForEvidenceMatch(evidenceRaw);
+  if (!normalizedField || !normalizedQuote) {
+    return buildNotDone();
+  }
+  if (!normalizedField.includes(normalizedQuote)) {
+    return buildNotDone();
+  }
+
+  const normalizedNoGo = normalizeForEvidenceMatch(intake.fields.noGoAreas);
+  if (normalizedNoGo) {
+    const l3Tokens = normalizeForEvidenceMatch(l3Label)
+      .split(" ")
+      .filter((tok) => tok.length >= 4);
+    if (l3Tokens.some((tok) => normalizedNoGo.includes(tok))) {
+      return buildNotDone();
+    }
+  }
+
+  return {
+    status,
+    evidence: clampEvidence(evidenceRaw),
+    evidenceField,
+    classifiedAt: new Date().toISOString(),
+    intakeImportedAt: intake.importedAt,
+  };
+}
+
 function parseAndValidate(
   raw: unknown,
   input: CurateL3LLMRowInput,
+  intake?: IntakeContextForValidator,
 ): CurateL3InitiativePayload[] {
   if (raw === null || typeof raw !== "object") {
     throw new VersantLLMError(
@@ -629,6 +838,11 @@ function parseAndValidate(
     const primaryVendor = sanitizeVendor(r.primaryVendor);
     const iconKey = sanitizeIconKey(r.iconKey);
     const coversL4RowIds = sanitizeCoversL4RowIds(r.coversL4RowIds, validIds);
+    const intakeStatus = sanitizeIntakeStatus(
+      r.intakeStatus,
+      input.l3,
+      intake,
+    );
     const id = buildL3InitiativeId(
       // The validator can't know the towerId without threading it
       // explicitly. We use the rowId as a proxy here since it already
@@ -647,6 +861,7 @@ function parseAndValidate(
       ...(iconKey ? { iconKey } : {}),
       ...(primaryVendor ? { primaryVendor } : {}),
       ...(coversL4RowIds.length > 0 ? { coversL4RowIds } : {}),
+      ...(intakeStatus ? { intakeStatus } : {}),
       promptVersion: CURATE_L3_PROMPT_VERSION,
     });
   }

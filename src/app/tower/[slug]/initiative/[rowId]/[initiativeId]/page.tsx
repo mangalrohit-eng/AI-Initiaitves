@@ -45,8 +45,11 @@ import { clientCurateBrief } from "@/lib/assess/assessClientApi";
 import {
   buildTowerReadinessDigest,
   intakeHasMinimumSubstance,
+  intakeFieldLabel,
+  intakeStatusIsStale,
   TOWER_READINESS_ATTRIBUTION_LABEL,
 } from "@/lib/assess/towerReadinessIntake";
+import { IntakeStatusPill } from "@/components/towers/IntakeStatusPill";
 import { CURATE_BRIEF_PROMPT_VERSION } from "@/lib/assess/curateBriefLLM";
 import {
   effectiveInitiativeFeasibility,
@@ -411,6 +414,67 @@ export default function V6InitiativePage() {
             ) : null}
           </div>
         </header>
+
+        {(() => {
+          const intakeStatus = initiative.intakeStatus;
+          const towerIntake =
+            getAssessProgram().towers[tower.id as TowerId]?.aiReadinessIntake;
+          const stale = intakeStatusIsStale(intakeStatus, towerIntake);
+          if (intakeStatus && intakeStatus.status !== "not-done") {
+            return (
+              <section
+                className="mt-6 rounded-2xl border border-forge-border bg-forge-surface p-5"
+                aria-label="Intake-driven status evidence"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-[10px] font-mono uppercase tracking-wider text-forge-hint">
+                    <span className="text-accent-purple-dark">&gt;</span>{" "}
+                    Intake evidence
+                  </p>
+                  <IntakeStatusPill
+                    intakeStatus={intakeStatus}
+                    stale={stale}
+                  />
+                </div>
+                <blockquote className="mt-3 border-l-2 border-accent-purple/40 pl-3 text-sm italic leading-relaxed text-forge-body">
+                  &ldquo;{intakeStatus.evidence}&rdquo;
+                </blockquote>
+                <p className="mt-2 text-[11px] text-forge-hint">
+                  From the {tower.name} AI Readiness Intake —{" "}
+                  <span className="text-forge-body">
+                    {intakeFieldLabel(intakeStatus.evidenceField)}
+                  </span>
+                  {intakeStatus.classifiedAt
+                    ? ` · classified ${new Date(intakeStatus.classifiedAt).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}`
+                    : ""}
+                </p>
+                {stale ? (
+                  <p className="mt-1 text-[11px] text-accent-amber">
+                    Intake re-imported since this classification — will refresh
+                    on next regenerate.
+                  </p>
+                ) : null}
+              </section>
+            );
+          }
+          if (
+            intakeHasMinimumSubstance(towerIntake) &&
+            (!intakeStatus || intakeStatus.status === "not-done")
+          ) {
+            return (
+              <p className="mt-4 text-[11px] italic text-forge-hint">
+                No matching evidence in the {tower.name} AI Readiness Intake —
+                this initiative is currently classified as Not Done.
+              </p>
+            );
+          }
+          return null;
+        })()}
 
         {isPlaceholderProcess ? (
           <div className="mt-4 rounded-2xl border border-accent-amber/50 bg-accent-amber/10 p-4 text-sm text-forge-body">

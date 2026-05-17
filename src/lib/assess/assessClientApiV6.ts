@@ -14,12 +14,24 @@
  *      events land in the local store as they arrive.
  */
 
-import type { TowerId } from "@/data/assess/types";
+import type { TowerAiReadinessIntake, TowerId } from "@/data/assess/types";
 import type {
   CurateL3InitiativePayload,
   CurateL3OverallSource,
   CurateL3RowSource,
 } from "@/lib/assess/curateL3InitiativesStreamProtocol";
+
+/**
+ * Subset of `TowerAiReadinessIntake` the curation route needs for the
+ * server-side `intakeStatus` validator. Only the four fields read by
+ * the validator are forwarded — keeps the wire payload small and avoids
+ * leaking unrelated free-text answers (e.g. `biggestImpact`,
+ * `dataRelevant`) the validator never inspects.
+ */
+export type CurateL3IntakeFields = Pick<
+  TowerAiReadinessIntake,
+  "currentAiTools" | "experimentsLearnings" | "readyNow" | "noGoAreas"
+>;
 
 /**
  * One L3 row's worth of input passed to the v6 curation route. Mirrors
@@ -58,7 +70,11 @@ export type CurateL3InitiativesResult = {
 export async function clientCurateL3Initiatives(
   towerId: TowerId,
   rows: CurateL3InitiativesRowInput[],
-  opts?: { towerIntakeDigest?: string },
+  opts?: {
+    towerIntakeDigest?: string;
+    intakeFields?: CurateL3IntakeFields;
+    intakeImportedAt?: string;
+  },
 ): Promise<
   | { ok: true; result: CurateL3InitiativesResult }
   | { ok: false; error: string; status: number }
@@ -71,6 +87,10 @@ export async function clientCurateL3Initiatives(
       towerId,
       rows,
       ...(opts?.towerIntakeDigest ? { towerIntakeDigest: opts.towerIntakeDigest } : {}),
+      ...(opts?.intakeFields ? { intakeFields: opts.intakeFields } : {}),
+      ...(opts?.intakeImportedAt
+        ? { intakeImportedAt: opts.intakeImportedAt }
+        : {}),
     }),
   });
   const text = await res.text();
@@ -141,7 +161,18 @@ export type StreamCurateL3Opts = {
 export async function streamCurateL3Initiatives(
   towerId: TowerId,
   rows: CurateL3InitiativesRowInput[],
-  opts: StreamCurateL3Opts & { towerIntakeDigest?: string } = {},
+  opts: StreamCurateL3Opts & {
+    towerIntakeDigest?: string;
+    /**
+     * Structured intake fields for the post-LLM `intakeStatus` validator
+     * on the server. When omitted, the server skips classification and
+     * the LLM is instructed (via the digest's absence) to omit the
+     * `intakeStatus` block entirely.
+     */
+    intakeFields?: CurateL3IntakeFields;
+    /** ISO timestamp of the latest intake import — server stamps it onto every classification. */
+    intakeImportedAt?: string;
+  } = {},
 ): Promise<
   | { ok: true; result: CurateL3InitiativesResult }
   | { ok: false; error: string; status: number }
@@ -164,6 +195,10 @@ export async function streamCurateL3Initiatives(
         rows,
         ...(opts.towerIntakeDigest
           ? { towerIntakeDigest: opts.towerIntakeDigest }
+          : {}),
+        ...(opts.intakeFields ? { intakeFields: opts.intakeFields } : {}),
+        ...(opts.intakeImportedAt
+          ? { intakeImportedAt: opts.intakeImportedAt }
           : {}),
       }),
       signal: opts.signal,

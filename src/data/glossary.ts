@@ -117,7 +117,7 @@ export const glossary: GlossaryEntry[] = [
     category: "Prioritisation & delivery",
     term: "Feasibility (Proven pattern / New build)",
     short: "Per-L5 Activity feasibility signal — set on each tower's Step 4.",
-    long: "Binary signal on every AI-eligible L5 Activity. Proven pattern = leverages an existing Versant platform or vendor pattern (BlackLine, Eightfold, Amagi, Workday, etc.); estimated first-half-year landing once funded. New build = no existing pattern at Versant; needs platform stand-up, deeper integration, or heavier change management. Feasibility is a tower-level signal only — it never sets program priority on its own.",
+    long: "Binary signal on every AI-eligible L5 Activity. Proven pattern = the AI move is well-precedented in industry on top of an existing Versant platform category (illustrative anchors: e.g., BlackLine, Eightfold, Amagi, Workday); estimated first-half-year landing once funded. New build = no existing pattern at Versant; needs platform stand-up, deeper integration, or heavier change management. Feasibility is a tower-level signal only — it never sets program priority on its own.",
   },
   {
     id: "priority-tier",
@@ -183,6 +183,38 @@ export const glossary: GlossaryEntry[] = [
     term: "Guardrail",
     short: "A rule the agent must satisfy before acting.",
     long: "Includes confidence thresholds, prohibited content categories, dollar limits, mandatory human review steps, and audit logging. Guardrails are how the platform stays safe at scale.",
+  },
+  {
+    id: "tower-workbench",
+    category: "Agents & architecture",
+    term: "Tower Workbench",
+    short:
+      "The custom-built, consolidated, per-tower app behind which a tower's point-solution AI agents are stitched.",
+    long: "One Workbench per Versant tower — 14 in total. Each consolidates the tower's L3 AI Solutions (point solutions like Bank Reconciliation Co-Pilot, Contract Search, etc.) behind 4-8 surfaces in the tower's native vernacular (Finance teams Close and Reconcile; Production teams Cue and Package; Ad Sales teams Pace and Yield). Workbench is the consolidator that prevents tool sprawl; the AI Solutions catalog is the set of agents the Workbench wraps. Custom-built — no COTS app stitches the specific point solutions, multi-entity / multi-brand / multi-JV context, and Versant-specific compliance posture for one tower.",
+  },
+  {
+    id: "workbench-surface",
+    category: "Agents & architecture",
+    term: "Workbench Surface",
+    short:
+      "A single verb-led action inside a Tower Workbench (e.g. Close, Reconcile, Brief, Cue, Pace).",
+    long: "Each Workbench ships 4-8 surfaces. A surface is the muscle-memory action the operator already says today, expressed in the tower's native vernacular (not a generic Search/Draft/Review set). A surface fuzzy-matches its `poweredByCapabilities` against the live curated L3 AI Solutions so clicking through opens the relevant deep-dive when a match exists, and shows a stable plain-text capability when none does.",
+  },
+  {
+    id: "orchestration-layer",
+    category: "Agents & architecture",
+    term: "Orchestration Layer",
+    short:
+      "The shared data, identity, agent, and governance fabric beneath every Tower Workbench.",
+    long: "Hand-authored canonical artifact composed of: a Data Architecture (Identity Graph, Knowledge Graph, Content Lake, Event Bus, Vector Store, Financial Ledger Hub, Audit Log, Feature Store); 12-20 API integrations to vendor point solutions (illustrative anchors: e.g., BlackLine, Eightfold, Harvey, Amagi, Deepgram, Veritone, LiveRamp, Piano, Nielsen, CrowdStrike, ServiceNow); 4-8 cross-cutting AI agents (Identity Resolution, Content Classifier, Governance Auditor, Standards Compliance, Covenant Monitor, Broadcast Anomaly, etc.); and 3-5 governance policies (SOX/SEC audit trail, FCC compliance, editorial AI gate, PII/CCPA enforcement, AI model risk review). The Orchestration Layer is the unit of leverage that lets 14 Workbenches act like one company — not 14 silos.",
+  },
+  {
+    id: "cross-cutting-agent",
+    category: "Agents & architecture",
+    term: "Cross-cutting agent",
+    short:
+      "An Orchestration-Layer agent that works on behalf of every tower (not one).",
+    long: "Examples: Identity Resolution Agent (stitches a CNBC.com user, a GolfNow booker, and a Fandango ticket buyer into one Versant identity); Content Classifier Agent (auto-tags every Content Lake asset against the Knowledge Graph); Governance Auditor Agent (watches every agent decision against the active policies); Editorial Standards Compliance Agent (encodes the editorial standards framework owned by the Head of Editorial Standards). Cross-cutting agents are authored on the Orchestration Layer, not per workbench.",
   },
 
   // ---- People & change -------------------------------------------------

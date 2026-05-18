@@ -424,6 +424,7 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
               row={row.row}
               l3Name={row.l3Name}
               towerIconKey={tower.iconKey}
+              towerId={tower.id}
               review={reviews[row.init.id]}
               actions={actions}
               towerIntake={result.intakeMeta.importedAt ?? undefined}

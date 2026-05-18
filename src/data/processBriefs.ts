@@ -190,7 +190,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "LLM API (Anthropic/OpenAI)",
+        "tool": "LLM API (e.g., Anthropic, OpenAI)",
         "purpose": "Natural language narrative generation with data linkage"
       },
       {
@@ -314,7 +314,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI Invoice Processing Platform (Stampli, Mineral AI)",
+        "tool": "AI Invoice Processing Platform (e.g., Stampli, Mineral AI)",
         "purpose": "OCR, matching, coding, approval routing"
       },
       {
@@ -493,7 +493,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Templated reporting platform (Workiva, Power BI, custom)",
+        "tool": "Templated reporting platform (e.g., Workiva, Power BI, or custom)",
         "purpose": "Data-connected deck templates"
       },
       {
@@ -617,7 +617,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "SEC filing data feed (EDGAR API, S&P Capital IQ)",
+        "tool": "SEC filing data feed (e.g., EDGAR API, S&P Capital IQ)",
         "purpose": "Automated peer financial data ingestion"
       },
       {
@@ -678,7 +678,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Spend analytics platform (SpendHQ, Sievo, Coupa Analytics)",
+        "tool": "Spend analytics platform (e.g., SpendHQ, Sievo, Coupa Analytics)",
         "purpose": "Spend classification, visualization, and recommendations"
       },
       {
@@ -846,7 +846,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Workflow orchestration (ServiceNow, custom)",
+        "tool": "Workflow orchestration (e.g., ServiceNow, or custom)",
         "purpose": "Automated task triggering and tracking across IT, HR, facilities"
       },
       {
@@ -907,7 +907,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI workforce analytics platform (Visier, Eightfold)",
+        "tool": "AI workforce analytics platform (e.g., Visier, Eightfold)",
         "purpose": "Predictive modeling on employee data"
       },
       {
@@ -1027,7 +1027,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Social analytics aggregation platform (Sprout Social, Emplifi, custom)",
+        "tool": "Social analytics aggregation platform (e.g., Sprout Social, Emplifi, or custom)",
         "purpose": "Cross-platform data ingestion and unification"
       },
       {
@@ -1145,7 +1145,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Regulatory monitoring platform (Thomson Reuters Regulatory Intelligence, LexisNexis)",
+        "tool": "Regulatory monitoring platform (e.g., Thomson Reuters Regulatory Intelligence, LexisNexis)",
         "purpose": "Automated regulatory source monitoring and classification"
       },
       {
@@ -1316,7 +1316,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI video analytics platform (Verkada, Avigilon)",
+        "tool": "AI video analytics platform (e.g., Verkada, Avigilon)",
         "purpose": "Computer vision on existing CCTV infrastructure"
       }
     ],
@@ -1369,7 +1369,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Visitor management system (Envoy, iLobby)",
+        "tool": "Visitor management system (e.g., Envoy, iLobby)",
         "purpose": "Pre-registration, check-in kiosk, badge management"
       },
       {
@@ -1425,7 +1425,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Vendor onboarding portal (Coupa, SAP Ariba supplier portal)",
+        "tool": "Vendor onboarding portal (e.g., Coupa, SAP Ariba supplier portal)",
         "purpose": "Self-serve document collection and verification"
       }
     ],
@@ -1580,7 +1580,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Cloud cost management platform (CloudHealth, Spot.io, AWS Cost Explorer + AI)",
+        "tool": "Cloud cost management platform (e.g., CloudHealth, Spot.io, AWS Cost Explorer + AI)",
         "purpose": "Multi-cloud cost monitoring, optimization recommendations"
       }
     ],
@@ -1637,7 +1637,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Cloud migration assessment tool (AWS Migration Hub, Azure Migrate, CloudSphere)",
+        "tool": "Cloud migration assessment tool (e.g., AWS Migration Hub, Azure Migrate, CloudSphere)",
         "purpose": "Workload discovery, dependency mapping, migration recommendation"
       }
     ],
@@ -1690,7 +1690,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI code review tool (GitHub Copilot, CodeRabbit, Amazon CodeGuru)",
+        "tool": "AI code review tool (e.g., GitHub Copilot, CodeRabbit, Amazon CodeGuru)",
         "purpose": "Automated PR analysis and annotation"
       }
     ],
@@ -1743,7 +1743,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI testing platform (Testim, Mabl, Katalon with AI)",
+        "tool": "AI testing platform (e.g., Testim, Mabl, Katalon with AI)",
         "purpose": "Automated test generation, execution, and maintenance"
       }
     ],
@@ -1795,11 +1795,11 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "CI/CD platform (GitHub Actions, GitLab CI, ArgoCD)",
+        "tool": "CI/CD platform (e.g., GitHub Actions, GitLab CI, ArgoCD)",
         "purpose": "Pipeline management"
       },
       {
-        "tool": "Deployment orchestration with canary/blue-green (Spinnaker, ArgoRollouts)",
+        "tool": "Deployment orchestration with canary/blue-green (e.g., Spinnaker, ArgoRollouts)",
         "purpose": "Intelligent deployment strategies"
       }
     ],
@@ -1851,7 +1851,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI-powered observability platform (Datadog, PagerDuty AIOps, BigPanda)",
+        "tool": "AI-powered observability platform (e.g., Datadog, PagerDuty AIOps, BigPanda)",
         "purpose": "Signal correlation, alert deduplication, intelligent routing"
       }
     ],
@@ -1910,7 +1910,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "LLM Gateway (LiteLLM, Portkey, custom)",
+        "tool": "LLM Gateway (e.g., LiteLLM, Portkey, or custom)",
         "purpose": "Centralized routing, caching, cost tracking, rate limiting"
       },
       {
@@ -1940,7 +1940,7 @@ export const processBriefs: AIProcessBrief[] = [
     "description": "Building and enforcing AI governance across Versant — model inventory, usage audit trails, bias monitoring, and responsible AI compliance. Critical for a news organization using AI in editorial content production.",
     "impactTier": "Medium",
     "preState": {
-      "summary": "No AI governance framework exists. No inventory of AI models in use. No audit trail for AI-generated content. Brian Carovillano's editorial standards team has no visibility into how AI is being used in content production.",
+      "summary": "No AI governance framework exists. No inventory of AI models in use. No audit trail for AI-generated content. The editorial standards team has no visibility into how AI is being used in content production.",
       "painPoints": [
         "AI being used ad hoc across teams with no oversight",
         "No audit trail for AI-generated news content — reputational risk",
@@ -1972,7 +1972,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI governance platform (Credo AI, IBM OpenPages, custom)",
+        "tool": "AI governance platform (e.g., Credo AI, IBM OpenPages, or custom)",
         "purpose": "Model inventory, audit trails, bias monitoring, policy enforcement"
       }
     ],
@@ -2024,7 +2024,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "SOAR platform (Palo Alto XSOAR, Splunk SOAR, Microsoft Sentinel)",
+        "tool": "SOAR platform (e.g., Palo Alto XSOAR, Splunk SOAR, Microsoft Sentinel)",
         "purpose": "Alert correlation, auto-triage, playbook execution"
       }
     ],
@@ -2077,7 +2077,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI email security (Abnormal Security, Proofpoint with AI, Mimecast)",
+        "tool": "AI email security (e.g., Abnormal Security, Proofpoint with AI, Mimecast)",
         "purpose": "Advanced phishing detection with behavioral analysis"
       }
     ],
@@ -2129,7 +2129,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI vulnerability prioritization (Kenna Security, Qualys VMDR, Tenable with AI)",
+        "tool": "AI vulnerability prioritization (e.g., Kenna Security, Qualys VMDR, Tenable with AI)",
         "purpose": "Context-aware vulnerability prioritization"
       }
     ],
@@ -2181,7 +2181,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "GRC platform with AI (Drata, Vanta, Anecdotes)",
+        "tool": "GRC platform with AI (e.g., Drata, Vanta, Anecdotes)",
         "purpose": "Automated evidence collection, framework mapping, compliance dashboards"
       }
     ],
@@ -2403,7 +2403,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Broadcast quality monitoring system (Telestream iQ, Interra Baton)",
+        "tool": "Broadcast quality monitoring system (e.g., Telestream iQ, Interra Baton)",
         "purpose": "Automated audio/video/captioning quality analysis"
       }
     ],
@@ -2515,7 +2515,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "FAST platform management (Amagi, Wurl)",
+        "tool": "FAST platform management (e.g., Amagi, Wurl)",
         "purpose": "Multi-platform FAST channel operations"
       }
     ],
@@ -2654,7 +2654,7 @@ export const processBriefs: AIProcessBrief[] = [
     "description": "Creating premium, cross-brand audience segments for advertisers using Versant's unique data combination — CNBC investor behavior + GolfNow golfer profiles + Fandango moviegoer purchase data + Rotten Tomatoes interest signals + MS NOW political engagement. No competitor can replicate these cross-vertical segments.",
     "impactTier": "High",
     "preState": {
-      "summary": "No cross-brand audience targeting exists. NBCU's ad sales operation (still managing Versant ads under TSA) uses standard Nielsen demographics. Versant's unique cross-vertical data combination is completely unmonetized.",
+      "summary": "No cross-brand audience targeting exists. NBCU's ad sales operation (still managing Versant ads under TSA) uses standard industry-panel demographics (e.g., Nielsen). Versant's unique cross-vertical data combination is completely unmonetized.",
       "painPoints": [
         "NBCU treats Versant channels as part of a larger portfolio — no incentive to build Versant-specific segments",
         "Cross-brand data (CNBC + GolfNow + Fandango) sits in separate silos with no connection",
@@ -2742,7 +2742,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Yield management platform (custom or FreeWheel/Google Ad Manager with AI layer)",
+        "tool": "Yield management platform (e.g., FreeWheel, Google Ad Manager with AI layer, or custom)",
         "purpose": "Real-time pricing engine across all ad inventory"
       }
     ],
@@ -2846,7 +2846,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Proposal automation platform (custom or Mediaocean/Operative with AI)",
+        "tool": "Proposal automation platform (e.g., Mediaocean, Operative with AI, or custom)",
         "purpose": "Template-based proposal generation from live data"
       }
     ],
@@ -2928,7 +2928,7 @@ export const processBriefs: AIProcessBrief[] = [
     "briefRoutingTier": "P2",
     "impactTier": "Low",
     "preState": {
-      "summary": "MVPD subscriber loss monitored via quarterly Nielsen reports and MVPD disclosure data. No predictive capability — Versant learns about subscriber losses after they've happened.",
+      "summary": "MVPD subscriber loss monitored via quarterly industry-panel reports (e.g., Nielsen) and MVPD disclosure data. No predictive capability — Versant learns about subscriber losses after they've happened.",
       "painPoints": [
         "$4.09B distribution revenue declining 5.4% YoY — need to anticipate which MVPDs are most at risk",
         "Virtual MVPDs (YouTube TV, Hulu Live) gaining while traditional cable loses — need to track migration patterns",
@@ -2966,7 +2966,7 @@ export const processBriefs: AIProcessBrief[] = [
     "keyMetric": "Predict MVPD churn risk 6-12 months ahead; enable proactive carriage negotiation",
     "dependencies": [
       "MVPD subscriber data feeds",
-      "Nielsen/industry measurement data"
+      "Industry measurement data (e.g., Nielsen)"
     ],
     "rolesImpacted": [
       {
@@ -3016,7 +3016,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI engagement platform (Braze, Iterable)",
+        "tool": "AI engagement platform (e.g., Braze, Iterable)",
         "purpose": "Personalized in-app and email nudges during trial"
       },
       {
@@ -3076,7 +3076,7 @@ export const processBriefs: AIProcessBrief[] = [
         "purpose": "Controlled pricing tests across segments"
       },
       {
-        "tool": "Subscription analytics (ChartMogul, custom)",
+        "tool": "Subscription analytics (e.g., ChartMogul, or custom)",
         "purpose": "Price elasticity measurement, LTV modeling by price point"
       }
     ],
@@ -3185,7 +3185,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Enterprise social management (Sprinklr, Hootsuite Enterprise, custom)",
+        "tool": "Enterprise social management (e.g., Sprinklr, Hootsuite Enterprise, or custom)",
         "purpose": "Multi-brand, multi-platform publishing orchestration"
       }
     ],
@@ -3237,7 +3237,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI content moderation (Hive Moderation, OpenAI Moderation API, custom)",
+        "tool": "AI content moderation (e.g., Hive Moderation, OpenAI Moderation API, or custom)",
         "purpose": "Real-time comment classification and action"
       }
     ],
@@ -3289,7 +3289,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Social analytics platform (Sprout Social, Emplifi)",
+        "tool": "Social analytics platform (e.g., Sprout Social, Emplifi)",
         "purpose": "Cross-platform aggregation and analytics"
       }
     ],
@@ -3341,7 +3341,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI creative platform (Pencil, Jasper, custom on Anthropic API)",
+        "tool": "AI creative platform (e.g., Pencil, Jasper, or custom on Anthropic API)",
         "purpose": "Automated ad creative generation with brand controls"
       }
     ],
@@ -3397,7 +3397,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Customer engagement platform (Braze, Iterable)",
+        "tool": "Customer engagement platform (e.g., Braze, Iterable)",
         "purpose": "Behavioral triggers, multi-channel orchestration, personalization"
       }
     ],
@@ -3449,7 +3449,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "CRO platform (Optimizely, VWO, AB Tasty)",
+        "tool": "CRO platform (e.g., Optimizely, VWO, AB Tasty)",
         "purpose": "Multivariate testing, personalization, funnel analytics"
       }
     ],
@@ -3505,7 +3505,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI media intelligence platform (Signal AI, Dataminr)",
+        "tool": "AI media intelligence platform (e.g., Signal AI, Dataminr)",
         "purpose": "Real-time social velocity and sentiment monitoring"
       }
     ],
@@ -3609,7 +3609,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Internal comms platform (Staffbase, Poppulo)",
+        "tool": "Internal comms platform (e.g., Staffbase, Poppulo)",
         "purpose": "Personalized employee communications with engagement tracking"
       }
     ],
@@ -3665,7 +3665,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI MMM platform (Measured, Keen, Analytic Partners)",
+        "tool": "AI MMM platform (e.g., Measured, Keen, Analytic Partners)",
         "purpose": "Continuous marketing mix modeling and attribution"
       }
     ],
@@ -3777,7 +3777,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Subscription management platform (Zuora, Recurly, Stripe Billing)",
+        "tool": "Subscription management platform (e.g., Zuora, Recurly, Stripe Billing)",
         "purpose": "Programmatic subscription changes via API"
       },
       {
@@ -3889,7 +3889,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Text analytics / conversation intelligence (Medallia, Qualtrics, custom NLP)",
+        "tool": "Text analytics / conversation intelligence (e.g., Medallia, Qualtrics, or custom NLP)",
         "purpose": "Support conversation analysis and insight extraction"
       }
     ],
@@ -4119,7 +4119,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "News monitoring/wire service API feeds (AP, Reuters, government data feeds)",
+        "tool": "News monitoring / wire service API feeds (e.g., AP, Reuters, government data feeds)",
         "purpose": "Comprehensive source monitoring"
       },
       {
@@ -4291,7 +4291,7 @@ export const processBriefs: AIProcessBrief[] = [
         "purpose": "Live data ingestion"
       },
       {
-        "tool": "Graphics system API (Vizrt, Chyron)",
+        "tool": "Graphics system API (e.g., Vizrt, Chyron)",
         "purpose": "Automated graphic population"
       }
     ],
@@ -4376,7 +4376,7 @@ export const processBriefs: AIProcessBrief[] = [
     "briefRoutingTier": "P2",
     "impactTier": "Medium",
     "preState": {
-      "summary": "Fact-checking happens manually — producers and standards team (Brian Carovillano's team) verify claims in scripts before broadcast and in articles before publication. During live broadcasts, real-time fact-checking is limited to what the team can look up on the fly.",
+      "summary": "Fact-checking happens manually — producers and the editorial standards team verify claims in scripts before broadcast and in articles before publication. During live broadcasts, real-time fact-checking is limited to what the team can look up on the fly.",
       "painPoints": [
         "Live broadcast claims can't always be fact-checked in real-time",
         "Pre-broadcast script verification is time-pressured",
@@ -4407,7 +4407,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Fact-checking database (ClaimBuster, custom knowledge base)",
+        "tool": "Fact-checking database (e.g., ClaimBuster, or custom knowledge base)",
         "purpose": "Verified fact database for claim comparison"
       },
       {
@@ -4423,7 +4423,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "rolesImpacted": [
       {
-        "role": "Standards Team (Carovillano's team)",
+        "role": "Editorial standards team",
         "impact": "AI-augmented capacity — can verify more claims across more content"
       }
     ]
@@ -4464,7 +4464,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Podcast hosting with DAI (Megaphone/Spotify, ART19/Amazon)",
+        "tool": "Podcast hosting with DAI (e.g., Megaphone / Spotify, ART19 / Amazon)",
         "purpose": "Dynamic ad insertion at listen-time"
       },
       {
@@ -4550,7 +4550,7 @@ export const processBriefs: AIProcessBrief[] = [
     "description": "A dedicated AI review layer for all AI-generated editorial content — verifying factual accuracy, style compliance, potential sensitivity, and editorial standards before human editor sees it. This is the governance layer that makes 'human-led, AI-powered' real.",
     "impactTier": "High",
     "preState": {
-      "summary": "No AI quality review exists because no AI-generated content exists yet at scale. As AI content generation scales (base-layer content, summaries, social clips), editorial standards team (Brian Carovillano) needs a scalable review mechanism.",
+      "summary": "No AI quality review exists because no AI-generated content exists yet at scale. As AI content generation scales (base-layer content, summaries, social clips), the editorial standards team needs a scalable review mechanism.",
       "painPoints": [
         "AI content generation will produce volume that human editors can't review individually",
         "Factual errors in AI content carry same reputational risk as human errors",
@@ -4594,7 +4594,7 @@ export const processBriefs: AIProcessBrief[] = [
     "dependencies": [
       "Source data feeds for fact verification",
       "Brand style guides codified",
-      "Sensitivity classification taxonomy defined with Carovillano's standards team"
+      "Sensitivity classification taxonomy defined with the editorial standards team"
     ],
     "rolesImpacted": [
       {
@@ -4643,7 +4643,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Template-based graphics engine (custom, or Canva Enterprise API, Adobe Express API)",
+        "tool": "Template-based graphics engine (e.g., Canva Enterprise API, Adobe Express API, or custom)",
         "purpose": "Automated graphic generation from brand templates"
       }
     ],
@@ -4697,7 +4697,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI captioning engine (Verbit, Rev AI, AssemblyAI, custom)",
+        "tool": "AI captioning engine (e.g., Verbit, Rev AI, AssemblyAI, or custom)",
         "purpose": "Automated captioning with speaker diarization"
       },
       {
@@ -4753,7 +4753,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Cloud transcoding platform (AWS MediaConvert, Bitmovin, Harmonic)",
+        "tool": "Cloud transcoding platform (e.g., AWS MediaConvert, Bitmovin, Harmonic)",
         "purpose": "Scalable multi-format transcoding"
       },
       {
@@ -4809,7 +4809,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "AI audio processing (iZotope RX with AI, Adobe Podcast AI, Descript)",
+        "tool": "AI audio processing (e.g., iZotope RX with AI, Adobe Podcast AI, Descript)",
         "purpose": "Automated audio enhancement and format-specific mastering"
       }
     ],
@@ -4860,7 +4860,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Media asset management with AI indexing (Veritone, Dalet, GrayMeta)",
+        "tool": "Media asset management with AI indexing (e.g., Veritone, Dalet, GrayMeta)",
         "purpose": "Large-scale content analysis and indexing"
       }
     ],
@@ -5072,7 +5072,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Bonded cellular/connectivity platform (LiveU, TVU Networks)",
+        "tool": "Bonded cellular / connectivity platform (e.g., LiveU, TVU Networks)",
         "purpose": "Remote connectivity management with AI-assisted selection"
       }
     ],
@@ -5228,7 +5228,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "FAST scheduling platform (Amagi, Wurl)",
+        "tool": "FAST scheduling platform (e.g., Amagi, Wurl)",
         "purpose": "Automated schedule generation and delivery"
       },
       {
@@ -5284,13 +5284,13 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "ML prediction model trained on historical Nielsen + digital data",
+        "tool": "ML prediction model trained on historical industry-panel + digital data (e.g., Nielsen)",
         "purpose": "Viewership forecasting with multi-factor analysis"
       }
     ],
     "keyMetric": "Data-driven schedule decisions vs. gut feel; what-if scenario testing enabled",
     "dependencies": [
-      "Historical viewership data (Nielsen + digital)",
+      "Historical viewership data (industry panel + digital, e.g., Nielsen)",
       "Competitive schedule data",
       "Content metadata"
     ],
@@ -5393,7 +5393,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Content intelligence platform (Parrot Analytics, custom)",
+        "tool": "Content intelligence platform (e.g., Parrot Analytics, or custom)",
         "purpose": "Content landscape mapping and demand analysis"
       }
     ],
@@ -5445,7 +5445,7 @@ export const processBriefs: AIProcessBrief[] = [
     ],
     "toolsRequired": [
       {
-        "tool": "Content demand analytics (Parrot Analytics, custom)",
+        "tool": "Content demand analytics (e.g., Parrot Analytics, or custom)",
         "purpose": "Audience demand scoring for proposed content"
       }
     ],

@@ -1,10 +1,9 @@
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PageShell } from "@/components/PageShell";
-import { InitiativeReviewChipV6 } from "@/components/towers/InitiativeReviewChipV6";
 import { TowerHeroV2 } from "@/components/towers/TowerHeroV2";
 import { TowerKpiStrip } from "@/components/towers/TowerKpiStrip";
-import { SolutionsGallery } from "@/components/towers/SolutionsGallery";
+import { TowerStep4Tabs } from "@/components/towers/TowerStep4Tabs";
 import { TowerSwitcher } from "@/components/towers/TowerSwitcher";
 import { TowerDataExports } from "@/components/assess/TowerDataExports";
 import { WorkshopToolsDrawer } from "@/components/towers/WorkshopToolsDrawer";
@@ -39,14 +38,15 @@ export function generateStaticParams() {
  *   8. Workshop tools drawer — collapsed; numbered AI-curation pipeline
  *      (intake → regenerate guidance → bulk briefs) plus the
  *      `StaleCurationBanner` always-visible alert in the header.
- *   9. AI solutions gallery — a right-aligned validation status chip
- *      sits above a single filterable card grid (no heading, no
- *      explanatory paragraph, no tabs, no group-by toggle, no marquee,
- *      no value-effort matrix). The cards ARE the content; the hero +
- *      KPIs above already told the story so a workshop attendee scrolls
- *      straight from "what is this tower" into "what could we build."
+ *   9. Tower Step-4 tabs — "Workbench" (default) renders the canonical,
+ *      hand-authored, custom-built per-tower app (consolidates point
+ *      solutions behind 4-8 surfaces in the tower's native vernacular);
+ *      "AI Solutions" renders the curated `SolutionsGallery` of point-
+ *      solution L3 Initiatives plus the validation chip. Workbench is
+ *      the consolidator; the gallery is the catalog of agents the
+ *      Workbench stitches together.
  *
- * Every "what to do next" affordance is above the fold; the gallery
+ * Every "what to do next" affordance is above the fold; the Workbench
  * is the page's headline content.
  */
 export default function TowerPage({ params }: { params: { slug: string } }) {
@@ -108,11 +108,11 @@ export default function TowerPage({ params }: { params: { slug: string } }) {
           <WorkshopToolsDrawer tower={tower} />
         </div>
 
-        <section className="mt-10 space-y-3" aria-label="AI solutions for this tower">
-          <div className="flex justify-end">
-            <InitiativeReviewChipV6 tower={tower} />
-          </div>
-          <SolutionsGallery tower={tower} />
+        <section
+          className="mt-10 space-y-3"
+          aria-label="AI solutions for this tower"
+        >
+          <TowerStep4Tabs tower={tower} />
         </section>
       </div>
     </PageShell>

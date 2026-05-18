@@ -13,6 +13,8 @@ import {
   DECK_QUADRANT_ORDER,
   DECK_SCORING_BULLETS,
 } from "./crossTowerDeckConstants";
+import { TOWER_WORKBENCHES } from "@/data/towerWorkbenches";
+import { ORCHESTRATION_LAYER } from "@/data/orchestrationLayer";
 
 function fmtUsd(n: number, redact: boolean): string {
   if (redact) return "—";
@@ -235,6 +237,10 @@ export function CrossTowerDeckDocument({ payload }: { payload: CrossTowerDeckPay
         </ul>
       </DeckSlide>
 
+      <WorkbenchesMosaicSlide />
+
+      <OrchestrationLayerSlide />
+
       <DeckSlide>
         <p className="font-mono text-[10px] font-semibold uppercase tracking-wider text-forge-hint">
           Value accrual
@@ -382,5 +388,135 @@ function Kpi({ label, value }: { label: string; value: string }) {
       <p className="text-[10px] font-semibold uppercase tracking-wider text-forge-hint">{label}</p>
       <p className="mt-1 font-mono text-lg font-semibold text-forge-ink">{value}</p>
     </div>
+  );
+}
+
+/**
+ * Deck slide — the 14 Tower Workbenches as a mosaic. Reads
+ * `TOWER_WORKBENCHES` so the slide stays in sync with the canonical
+ * data.
+ */
+function WorkbenchesMosaicSlide() {
+  const workbenches = Object.values(TOWER_WORKBENCHES);
+  return (
+    <DeckSlide>
+      <p className="font-mono text-[10px] font-semibold uppercase tracking-wider text-forge-hint">
+        Architecture
+      </p>
+      <h2 className="mt-2 font-display text-xl font-semibold text-forge-ink">
+        {workbenches.length} Tower Workbenches — one per tower
+      </h2>
+      <p className="mt-2 max-w-3xl text-xs leading-relaxed text-forge-subtle">
+        Each tower gets a custom-built workbench that consolidates its point-
+        solution AI agents behind 4-8 surfaces in the tower&apos;s native
+        vernacular. Workbench is the consolidator; the AI Solutions catalog is
+        the set of agents and tools the Workbench stitches together.
+      </p>
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {workbenches.map((w) => (
+          <div
+            key={w.id}
+            className="rounded-lg border border-forge-border bg-forge-well/30 p-2.5"
+          >
+            <p className="font-display text-[12px] font-semibold text-forge-ink">
+              {w.name.replace(" Workbench", "")}
+            </p>
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-accent-purple-dark">
+              {w.surfaces.length} surfaces
+            </p>
+            <p className="mt-1 line-clamp-2 text-[10.5px] leading-snug text-forge-subtle">
+              {w.surfaces.map((s) => s.verb).join(" · ")}
+            </p>
+          </div>
+        ))}
+      </div>
+    </DeckSlide>
+  );
+}
+
+/**
+ * Deck slide — Orchestration Layer architecture diagram. Reads
+ * `ORCHESTRATION_LAYER` so the slide stays in sync with the canonical
+ * data.
+ */
+function OrchestrationLayerSlide() {
+  const layer = ORCHESTRATION_LAYER;
+  const sampleAgents = layer.agents.slice(0, 4);
+  const sampleData = layer.dataArchitecture.slice(0, 4);
+  return (
+    <DeckSlide>
+      <p className="font-mono text-[10px] font-semibold uppercase tracking-wider text-forge-hint">
+        Architecture
+      </p>
+      <h2 className="mt-2 font-display text-xl font-semibold text-forge-ink">
+        Orchestration Layer — the shared fabric beneath every workbench
+      </h2>
+      <p className="mt-2 max-w-3xl text-xs leading-relaxed text-forge-subtle">
+        {layer.narrative}
+      </p>
+      <div className="mt-5 space-y-2">
+        <div className="rounded-lg border-2 border-accent-purple/40 bg-accent-purple/5 p-3">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-accent-purple-dark">
+            Layer 1 · {Object.keys(TOWER_WORKBENCHES).length} Tower Workbenches
+          </p>
+          <p className="mt-1 text-[11px] text-forge-body">
+            Custom-built user-facing apps, one per tower.
+          </p>
+        </div>
+        <p className="text-center font-mono text-[14px] text-forge-hint">↓</p>
+        <div className="rounded-lg border-2 border-accent-teal/40 bg-accent-teal/5 p-3">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-accent-teal">
+            Layer 2 · Orchestration
+          </p>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
+                Data architecture
+              </p>
+              <ul className="mt-0.5 space-y-0.5 text-[11px] text-forge-body">
+                {sampleData.map((d) => (
+                  <li key={d.id}>· {d.name}</li>
+                ))}
+                {layer.dataArchitecture.length > sampleData.length ? (
+                  <li className="text-forge-subtle">
+                    + {layer.dataArchitecture.length - sampleData.length} more
+                  </li>
+                ) : null}
+              </ul>
+            </div>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-forge-hint">
+                Cross-cutting agents
+              </p>
+              <ul className="mt-0.5 space-y-0.5 text-[11px] text-forge-body">
+                {sampleAgents.map((a) => (
+                  <li key={a.id}>· {a.name}</li>
+                ))}
+                {layer.agents.length > sampleAgents.length ? (
+                  <li className="text-forge-subtle">
+                    + {layer.agents.length - sampleAgents.length} more
+                  </li>
+                ) : null}
+              </ul>
+            </div>
+          </div>
+        </div>
+        <p className="text-center font-mono text-[14px] text-forge-hint">↓</p>
+        <div className="rounded-lg border-2 border-forge-border-strong bg-forge-well/50 p-3">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-forge-subtle">
+            Layer 3 · {layer.apiIntegrations.length} named API integrations
+          </p>
+          <p className="mt-1 text-[11px] text-forge-body">
+            Vendor point solutions — BlackLine, Eightfold, Harvey, Amagi,
+            Deepgram, Veritone, LiveRamp, Piano, Nielsen, CrowdStrike, ServiceNow,
+            and more.
+          </p>
+        </div>
+      </div>
+      <p className="mt-4 font-mono text-[10px] text-forge-hint">
+        {layer.buildEffort} · {layer.estimatedDeliveryMonths}-month delivery ·{" "}
+        {layer.governance.length} governance policies
+      </p>
+    </DeckSlide>
   );
 }

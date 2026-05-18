@@ -18,6 +18,7 @@ import type {
   OrchestrationBlock,
   StrategistInitiative,
 } from "@/lib/strategist/types";
+import { CanonicalOrchestrationLayer } from "./CanonicalOrchestrationLayer";
 
 /**
  * Cross-Tower → "Orchestration & Data Layer" tab.
@@ -52,48 +53,74 @@ export function OrchestrationLayerTab({
   const errored = state.status === "error";
 
   return (
-    <div className="space-y-6">
-      {hideHeader ? null : (
-        <Header
-          scope={scope}
-          status={state.status}
-          generatedAt={state.generatedAt}
-          isStale={isStale}
-          isLoading={isLoading}
-          onGenerate={() => void generate({ forceRegenerate: false })}
-          onRegenerate={() => void generate({ forceRegenerate: true })}
-        />
-      )}
+    <div className="space-y-8">
+      {/* Canonical (hand-authored) Orchestration Layer — primary content. */}
+      <CanonicalOrchestrationLayer />
 
-      {errored ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-red-500/40 bg-red-500/5 p-4 text-sm text-red-700"
-        >
-          <p className="font-medium">
-            We couldn&apos;t reach the strategist model.
-          </p>
-          <p className="mt-1 text-[12.5px] text-red-700/85">
-            {state.errorMessage ?? "Unknown error"}
-          </p>
+      {/* Strategist commentary — LLM-derived narrative + blocked-initiative
+          callouts, demoted beneath the canonical artifact. */}
+      <section
+        aria-label="Strategist commentary"
+        className="space-y-4 rounded-2xl border border-forge-border bg-forge-well/30 p-5"
+      >
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-forge-hint">
+              <Sparkles className="h-3 w-3" aria-hidden />
+              &gt; Strategist commentary
+            </div>
+            <h3 className="mt-1 font-display text-lg font-semibold text-forge-ink">
+              How this run reads the portfolio
+            </h3>
+            <p className="mt-1 max-w-3xl text-[12.5px] text-forge-subtle">
+              LLM-derived narrative against the canonical layer above plus the
+              specific initiatives that stall without it.
+            </p>
+          </div>
         </div>
-      ) : null}
 
-      {!isReady && !isLoading && !errored ? (
-        <EmptyOrchestrationPanel
-          scope={scope}
-          onGenerate={() => void generate({ forceRegenerate: false })}
-        />
-      ) : null}
+        {hideHeader ? null : (
+          <Header
+            scope={scope}
+            status={state.status}
+            generatedAt={state.generatedAt}
+            isStale={isStale}
+            isLoading={isLoading}
+            onGenerate={() => void generate({ forceRegenerate: false })}
+            onRegenerate={() => void generate({ forceRegenerate: true })}
+          />
+        )}
 
-      {isLoading && !isReady ? <OrchestrationLoadingPanel /> : null}
+        {errored ? (
+          <div
+            role="alert"
+            className="rounded-xl border border-red-500/40 bg-red-500/5 p-4 text-sm text-red-700"
+          >
+            <p className="font-medium">
+              We couldn&apos;t reach the strategist model.
+            </p>
+            <p className="mt-1 text-[12.5px] text-red-700/85">
+              {state.errorMessage ?? "Unknown error"}
+            </p>
+          </div>
+        ) : null}
 
-      {isReady && state.outputs ? (
-        <OrchestrationContent
-          orchestration={state.outputs.orchestration}
-          initiatives={state.outputs.initiatives}
-        />
-      ) : null}
+        {!isReady && !isLoading && !errored ? (
+          <EmptyOrchestrationPanel
+            scope={scope}
+            onGenerate={() => void generate({ forceRegenerate: false })}
+          />
+        ) : null}
+
+        {isLoading && !isReady ? <OrchestrationLoadingPanel /> : null}
+
+        {isReady && state.outputs ? (
+          <OrchestrationContent
+            orchestration={state.outputs.orchestration}
+            initiatives={state.outputs.initiatives}
+          />
+        ) : null}
+      </section>
     </div>
   );
 }

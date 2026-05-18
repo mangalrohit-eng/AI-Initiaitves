@@ -8,6 +8,8 @@ import "server-only";
 
 import { towers } from "@/data/towers";
 import { processBriefs } from "@/data/processBriefs";
+import { TOWER_WORKBENCHES } from "@/data/towerWorkbenches";
+import { ORCHESTRATION_LAYER } from "@/data/orchestrationLayer";
 import { VERSANT_CONTEXT } from "./buildVersantContext";
 import type { StaticBriefDigest, StaticCorpusDigest, StaticTowerDigest } from "./types";
 
@@ -120,6 +122,53 @@ export function staticCorpusForPrompt(d: StaticCorpusDigest): string {
       lines.push(`  Brands: ${b.brandsMentioned.join(", ")}`);
     }
   }
+
+  lines.push("");
+  lines.push(
+    "# TOWER WORKBENCHES (custom-built, consolidated per-tower apps — one per tower)",
+  );
+  for (const w of Object.values(TOWER_WORKBENCHES)) {
+    lines.push(
+      `[${w.id}] ${w.name} | tower=${w.towerId} | build=${w.buildEffort} | delivery=${w.estimatedDeliveryMonths}mo`,
+    );
+    lines.push(`  Tagline: ${truncate(w.tagline, 200)}`);
+    lines.push(
+      `  Surfaces (${w.surfaces.length}): ${w.surfaces.map((s) => `${s.verb}/${s.name}`).join(" · ")}`,
+    );
+    lines.push(`  Success metric: ${w.successMetric}`);
+    lines.push(`  Why custom: ${truncate(w.whyCustomBuild, 200)}`);
+    lines.push(`  Wraps (illustrative vendor anchors — not committed picks): ${w.digitalCore.integrations.join(", ")}`);
+  }
+
+  lines.push("");
+  lines.push(
+    "# ORCHESTRATION LAYER (canonical shared fabric beneath all workbenches)",
+  );
+  lines.push(`Narrative: ${truncate(ORCHESTRATION_LAYER.narrative, 280)}`);
+  lines.push(`Why shared: ${truncate(ORCHESTRATION_LAYER.whyShared, 280)}`);
+  lines.push(
+    `Build: ${ORCHESTRATION_LAYER.buildEffort} | Delivery: ${ORCHESTRATION_LAYER.estimatedDeliveryMonths}mo`,
+  );
+  lines.push(
+    `Data architecture (${ORCHESTRATION_LAYER.dataArchitecture.length}): ${ORCHESTRATION_LAYER.dataArchitecture
+      .map((c) => `${c.name} [${c.category}]`)
+      .join(" · ")}`,
+  );
+  lines.push(
+    `Cross-cutting agents (${ORCHESTRATION_LAYER.agents.length}): ${ORCHESTRATION_LAYER.agents
+      .map((a) => `${a.name} [${a.type}]`)
+      .join(" · ")}`,
+  );
+  lines.push(
+    `API integrations (${ORCHESTRATION_LAYER.apiIntegrations.length}) — illustrative vendor anchors only, never render as committed picks: ${Array.from(
+      new Set(ORCHESTRATION_LAYER.apiIntegrations.map((i) => i.pointSolution)),
+    ).join(", ")}`,
+  );
+  lines.push(
+    `Governance policies (${ORCHESTRATION_LAYER.governance.length}): ${ORCHESTRATION_LAYER.governance
+      .map((g) => g.name)
+      .join(" · ")}`,
+  );
 
   return lines.join("\n");
 }

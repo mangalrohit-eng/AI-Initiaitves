@@ -25,6 +25,24 @@ export type ChangelogEntry = {
 
 export const changelog: ChangelogEntry[] = [
   {
+    id: "illustrative-voice-2026-05-18",
+    date: "2026-05-18",
+    kind: "fix",
+    title: "Illustrative voice: roles in, names out; vendors framed as anchors",
+    summary:
+      "Initiative cards, Tower Workbenches, the Orchestration Layer, briefs, the glossary, and the /ask responder now refer to Versant executives by role only — never by name — and frame every vendor mention as an illustrative anchor (`category (e.g., BlackLine, FloQast)`), not a committed pick. The exception is a new `committedVendors` field on the `Tower` type that lets a Versant intake form confirm a capability/vendor pair, at which point that specific pair renders definitively for that tower only. The prompt kit was rebuilt around `EXECUTIVE_ROLES` and `VENDOR_CATEGORY_CATALOG` so LLM-regenerated content carries the new voice forward. Existing LLM caches will refresh organically the next time a tower's initiatives are re-curated.",
+    href: "/changelog#illustrative-voice-2026-05-18",
+  },
+  {
+    id: "tower-workbench-launch",
+    date: "2026-05-18",
+    kind: "release",
+    title: "Tower Workbenches + canonical Orchestration Layer",
+    summary:
+      "Step 4 now defaults to a per-tower Workbench tab — the custom-built, consolidated app behind which a tower's point-solution AI agents are stitched (one per tower, 14 in total). Each Workbench ships 4-8 surfaces in the tower's native vernacular (Finance: Close, Reconcile, Draft MD&A; Production: Cue, Browse archive, Package; Ad Sales: Pace, Yield, Score) and fuzzy-matches to the live AI Solutions catalog. The Cross-Tower Orchestration Layer tab now leads with a canonical hand-authored fabric: layered architecture diagram, 8 data architecture components (Identity Graph, Knowledge Graph, Content Lake, Event Bus, Vector Store, Financial Ledger Hub, Audit Log, Feature Store); 21 illustrative API integrations to vendor categories (e.g., BlackLine, Eightfold, Harvey, Amagi, Deepgram, Veritone, LiveRamp, Piano, Nielsen, CrowdStrike, ServiceNow); 8 cross-cutting AI agents; and 5 governance policies (SOX/SEC, FCC, editorial AI gate, PII/CCPA, AI model risk). The LLM-generated strategist narrative is retained as secondary commentary beneath the canonical artifact.",
+    href: "/changelog#tower-workbench-launch",
+  },
+  {
     id: "p1-local-collab",
     date: "2026-04-22",
     kind: "release",

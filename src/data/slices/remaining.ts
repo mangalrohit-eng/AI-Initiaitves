@@ -1045,7 +1045,7 @@ export const legalTower: TowerSlice = {
   id: "legal",
   name: "Legal & Business Affairs",
   iconKey: "Scale",
-  versantLeads: ["Jonathan Gottlieb"],
+  versantLeads: ["General Counsel"],
   accentureLeads: ["Lisa Bloomberg"],
   description:
     "Legal operations spanning content rights management, carriage agreement negotiation, talent contracts, SEC/FCC compliance, M&A due diligence, and AI governance for a newly public media company.",
@@ -1917,10 +1917,10 @@ export const techTower: TowerSlice = {
   id: "tech-engineering",
   name: "Technology & Engineering",
   iconKey: "Cpu",
-  versantLeads: ["Mike Cagnazzi", "Steve McElwee", "Deep Bagchee"],
+  versantLeads: ["CTO", "Chief Architect", "CPTO (News)"],
   accentureLeads: ["Rajeev Kaul"],
   description:
-    "Enterprise technology, software engineering, product development, cloud infrastructure, cybersecurity, and AI platform development. Deep Bagchee (CPTO, News) leads digital product for CNBC/MS NOW. Nate Balogh (CIO) oversees enterprise IT.",
+    "Enterprise technology, software engineering, product development, cloud infrastructure, cybersecurity, and AI platform development. The CPTO (News) leads digital product for CNBC and MS NOW; the CIO oversees enterprise IT.",
   currentState:
     "Separating from Comcast technology infrastructure. Tech stack includes legacy elements (WordPress, PHP, Cloudflare per ZoomInfo). Building independent cloud infrastructure. StockStory acquisition brings small AI/ML team. No visible cloud strategy declaration. No unified data platform. Heavy reliance on Comcast-era TSAs for technology.",
   totalProcesses: 4,
@@ -2405,7 +2405,7 @@ export const opsTower: TowerSlice = {
   id: "operations-technology",
   name: "Technology Operations",
   iconKey: "Workflow",
-  versantLeads: ["Nate Balogh"],
+  versantLeads: ["CIO"],
   accentureLeads: ["Sandhya Parameshwara"],
   description:
     "Broadcast operations, master control, playout, signal distribution, and technical operations for 7+ linear networks plus growing digital/FAST/OTA distribution. The operational backbone that keeps content flowing to ~126M US households.",
@@ -3095,10 +3095,10 @@ export const marketingTower: TowerSlice = {
   id: "marketing-comms",
   name: "Marketing & Communications",
   iconKey: "Megaphone",
-  versantLeads: ["Frank Tanki", "Tom Clendenin", "Amanda Norvell", "Claire Ripsteen"],
+  versantLeads: ["CMO (Entertainment & Sports)", "CMO (CNBC & MS NOW)", "Head of Brand Marketing", "Head of Corporate Communications"],
   accentureLeads: ["Lisa Schwartz"],
   description:
-    "Brand marketing, performance marketing, PR/communications, social media, and audience development across all Versant brands. Two CMOs: Frank Tanki (Entertainment & Sports) and Tom Clendenin (CNBC & MS NOW).",
+    "Brand marketing, performance marketing, PR/communications, social media, and audience development across all Versant brands. Two CMOs split the portfolio: one for Entertainment & Sports, one for CNBC and MS NOW.",
   currentState:
     "Building independent brand identity for Versant as a corporate entity while managing established brands (CNBC, MS NOW, E!, USA, Golf Channel). MS NOW generating 8B social views and 140M+ podcast downloads. Major DTC launches (MS NOW summer 2026, CNBC subscription) require acquisition marketing. Election cycle (2026 midterms) is a massive MS NOW marketing moment.",
   totalProcesses: 4,
@@ -3738,10 +3738,10 @@ export const editorialTower: TowerSlice = {
   id: "editorial-news",
   name: "Editorial & News",
   iconKey: "Newspaper",
-  versantLeads: ["Brian Carovillano (MS NOW)", "Brad Quick (CNBC)"],
+  versantLeads: ["Head of Editorial Standards (MS NOW)", "Head of Newsroom (CNBC)"],
   accentureLeads: ["Noor Chawla"],
   description:
-    "Newsroom operations, editorial standards, content production pipeline for MS NOW (political news) and CNBC (business news). Brian Carovillano leads standards and editorial partnerships.",
+    "Newsroom operations, editorial standards, content production pipeline for MS NOW (political news) and CNBC (business news). The Head of Editorial Standards owns standards and editorial partnerships.",
   currentState:
     "MS NOW separating from NBC News to build independent newsgathering. CNBC refreshing digital identity and integrating StockStory AI. Both brands produce thousands of hours of live content annually. MS NOW: 8B social views, 140M+ podcast downloads, DTC launch summer 2026. CNBC: #1 global business news, 6,000+ hours live coverage, Kalshi partnership, DTC subscription planned.",
   totalProcesses: 4,

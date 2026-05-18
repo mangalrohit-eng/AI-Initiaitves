@@ -59,6 +59,39 @@ export type Tower = {
    * neutral chevron-only header.
    */
   iconKey?: string;
+  /**
+   * Optional capability/vendor pairs that Versant has confirmed for this
+   * tower (typically captured via an intake form during discovery).
+   *
+   * When a pair appears here, the prompt kit + workbench / orchestration
+   * UI render that vendor definitively for that capability — no `e.g.,`
+   * prefix. Every other vendor mention stays illustrative-by-default.
+   *
+   * Empty (or omitted) on every tower today. The mechanism exists so
+   * future intake submissions can populate it without another schema
+   * change.
+   */
+  committedVendors?: CommittedVendor[];
+};
+
+/**
+ * A Versant-confirmed vendor pick for one capability in one tower.
+ * Tracked at the tower grain (not initiative grain) because confirmation
+ * is a procurement event, not an initiative event — once a vendor is
+ * picked for "Close orchestration," every initiative in that tower that
+ * touches close orchestration inherits the definitive name.
+ */
+export type CommittedVendor = {
+  /** Capability the vendor has been selected for (e.g., "Close orchestration"). */
+  capability: string;
+  /** Confirmed vendor name (e.g., "BlackLine"). Renders without "e.g.,". */
+  vendor: string;
+  /** Where the confirmation came from — keeps the audit trail tight. */
+  confirmedBy?: "intake-form" | "executive-decision" | "rfp" | "other";
+  /** ISO date the pair was confirmed. */
+  confirmedAt?: string;
+  /** Optional one-line rationale for the audit trail. */
+  rationale?: string;
 };
 
 export type TopOpportunity = {
@@ -392,4 +425,233 @@ export type AgentFlow = {
   to: string;
   dataPassed: string;
   trigger: string;
+};
+
+// ============================================================================
+//   TOWER WORKBENCH — the per-tower, custom-built user-facing app that
+//   consolidates a tower's point-solution L3 Initiatives behind 4-8 user
+//   verbs. Sits one altitude above the L3 Initiatives ("the agents") and
+//   one below the cross-tower OrchestrationLayer ("the shared fabric").
+//
+//   IMPORTANT: This is the per-TOWER Workbench (a meta-surface). It is
+//   distinct from `WorkbenchLens` above, which is the per-INITIATIVE tools
+//   lens. Type names disambiguate: `TowerWorkbench` vs. `WorkbenchLens`.
+// ============================================================================
+
+/**
+ * One user-visible surface inside a Tower Workbench. A surface is the
+ * muscle-memory action the operator already says today — Finance teams
+ * "close" and "reconcile", Production teams "cue" and "package", Ad Sales
+ * teams "pace" and "yield". Verbs are intentionally free-text (not an
+ * enum) because the vocabulary varies dramatically per tower.
+ */
+export type WorkbenchSurface = {
+  /** Kebab-case slug stable within its workbench. */
+  id: string;
+  /**
+   * 1-2 word verb in the tower's NATIVE vernacular (not the generic
+   * "Search/Draft/Review" set). Renders as a small uppercase pill on the
+   * surface card.
+   */
+  verb: string;
+  /** Human-readable surface name, e.g. "Multi-entity close console". */
+  name: string;
+  /** 1-2 sentence Versant-specific description of what happens here. */
+  description: string;
+  /** Headline user moment in the tower's vocabulary. */
+  primaryAction: string;
+  /**
+   * Free-text names of underlying capabilities. Fuzzy-matched at render
+   * time against the live `l3Initiatives[].solutionName` so the surface
+   * card can render click-through chips when a match exists. Surface
+   * still renders cleanly when no live match exists. v1 scope: tower-local
+   * refs only — cross-tower flows belong on the Orchestration Layer.
+   */
+  poweredByCapabilities: string[];
+  /** Lucide allowlist key (see `solutionIconAllowlist.ts`). */
+  iconKey: string;
+};
+
+export type TowerWorkbenchDigitalCore = {
+  /** Named knowledge store, e.g. "Versant Legal Knowledge Graph". */
+  knowledgeStore: string;
+  /** Identity layer — usually shared, e.g. "Versant SSO via Okta". */
+  identity: string;
+  /** Workbench-internal agent dispatcher description. */
+  agentRouter: string;
+  /** Tower-appropriate audit trail framing (SOX/SEC for Finance, FCC for Ops, etc.). */
+  auditLog: string;
+  /** Named vendors this workbench wraps. */
+  integrations: string[];
+};
+
+export type TowerWorkbenchBuildEffort = "Light custom" | "Medium custom" | "Heavy custom";
+
+export type TowerWorkbench = {
+  /** Stable id `${towerId}-workbench`. */
+  id: string;
+  /** The tower this workbench belongs to. */
+  towerId: string;
+  /** Display name, e.g. "Legal & Business Affairs Workbench". */
+  name: string;
+  /** One-line positioning. */
+  tagline: string;
+  /** Role labels real to this tower. */
+  primaryUsers: string[];
+  /** 4-8 surfaces. */
+  surfaces: WorkbenchSurface[];
+  /** 2-4 sentences naming Versant brands / people / financials specific to this tower. */
+  whyConsolidated: string;
+  /** 2-3 sentences on the tower-specific COTS gap that forces a custom build. */
+  whyCustomBuild: string;
+  digitalCore: TowerWorkbenchDigitalCore;
+  buildEffort: TowerWorkbenchBuildEffort;
+  /** Typically 6-12 months. */
+  estimatedDeliveryMonths: number;
+  /** Pod composition, e.g. "1 Forge eng pod (~6 FTE) + tower-lead product owner". */
+  deliveryPodShape: string;
+  /** Qualitative workforce-impact line — never invent FTE numbers. */
+  workforceShift: string;
+  /** Single success metric framed in the tower's vocabulary. */
+  successMetric: string;
+  /** Rollout pattern: pilot one practice/network/brand → expand. */
+  rolloutPattern: string;
+};
+
+// ============================================================================
+//   ORCHESTRATION LAYER — the canonical, hand-authored architecture that
+//   sits beneath all Tower Workbenches. Replaces the LLM-generated four
+//   narrative strings on `OrchestrationBlock` as the primary content of the
+//   cross-tower Orchestration tab; the LLM block is retained as
+//   "Strategist commentary" beneath the canonical artifact.
+// ============================================================================
+
+export type DataArchCategory =
+  | "Identity"
+  | "Knowledge"
+  | "Content"
+  | "Event"
+  | "Vector"
+  | "Lake"
+  | "Mesh"
+  | "Catalog"
+  | "Feature";
+
+export type DataArchitectureComponent = {
+  /** Kebab-case slug stable across the layer. */
+  id: string;
+  /** Display name, e.g. "Versant Identity Graph". */
+  name: string;
+  category: DataArchCategory;
+  /** 2-3 sentences. What it stores; why it exists. */
+  description: string;
+  /** TowerId list — workbenches that read from this. Use `"all"` for cross-cutting components. */
+  primaryConsumers: string[] | "all";
+  /** TowerId list — towers / point solutions that write into this. Use `"all"` for cross-cutting components. */
+  primaryProducers: string[] | "all";
+  /** Named upstreams (vendor systems / events) that feed this component. */
+  feedsFromPointSolutions: string[];
+  /** Technology choice or the phrase "TBD — subject to discovery". */
+  technologyChoice: string;
+  /** Lucide allowlist key. */
+  iconKey: string;
+};
+
+export type ApiDirection = "ingress" | "egress" | "bidirectional";
+
+export type ApiProtocol =
+  | "REST"
+  | "GraphQL"
+  | "Webhook"
+  | "Event stream"
+  | "File / blob";
+
+export type ApiCadence =
+  | "real-time"
+  | "near-real-time"
+  | "daily"
+  | "weekly"
+  | "event-driven";
+
+export type ApiIntegration = {
+  id: string;
+  /** Human-readable integration name. */
+  name: string;
+  direction: ApiDirection;
+  /** Named point solution / vendor system, e.g. "BlackLine reconciliation engine". */
+  pointSolution: string;
+  /**
+   * Workbenches that consume the resulting data, or the literal "all"
+   * when the integration feeds every workbench (shared infra).
+   */
+  workbenchConsumers: string[] | "all";
+  /** 1-line payload spec, e.g. "{ entityId, reconciliationId, status, exceptions[] }". */
+  payloadShape: string;
+  cadence: ApiCadence;
+  protocol: ApiProtocol;
+  /** DataArchitectureComponent.id[] this integration feeds. */
+  servesDataComponents: string[];
+};
+
+export type OrchestrationAgentType =
+  | "Orchestrator"
+  | "Specialist"
+  | "Monitor"
+  | "Router"
+  | "Executor";
+
+export type OrchestrationAgent = {
+  id: string;
+  name: string;
+  type: OrchestrationAgentType;
+  /** What the agent does in 1-2 sentences. */
+  role: string;
+  /** Concrete triggers (named events / signals). */
+  triggers: string[];
+  /** Concrete outputs (named records / events). */
+  outputs: string[];
+  /**
+   * Workbenches that depend on this agent, or "all" for cross-cutting
+   * agents (Identity Resolution, Content Classifier, Governance Auditor).
+   */
+  servesWorkbenches: string[] | "all";
+  /** Lucide allowlist key. */
+  iconKey: string;
+};
+
+export type GovernancePolicy = {
+  id: string;
+  name: string;
+  description: string;
+  /** Named human or agent that enforces this policy. */
+  enforcedBy: string;
+  /** Workbench / surface / agent names this policy binds. */
+  appliesTo: string[];
+  /** Lucide allowlist key. */
+  iconKey: string;
+};
+
+export type OrchestrationLayerBuildEffort =
+  | "Light custom"
+  | "Medium custom"
+  | "Heavy custom";
+
+export type OrchestrationLayer = {
+  /** 2-3 sentences — why this layer exists. */
+  narrative: string;
+  /** Why this cannot be built initiative-by-initiative. */
+  whyShared: string;
+  /** 5-8 components. */
+  dataArchitecture: DataArchitectureComponent[];
+  /** 12-20 named integrations. */
+  apiIntegrations: ApiIntegration[];
+  /** 4-8 cross-cutting agents. */
+  agents: OrchestrationAgent[];
+  /** 3-5 policies. */
+  governance: GovernancePolicy[];
+  buildEffort: OrchestrationLayerBuildEffort;
+  /** Typically 9-15 months. */
+  estimatedDeliveryMonths: number;
+  /** Pod composition. */
+  podShape: string;
 };

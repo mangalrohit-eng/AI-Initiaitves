@@ -662,7 +662,7 @@ const editorial: WorkCategory[] = [
     id: "ed-std",
     name: "Editorial Standards & Quality",
     description:
-      "Maintaining editorial standards, accuracy, and trust across all Versant news content — led by Brian Carovillano's standards team.",
+      "Maintaining editorial standards, accuracy, and trust across all Versant news content — owned by the editorial standards team.",
     icon: "ShieldCheck",
     processes: [
       p(["ed-std-1", "AI Content Quality Review", "Continuous", "Mission-critical", "Not yet established", true, P1, "As AI generates more content, a dedicated AI review layer ensures accuracy, style compliance, and editorial standards. This is the 'human-led, AI-powered' governance layer.", "ed-1", "governance"]),

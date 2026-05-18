@@ -222,7 +222,7 @@ function buildLensEmphasisLines(a: CrossTowerAssumptions): string[] {
   }
   if (a.emphasizeEditorialIntegrity) {
     lines.push(
-      "  - Editorial integrity: when initiatives sit in Editorial & News, Production, or Marketing & Communications, flag the human-judgment floor — agents are co-pilot, fact-check is human, byline is human. Brian Carovillano is gatekeeper.",
+      "  - Editorial integrity: when initiatives sit in Editorial & News, Production, or Marketing & Communications, flag the human-judgment floor — agents are co-pilot, fact-check is human, byline is human. The SVP Standards and Editorial is gatekeeper.",
     );
   }
   if (a.emphasizeBroadcastResilience) {

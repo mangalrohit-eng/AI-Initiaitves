@@ -14,7 +14,7 @@ export function DigitalCoreTab({ process }: { process: Process }) {
                 <th className="px-4 py-3">Platform</th>
                 <th className="px-4 py-3">Purpose</th>
                 <th className="px-4 py-3">Priority</th>
-                <th className="px-4 py-3">Examples</th>
+                <th className="px-4 py-3">Illustrative vendors</th>
               </tr>
             </thead>
             <tbody>

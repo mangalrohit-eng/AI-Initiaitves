@@ -104,7 +104,7 @@ export function buildOffshoreSystemPrompt(
     "  - 0 — entirely retained onshore. Use for editorial / on-air talent / SOX-critical close controls / top-tier client relationships / live broadcast operating layer.",
     "",
     "VERSANT-SPECIFIC CONSTRAINTS YOU MUST APPLY:",
-    "  - Brian Carovillano (SVP Standards & Editorial) holds binding veto on any newsroom workflow → editorial / on-air / standards work = 0% GCC, full stop.",
+    "  - The SVP Standards & Editorial holds binding veto on any newsroom workflow → editorial / on-air / standards work = 0% GCC, full stop.",
     "  - MS NOW progressive positioning + CNBC anchor producers → political brand sensitivity is high. Editorial-adjacent rows (fact-check pipelines, source vetting, on-air control) lean 0-20% GCC.",
     "  - BB- credit rating → Treasury / debt management / covenant monitoring stays onshore (0-20% GCC). AP/AR/T&E/intercompany ops are GCC-eligible (Wave 1 covenant savings — 80-95% GCC).",
     "  - Newly-public SEC obligations + first SOX cycle → SOX-critical close controls stay onshore (0-15% GCC) until Wave 3 post-clean-opinion. Pure ops (AR aging, AP processing) lean 80-95% GCC.",

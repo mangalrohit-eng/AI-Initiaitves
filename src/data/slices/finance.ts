@@ -889,7 +889,7 @@ export const financeTower: TowerSlice = {
   id: "finance",
   name: "Finance",
   iconKey: "Calculator",
-  versantLeads: ["Greg Wright", "Andre Hale"],
+  versantLeads: ["CFO", "Controller"],
   accentureLeads: ["Jim Murphy", "Alex Chitticks"],
   description:
     "Financial planning, reporting, treasury, tax, and investor relations for a newly public company managing $6.69B revenue, $2.75B debt, and complex multi-entity structures including Fandango JV (75% with WBD) and Nikkei CNBC JV.",

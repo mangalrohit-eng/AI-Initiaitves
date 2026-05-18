@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUpRight, Building2, Layers } from "lucide-react";
+import { ArrowUpRight, Building2, Layers, Sparkles } from "lucide-react";
 import type {
   InitiativeReview,
   TowerAiReadinessIntake,
@@ -24,6 +24,8 @@ import {
 import { intakeStatusIsStale } from "@/lib/assess/towerReadinessIntake";
 import { cn } from "@/lib/utils";
 import { L3_FTE_DATA_MISSING_LABEL } from "@/lib/initiatives/attributeL3AiUsd";
+import { TOWER_WORKBENCHES } from "@/data/towerWorkbenches";
+import { matchCapabilitiesToInitiatives } from "@/lib/workbench/matchCapabilities";
 
 /**
  * Redesigned per-AI-Solution card used inside `SolutionsGallery`.
@@ -53,6 +55,7 @@ export function SolutionCardV2({
   l3Name,
   className,
   towerIconKey,
+  towerId,
   review,
   actions,
   towerIntake,
@@ -68,6 +71,14 @@ export function SolutionCardV2({
    * fallback rather than the generic Rocket / Compass.
    */
   towerIconKey?: string;
+  /**
+   * Tower id — when provided the card looks up the tower's Workbench
+   * and renders a small "Surfaces in [Surface name]" caption when this
+   * initiative powers a hand-authored workbench surface. Optional for
+   * back-compat; caption is silent when omitted or when no surface
+   * confidently matches.
+   */
+  towerId?: string;
   /** Tower-lead decision for this initiative (if any). */
   review?: InitiativeReview;
   /** Approve / reject / restore actions from `useInitiativeReviewsV6`. */
@@ -87,6 +98,10 @@ export function SolutionCardV2({
   const intakeStatus = init.intakeStatus;
   const intakeStatusStale = intakeStatusIsStale(intakeStatus, towerIntake);
   const [intakeEvidenceOpen, setIntakeEvidenceOpen] = React.useState(false);
+  const workbenchSurfaceName = React.useMemo(
+    () => resolveWorkbenchSurfaceName(init, towerId),
+    [init, towerId],
+  );
 
   const Frame = (
     <div
@@ -165,6 +180,17 @@ export function SolutionCardV2({
               {init.tagline}
             </p>
           ) : null}
+          {workbenchSurfaceName ? (
+            <p
+              className="mt-1.5 inline-flex max-w-full items-center gap-1 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-accent-purple-dark"
+              title="This AI Solution powers a surface in this tower's Workbench."
+            >
+              <Sparkles className="h-2.5 w-2.5" aria-hidden />
+              <span className="truncate normal-case tracking-normal">
+                Surfaces in {workbenchSurfaceName}
+              </span>
+            </p>
+          ) : null}
         </div>
       </div>
       {init.aiRationale && !init.isPlaceholder ? (
@@ -235,4 +261,30 @@ export function SolutionCardV2({
       {Frame}
     </Link>
   );
+}
+
+/**
+ * Resolve which hand-authored Workbench surface this initiative powers,
+ * if any. Uses the same fuzzy-match helper as the Workbench view so a
+ * surface card and a solution card agree on the linkage. Returns the
+ * surface display name or `null` when no confident match exists or
+ * when `towerId` was not provided.
+ */
+function resolveWorkbenchSurfaceName(
+  init: V6InitiativeCard,
+  towerId: string | undefined,
+): string | null {
+  if (!towerId || init.isPlaceholder) return null;
+  const workbench = TOWER_WORKBENCHES[towerId];
+  if (!workbench) return null;
+  for (const surface of workbench.surfaces) {
+    const matches = matchCapabilitiesToInitiatives(
+      surface.poweredByCapabilities,
+      [init],
+    );
+    if (matches.some((m) => m.init?.id === init.id)) {
+      return surface.name;
+    }
+  }
+  return null;
 }

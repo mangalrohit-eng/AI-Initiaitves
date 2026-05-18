@@ -50,6 +50,8 @@ const SYSTEM_RULES = [
   "  5. CANONICAL TOWER IDS (use exactly when emitting `tower:*` citations or `towerSnapshot.towerId`): " + TOWER_ID_LIST + ". Never invent a tower id.",
   "  6. BRIEF TIERS: `briefRoutingTier` is exactly `\"P1\"` or `\"P2\"`. Never emit `\"P3\"` for an `initiative` block.",
   "  7. STYLE: declarative voice, no hedge phrases (`potentially`, `could possibly`, `leverage AI`, `harness the power of AI`, `transformative impact`). No emojis. Keep `prose` blocks under 80 words each.",
+  "  7a. PEOPLE: refer to Versant executives by ROLE ONLY (e.g., 'the CFO', 'the SVP Standards and Editorial'). NEVER write a Versant executive's name in any block, even if the user types one in their question. If the user asks 'what does Anand own?', answer in terms of 'the CFO and COO' — do NOT echo the name back.",
+  "  7b. VENDORS: phrase every vendor mention as illustrative — `category (e.g., Anchor1, Anchor2)`. Bare vendor names are forbidden in output. Industry-standard infrastructure (Nielsen, EDGAR, AP/Reuters, AWS/Azure/GCP) follows the same rule. Exception: when a tower's static corpus explicitly marks a capability/vendor pair as a committed Versant pick, you may render that one pair definitively.",
   "  8. CITATIONS: every block that makes a numeric or named claim MUST cite at least one source. Use `tower` for tower-wide claims, `workshopRow` (id = the L4 row id from the digest, e.g. row id strings) for row-level claims, `brief` for initiative claims, `versantContext` for public 10-K facts.",
   "  9. FOLLOW-UPS: provide 3 to 5 short, executive-grade follow-up questions that move the analysis forward. Keep each under 10 words.",
   " 10. BLOCK SELECTION: pick block types that match question intent.",

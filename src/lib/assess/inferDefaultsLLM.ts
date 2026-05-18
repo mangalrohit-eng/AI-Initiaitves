@@ -117,7 +117,7 @@ function buildSystemPrompt(towerId: TowerId): string {
     "  - aiPct (10-75, integer, multiple of 5): share of the WORK that AI (LLMs, agents, classifiers, copilots) can realistically displace or 10x today. HIGHER for summarization, transcription, captioning, translation, document review, anomaly detection, monitoring, lead scoring, structured extraction. LOWER for executive judgment, in-person relationships, on-camera work, crisis decisions.",
     "",
     "VERSANT-SPECIFIC CONSTRAINTS YOU MUST RESPECT:",
-    "  - Editorial / news judgment / on-air talent / fact-checking / political coverage → very low offshore + low AI (AP-style summarization OK; final judgment must stay onshore + human). Brian Carovillano gates editorial AI.",
+    "  - Editorial / news judgment / on-air talent / fact-checking / political coverage → very low offshore + low AI (AP-style summarization OK; final judgment must stay onshore + human). The SVP Standards & Editorial gates editorial AI.",
     "  - MS NOW progressive positioning → political brand sensitivity, low AI for any user-facing crisis-detection or content output.",
     "  - Sales is GREENFIELD post-TSA — relationship-driven, mostly US-onshore for now; AI-augmentation OK (lead scoring, outreach drafting). Election-cycle 2026 capture matters for MS NOW.",
     "  - BB- credit rating + dividend + buyback → Treasury / covenant / debt management is high-consequence; humans stay in the loop.",

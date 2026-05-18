@@ -42,7 +42,7 @@ import { resolveOpenAiBaseUrl } from "@/lib/llm/openaiBase";
  * Versant identity, per-tower context, vendor allow-list, voice rules, or
  * naming guidance change in a way that would flip outputs.
  */
-export const VERSANT_PROMPT_KIT_VERSION = "vpk-2026-05-05a";
+export const VERSANT_PROMPT_KIT_VERSION = "vpk-2026-05-18-illustrative";
 
 // ===========================================================================
 //   Defaults — the single Versant model + reasoning bar
@@ -158,8 +158,7 @@ export const VERSANT_CONTEXT_BLOCK = [
   "  Entertainment and sports: USA Network (USA Sports), E!, Syfy, Oxygen True Crime — Winter Olympics on USA/CNBC; Kardashians split rights (on-air retained at Versant; streaming sold to Hulu).",
   "  Digital platforms: Fandango (75 percent Versant, 25 percent WBD), Rotten Tomatoes, Free TV Networks, Indy Cinema Group.",
   "",
-  "LEADERSHIP — name only when relevant to the project's tower:",
-  "  Mark Lazarus (CEO), Anand Kini (CFO and COO), Deep Bagchee (CPTO News), Rebecca Kutler (President MS NOW), KC Sullivan (President CNBC), Matthew Hong (President Sports), Nate Balogh (EVP and CIO), Brian Carovillano (SVP Standards and Editorial — gatekeeper for editorial AI), Caroline Richardson (SVP and CISO), Frank Tanki (CMO Entertainment and Sports), Tom Clendenin (CMO CNBC and MS NOW), David Novak (Board Chair).",
+  "LEADERSHIP — refer to executives by role only. NEVER write a Versant executive's name in output. The executive roles in scope are: CEO, CFO and COO, CPTO News, President MS NOW, President CNBC, President Sports, CIO, SVP Standards and Editorial (the gatekeeper for editorial AI), CISO, CMO Entertainment and Sports, CMO CNBC and MS NOW, Board Chair. Reach for the role's responsibility when you need to attribute a decision — e.g., 'the CFO owns covenant compliance', 'the SVP Standards and Editorial signs off on every newsroom AI gate'. Names are deliberately suppressed at the prompt boundary so generated output stays role-only.",
   "",
   "STRUCTURAL CONSTRAINTS — these define which projects matter and why:",
   "  - NBCU TSA expiration (~2028): NBCU runs ad sales and shared services until the Transition Services Agreement expires. Versant must build standalone capability before then. Ad sales is greenfield; finance close, payroll, IT, broadcast operations all have hard cutover deadlines.",
@@ -202,8 +201,16 @@ export const ALLOWED_BRANDS: readonly string[] = [
   "Nikkei CNBC",
 ];
 
-/** Real Versant people — used only when relevant to the cohort tower. */
-export const ALLOWED_PEOPLE: readonly string[] = [
+/**
+ * Real Versant executive names — kept ONLY so `/ask` and similar grounding
+ * code can recognize a user query that types a name. The prompt kit
+ * itself never injects this list into an LLM system prompt (see
+ * `buildAllowListsBlock` — only `EXECUTIVE_ROLES` ships to the model).
+ *
+ * Treat this as raw reference data, not as output guidance. Generated
+ * output must always render the role, never the name.
+ */
+export const ALLOWED_PEOPLE_NAMES: readonly string[] = [
   "Mark Lazarus",
   "Anand Kini",
   "Deep Bagchee",
@@ -219,167 +226,227 @@ export const ALLOWED_PEOPLE: readonly string[] = [
 ];
 
 /**
- * Real vendors the LLM is allowed to name in post-state Workbench /
- * Digital Core / Agents `toolsUsed`. Pre-state tools may name legacy
- * systems freely. The literal `"TBD — subject to discovery"` is always
- * permitted as a fallback.
+ * Deprecated alias for `ALLOWED_PEOPLE_NAMES`. Kept so any external
+ * consumer still importing the old symbol continues to compile — the
+ * prompt-side code no longer references it.
  *
- * Curated to vendors that already appear in the operating model or have
- * been validated as reasonable Versant fits. When we add a new vendor to
- * a brief, add it here too.
+ * @deprecated Use `ALLOWED_PEOPLE_NAMES` for raw grounding, or
+ *   `EXECUTIVE_ROLES` for prompt-side output guidance.
  */
-export const ALLOWED_VENDORS: readonly string[] = [
-  // Finance / close / treasury
-  "BlackLine",
-  "Workiva",
-  "FloQast",
-  "Vena",
-  "Trintech",
-  "Anaplan",
-  "Pigment",
-  "Tipalti",
-  "Bill.com",
-  "AppZen",
-  "Stampli",
-  "Coupa",
-  "Concur",
-  "SAP S/4HANA",
-  "Oracle Fusion",
-  "NetSuite",
-  "Workday Financials",
-  "Sage Intacct",
-  "Kyriba",
-  "GTreasury",
-  "Ramp",
-  "Brex",
-  // HR / people
-  "Workday HCM",
-  "Workday Adaptive",
-  "Eightfold",
-  "Phenom",
-  "Beamery",
-  "Visier",
-  "Lattice",
-  "Culture Amp",
-  "Greenhouse",
-  "Lever",
-  "ADP",
-  // Content / editorial
-  "Descript",
-  "Veritone",
-  "Deepgram",
-  "AssemblyAI",
-  "Speechmatics",
-  "Wisecut",
-  "Captions.ai",
-  "Adobe Premiere Pro",
-  "Adobe Audition",
-  "Adobe Sensei",
-  "Avid Media Composer",
-  "iNEWS",
-  "ENPS",
-  "Reuters Connect",
-  "AP",
-  "Factiva",
-  "Bloomberg Terminal",
-  "OpenAI",
-  "Anthropic",
-  "Google Gemini",
-  "Mistral",
-  "ElevenLabs",
-  "Runway",
-  "Sora",
-  // Broadcast / playout / distribution
-  "Amagi",
-  "Imagine Communications",
-  "Evertz",
-  "Grass Valley",
-  "Telestream",
-  "Vizrt",
-  "Ross Video",
-  "AWS Elemental",
-  "Akamai",
-  // Ad sales / monetization / DTC
-  "FreeWheel",
-  "Operative",
-  "Mediaocean",
-  "Magnite",
-  "Yahoo DSP",
-  "The Trade Desk",
-  "LiveRamp",
-  "Iterable",
-  "Braze",
-  "Piano",
-  "Zuora",
-  "Salesforce",
-  "Salesforce Marketing Cloud",
-  "Adobe Experience Platform",
-  "Segment",
-  "Snowflake",
-  "Databricks",
-  "Looker",
-  "Tableau",
-  "Power BI",
-  // Rights / royalties
-  "Rightsline",
-  "FilmTrack",
-  "Whip Media",
-  "Vistex",
-  // Marketing / brand / measurement
-  "Sprinklor",
-  "Sprinklr",
-  "Brandwatch",
-  "Quid",
-  "NewsWhip",
-  "Comscore",
-  "Nielsen",
-  "iSpot.tv",
-  "Samba TV",
-  // Legal / compliance / contracts
-  "Ironclad",
-  "Evisort",
-  "Harvey",
-  "DocuSign",
-  "DocuSign CLM",
-  "OneTrust",
-  // IT / cybersecurity
-  "ServiceNow",
-  "Atlassian",
-  "Jira",
-  "Confluence",
-  "GitHub",
-  "GitHub Copilot",
-  "CrowdStrike",
-  "Abnormal Security",
-  "Wiz",
-  "Snyk",
-  "Datadog",
-  "Splunk",
-  "Microsoft 365",
-  "Microsoft Sentinel",
-  "Microsoft Purview",
-  "Microsoft Copilot",
-  "Okta",
-  "PagerDuty",
-  "Cloudflare",
-  // Cloud
-  "AWS",
-  "Azure",
-  "Google Cloud",
-  // Hyperscaler AI
-  "AWS Bedrock",
-  "Azure OpenAI",
-  "Vertex AI",
-  // Agentic / orchestration platforms
-  "LangChain",
-  "LangGraph",
-  "LlamaIndex",
-  "CrewAI",
-  "Pinecone",
-  "Weaviate",
-  "Glean",
-  "Hebbia",
+export const ALLOWED_PEOPLE = ALLOWED_PEOPLE_NAMES;
+
+/**
+ * The executive roles the LLM may reference in output — by role only,
+ * never by name. Order roughly mirrors the leadership table in
+ * `VERSANT_CONTEXT_BLOCK` so the model sees the same shape.
+ */
+export const EXECUTIVE_ROLES: readonly string[] = [
+  "CEO",
+  "CFO and COO",
+  "CPTO News",
+  "President MS NOW",
+  "President CNBC",
+  "President Sports",
+  "CIO",
+  "SVP Standards and Editorial",
+  "CISO",
+  "CMO Entertainment and Sports",
+  "CMO CNBC and MS NOW",
+  "Board Chair",
 ];
+
+/**
+ * Vendor category catalog — categorized lists of illustrative anchors.
+ *
+ * The prompt kit ships this to the LLM as *illustrative* candidates,
+ * never as recommendations. The voice rules require the model to phrase
+ * any vendor mention as a category + 1-3 named anchors prefixed with
+ * `e.g.,` (for example: `AI close-orchestration platform (e.g.,
+ * BlackLine, FloQast)`).
+ *
+ * The literal `"TBD — subject to discovery"` is always permitted as a
+ * fallback when even an illustrative anchor would over-commit.
+ *
+ * Exception: when a tower's `committedVendors` field (on the `Tower`
+ * type) names a specific vendor for a capability — typically captured
+ * via a Versant intake form — the model may render that pair
+ * definitively for that one capability in that one tower. The
+ * `buildCommittedVendorsBlock` helper passes those committed pairs
+ * through to the prompt explicitly.
+ */
+export const VENDOR_CATEGORY_CATALOG: Record<string, readonly string[]> = {
+  "Finance / close / treasury": [
+    "BlackLine",
+    "Workiva",
+    "FloQast",
+    "Vena",
+    "Trintech",
+    "Anaplan",
+    "Pigment",
+    "Tipalti",
+    "Bill.com",
+    "AppZen",
+    "Stampli",
+    "Coupa",
+    "Concur",
+    "SAP S/4HANA",
+    "Oracle Fusion",
+    "NetSuite",
+    "Workday Financials",
+    "Sage Intacct",
+    "Kyriba",
+    "GTreasury",
+    "Ramp",
+    "Brex",
+  ],
+  "HR / people": [
+    "Workday HCM",
+    "Workday Adaptive",
+    "Eightfold",
+    "Phenom",
+    "Beamery",
+    "Visier",
+    "Lattice",
+    "Culture Amp",
+    "Greenhouse",
+    "Lever",
+    "ADP",
+  ],
+  "Content / editorial / newsroom": [
+    "Descript",
+    "Veritone",
+    "Deepgram",
+    "AssemblyAI",
+    "Speechmatics",
+    "Wisecut",
+    "Captions.ai",
+    "Adobe Premiere Pro",
+    "Adobe Audition",
+    "Adobe Sensei",
+    "Avid Media Composer",
+    "iNEWS",
+    "ENPS",
+    "Reuters Connect",
+    "AP",
+    "Factiva",
+    "Bloomberg Terminal",
+    "OpenAI",
+    "Anthropic",
+    "Google Gemini",
+    "Mistral",
+    "ElevenLabs",
+    "Runway",
+    "Sora",
+  ],
+  "Broadcast / playout / distribution": [
+    "Amagi",
+    "Imagine Communications",
+    "Evertz",
+    "Grass Valley",
+    "Telestream",
+    "Vizrt",
+    "Ross Video",
+    "AWS Elemental",
+    "Akamai",
+  ],
+  "Ad sales / monetization / DTC": [
+    "FreeWheel",
+    "Operative",
+    "Mediaocean",
+    "Magnite",
+    "Yahoo DSP",
+    "The Trade Desk",
+    "LiveRamp",
+    "Iterable",
+    "Braze",
+    "Piano",
+    "Zuora",
+    "Salesforce",
+    "Salesforce Marketing Cloud",
+    "Adobe Experience Platform",
+    "Segment",
+    "Snowflake",
+    "Databricks",
+    "Looker",
+    "Tableau",
+    "Power BI",
+  ],
+  "Rights / royalties / content metadata": [
+    "Rightsline",
+    "FilmTrack",
+    "Whip Media",
+    "Vistex",
+  ],
+  "Marketing / brand / measurement": [
+    "Sprinklr",
+    "Brandwatch",
+    "Quid",
+    "NewsWhip",
+    "Comscore",
+    "Nielsen",
+    "iSpot.tv",
+    "Samba TV",
+  ],
+  "Legal / compliance / contracts": [
+    "Ironclad",
+    "Evisort",
+    "Harvey",
+    "DocuSign",
+    "DocuSign CLM",
+    "OneTrust",
+  ],
+  "IT / cybersecurity / developer platform": [
+    "ServiceNow",
+    "Atlassian",
+    "Jira",
+    "Confluence",
+    "GitHub",
+    "GitHub Copilot",
+    "CrowdStrike",
+    "Abnormal Security",
+    "Wiz",
+    "Snyk",
+    "Datadog",
+    "Splunk",
+    "Microsoft 365",
+    "Microsoft Sentinel",
+    "Microsoft Purview",
+    "Microsoft Copilot",
+    "Okta",
+    "PagerDuty",
+    "Cloudflare",
+  ],
+  "Cloud / hyperscaler AI": [
+    "AWS",
+    "Azure",
+    "Google Cloud",
+    "AWS Bedrock",
+    "Azure OpenAI",
+    "Vertex AI",
+  ],
+  "Agentic / orchestration platforms": [
+    "LangChain",
+    "LangGraph",
+    "LlamaIndex",
+    "CrewAI",
+    "Pinecone",
+    "Weaviate",
+    "Glean",
+    "Hebbia",
+  ],
+};
+
+/**
+ * Flat, deduplicated list of every vendor in the catalog. Kept as a
+ * back-compat alias for callers that still expect the old shape (and
+ * for `/ask` grounding so user-typed vendor names get recognised).
+ *
+ * @deprecated Prefer `VENDOR_CATEGORY_CATALOG` for prompt construction
+ *   (so the model sees the category + illustrative anchors shape).
+ */
+export const ALLOWED_VENDORS: readonly string[] = Array.from(
+  new Set(Object.values(VENDOR_CATEGORY_CATALOG).flat()),
+);
 
 /**
  * Canonical "why not AI" reasons. Every `reviewed-not-eligible` L5 must
@@ -411,33 +478,33 @@ export const NOT_ELIGIBLE_REASONS: readonly NotEligibleReason[] = [
  */
 export const TOWER_CONTEXT: Record<TowerId, string> = {
   finance:
-    "Finance (Versant leads Greg Wright + Andre Hale). NBCU TSA covers finance close, treasury, payroll until ~2028; Versant must stand up its own close (target 5-7 days down from 12-18) under CFO Anand Kini and ensure BB- covenant compliance — covenant breach is existential. New-public-company SEC obligations: maiden 10-K landed FY2025, segment reporting, disclosure controls, internal audit. Multi-entity consolidation across 7+ brands plus Fandango JV (75/25 WBD) and Nikkei CNBC JV. Content-rights amortization across hundreds of deals. Vendor stack tilts toward BlackLine, Workiva, FloQast, Trintech, Tipalti, AppZen, SAP S/4HANA / Oracle Fusion / NetSuite, Workday Financials, Vena, Anaplan, Pigment, Kyriba, GTreasury.",
+    "Finance. NBCU TSA covers finance close, treasury, payroll until ~2028; Versant must stand up its own close (target 5-7 days down from 12-18) under the CFO and ensure BB- covenant compliance — covenant breach is existential. New-public-company SEC obligations: maiden 10-K landed FY2025, segment reporting, disclosure controls, internal audit. Multi-entity consolidation across 7+ brands plus Fandango JV (75/25 WBD) and Nikkei CNBC JV. Content-rights amortization across hundreds of deals. Illustrative vendor anchors for the post-state (treat as examples, not picks): AI close-orchestration (e.g., BlackLine, FloQast, Trintech), close reporting (e.g., Workiva), AP automation (e.g., Tipalti, AppZen, Stampli), ERP (e.g., SAP S/4HANA, Oracle Fusion, NetSuite, Workday Financials), planning (e.g., Vena, Anaplan, Pigment), treasury (e.g., Kyriba, GTreasury).",
   hr:
-    "HR & Talent. Carve-out year — building standalone HR off NBCU TSAs while landing every Versant employee on a single Workday HCM. CEO Mark Lazarus owns the talent strategy; named-talent contracts (anchors, on-air, executives) are relationship-driven — AI assists drafting, intelligence, and analytics, not negotiation. Hard floor: editorial talent (MS NOW, CNBC), live-event talent (Golf, Olympics) is name-by-name. Vendor stack tilts toward Workday HCM / Adaptive, Eightfold, Phenom, Beamery, Greenhouse / Lever, Visier, Lattice, Culture Amp, ADP.",
+    "HR & Talent. Carve-out year — building standalone HR off NBCU TSAs while landing every Versant employee on a single core HCM. The CEO owns the talent strategy; named-talent contracts (anchors, on-air, executives) are relationship-driven — AI assists drafting, intelligence, and analytics, not negotiation. Hard floor: editorial talent (MS NOW, CNBC), live-event talent (Golf, Olympics) is name-by-name. Illustrative vendor anchors for the post-state: core HCM (e.g., Workday HCM, Workday Adaptive), talent intelligence (e.g., Eightfold, Phenom, Beamery), ATS (e.g., Greenhouse, Lever), workforce analytics (e.g., Visier), engagement (e.g., Lattice, Culture Amp), payroll (e.g., ADP).",
   "research-analytics":
-    "Research & Analytics. Powers the audience, ratings, ad-research, content-performance signal across MS NOW, CNBC, USA Network, E!, Syfy, Oxygen True Crime, Golf Channel, Fandango, Rotten Tomatoes, SportsEngine. Inputs to ad sales (yield), programming (commissioning), marketing (campaigns), and editorial (audience strategy). Election-cycle 2026 audience modeling is high-stakes for MS NOW. Vendor stack tilts toward Comscore, Nielsen, iSpot.tv, Samba TV, Snowflake, Databricks, Looker, Tableau, Power BI, Brandwatch, Quid, NewsWhip.",
+    "Research & Analytics. Powers the audience, ratings, ad-research, content-performance signal across MS NOW, CNBC, USA Network, E!, Syfy, Oxygen True Crime, Golf Channel, Fandango, Rotten Tomatoes, SportsEngine. Inputs to ad sales (yield), programming (commissioning), marketing (campaigns), and editorial (audience strategy). Election-cycle 2026 audience modeling is high-stakes for MS NOW. Illustrative vendor anchors: measurement (e.g., Comscore, Nielsen, iSpot.tv, Samba TV), data platform (e.g., Snowflake, Databricks), BI (e.g., Looker, Tableau, Power BI), social/content intelligence (e.g., Brandwatch, Quid, NewsWhip).",
   legal:
-    "Legal & Business Affairs. Contract surge from spin-off: vendor renegotiation, JV docs (Fandango 75/25 WBD, Nikkei CNBC), talent agreements (anchors, on-air, athletes), rights deals (USGA through 2032, Olympics windows, Kardashians-style split rights). New-public-company SEC + governance posture under Board Chair David Novak. CISO Caroline Richardson partners on data-protection / privacy. Hard floor: AI drafts and reviews, never signs. Vendor stack tilts toward Ironclad, Evisort, Harvey, DocuSign / DocuSign CLM, OneTrust, Bloomberg Terminal.",
+    "Legal & Business Affairs. Contract surge from spin-off: vendor renegotiation, JV docs (Fandango 75/25 WBD, Nikkei CNBC), talent agreements (anchors, on-air, athletes), rights deals (USGA through 2032, Olympics windows, Kardashians-style split rights). New-public-company SEC + governance posture under the Board Chair. The CISO partners on data-protection / privacy. Hard floor: AI drafts and reviews, never signs. Illustrative vendor anchors: CLM (e.g., Ironclad, DocuSign CLM, Evisort), legal AI (e.g., Harvey), e-signature (e.g., DocuSign), privacy/GRC (e.g., OneTrust), market data (e.g., Bloomberg Terminal).",
   "corp-services":
-    "Corporate Services (Procurement / Real Estate / Facilities / Travel / Internal Operations). New-public-company posture: SOX-grade controls, vendor master data discipline, real-estate footprint reset post-spin. Procurement standing up its own SaaS sourcing motion off NBCU. Vendor stack tilts toward Coupa, Concur, ServiceNow, Microsoft 365, Workday Financials, DocuSign.",
+    "Corporate Services (Procurement / Real Estate / Facilities / Travel / Internal Operations). New-public-company posture: SOX-grade controls, vendor master data discipline, real-estate footprint reset post-spin. Procurement standing up its own SaaS sourcing motion off NBCU. Illustrative vendor anchors: source-to-pay (e.g., Coupa), T&E (e.g., Concur), workflow (e.g., ServiceNow), productivity (e.g., Microsoft 365), financials (e.g., Workday Financials), e-signature (e.g., DocuSign).",
   "tech-engineering":
-    "Technology & Engineering (CIO Nate Balogh). Standalone IT stand-up: identity, endpoint, network, SecOps, developer platforms — all carved out from NBCU. CISO Caroline Richardson owns cybersecurity. Engineering is the spine for every other tower's AI delivery — agentic platforms, RAG infrastructure, vector stores, model governance, hyperscaler footprint. Vendor stack tilts toward Microsoft 365 / Sentinel / Purview / Copilot, Okta, ServiceNow, Atlassian / Jira / Confluence, GitHub Copilot, CrowdStrike, Abnormal Security, Wiz, Snyk, Datadog, Splunk, AWS / Azure / GCP, AWS Bedrock / Azure OpenAI / Vertex AI, LangChain, LangGraph, Pinecone, Weaviate, Glean.",
+    "Technology & Engineering. Standalone IT stand-up under the CIO: identity, endpoint, network, SecOps, developer platforms — all carved out from NBCU. The CISO owns cybersecurity. Engineering is the spine for every other tower's AI delivery — agentic platforms, RAG infrastructure, vector stores, model governance, hyperscaler footprint. Illustrative vendor anchors: productivity + security suite (e.g., Microsoft 365, Microsoft Sentinel, Microsoft Purview, Microsoft Copilot), identity (e.g., Okta), ITSM (e.g., ServiceNow), dev tooling (e.g., Atlassian, Jira, Confluence, GitHub, GitHub Copilot), endpoint/email security (e.g., CrowdStrike, Abnormal Security, Wiz, Snyk), observability (e.g., Datadog, Splunk), hyperscalers (e.g., AWS, Azure, Google Cloud), hyperscaler AI (e.g., AWS Bedrock, Azure OpenAI, Vertex AI), agentic orchestration (e.g., LangChain, LangGraph, Pinecone, Weaviate, Glean).",
   "operations-technology":
-    "Technology Operations (Broadcast Ops / Master Control / Distribution / Affiliate Engineering). Live-broadcast physical floor: master control, on-air ops, in-studio production are physical, US-located, talent-relationship-driven. Versant must replicate NBCU's affiliate distribution and broadcast ops standalone before TSA cutover (~2028). Winter Olympics on USA/CNBC, USGA through 2032, NHL/NFL windows — high-stakes live operational moments where downtime is unacceptable. Vendor stack tilts toward Amagi, Imagine Communications, Evertz, Grass Valley, Telestream, Vizrt, Ross Video, AWS Elemental, Akamai.",
+    "Technology Operations (Broadcast Ops / Master Control / Distribution / Affiliate Engineering). Live-broadcast physical floor: master control, on-air ops, in-studio production are physical, US-located, talent-relationship-driven. Versant must replicate NBCU's affiliate distribution and broadcast ops standalone before TSA cutover (~2028). Winter Olympics on USA/CNBC, USGA through 2032, NHL/NFL windows — high-stakes live operational moments where downtime is unacceptable. Illustrative vendor anchors: FAST/playout (e.g., Amagi, Imagine Communications), broadcast infrastructure (e.g., Evertz, Grass Valley), quality monitoring (e.g., Telestream), graphics (e.g., Vizrt, Ross Video), cloud encoding (e.g., AWS Elemental), CDN (e.g., Akamai).",
   "ad-sales":
-    "Ad Sales — greenfield advertising sales post–NBCU TSA (~2028): upfronts, scatter, yield, audience packaging, political windows, programmatic. ~$1.58B advertising revenue at risk if cutover stumbles. CMO Frank Tanki (Entertainment & Sports) and CMO Tom Clendenin (CNBC & MS NOW) own client-facing positioning. Election-cycle 2026 capture is critical for MS NOW; Olympics on USA/CNBC drives premium upfront. Vendor stack tilts toward FreeWheel, Operative, Mediaocean, Magnite, Yahoo DSP, The Trade Desk, LiveRamp, Salesforce, Comscore, Nielsen, iSpot.tv, Samba TV.",
+    "Ad Sales — greenfield advertising sales post–NBCU TSA (~2028): upfronts, scatter, yield, audience packaging, political windows, programmatic. ~$1.58B advertising revenue at risk if cutover stumbles. The two CMOs (Entertainment & Sports; CNBC & MS NOW) own client-facing positioning. Election-cycle 2026 capture is critical for MS NOW; Olympics on USA/CNBC drives premium upfront. Illustrative vendor anchors: ad serving / yield (e.g., FreeWheel, Operative, Mediaocean), SSP/DSP (e.g., Magnite, Yahoo DSP, The Trade Desk), identity (e.g., LiveRamp), CRM (e.g., Salesforce), measurement (e.g., Comscore, Nielsen, iSpot.tv, Samba TV).",
   sales:
-    "Sales (Ad Sales & Sponsorships). Ad sales is greenfield — NBCU sells Versant inventory under TSA until ~2028, then Versant must run upfronts, scatter, sponsorships, programmatic, DTC monetization standalone. ~$1.58B advertising revenue at risk if cutover stumbles. CMO Frank Tanki (Entertainment & Sports) and CMO Tom Clendenin (CNBC & MS NOW) own client-facing positioning. Election-cycle 2026 capture is critical for MS NOW; Olympics on USA/CNBC drives premium upfront. Vendor stack tilts toward FreeWheel, Operative, Mediaocean, Magnite, Yahoo DSP, The Trade Desk, LiveRamp, Salesforce, Comscore, Nielsen, iSpot.tv, Samba TV.",
+    "Sales (Ad Sales & Sponsorships). Ad sales is greenfield — NBCU sells Versant inventory under TSA until ~2028, then Versant must run upfronts, scatter, sponsorships, programmatic, DTC monetization standalone. ~$1.58B advertising revenue at risk if cutover stumbles. The two CMOs (Entertainment & Sports; CNBC & MS NOW) own client-facing positioning. Election-cycle 2026 capture is critical for MS NOW; Olympics on USA/CNBC drives premium upfront. Illustrative vendor anchors: ad serving / yield (e.g., FreeWheel, Operative, Mediaocean), SSP/DSP (e.g., Magnite, Yahoo DSP, The Trade Desk), identity (e.g., LiveRamp), CRM (e.g., Salesforce), measurement (e.g., Comscore, Nielsen, iSpot.tv, Samba TV).",
   "marketing-comms":
-    "Marketing & Communications. Multi-brand orchestration across MS NOW, CNBC, Golf Channel, USA Network, E!, Syfy, Oxygen True Crime, Fandango, Rotten Tomatoes, SportsEngine. CMOs split: Frank Tanki (Entertainment & Sports), Tom Clendenin (CNBC & MS NOW). DTC growth motion: MS NOW community launching summer 2026, CNBC Pro, GolfPass, Fandango. Election-cycle 2026 brand-safety stakes are high for MS NOW; progressive editorial voice must be preserved. Vendor stack tilts toward Sprinklr, Brandwatch, Quid, NewsWhip, Iterable, Braze, Piano, Salesforce Marketing Cloud, Adobe Experience Platform, LiveRamp.",
+    "Marketing & Communications. Multi-brand orchestration across MS NOW, CNBC, Golf Channel, USA Network, E!, Syfy, Oxygen True Crime, Fandango, Rotten Tomatoes, SportsEngine. Two CMOs split the portfolio (Entertainment & Sports; CNBC & MS NOW). DTC growth motion: MS NOW community launching summer 2026, CNBC Pro, GolfPass, Fandango. Election-cycle 2026 brand-safety stakes are high for MS NOW; progressive editorial voice must be preserved. Illustrative vendor anchors: social listening / brand intelligence (e.g., Sprinklr, Brandwatch, Quid, NewsWhip), engagement (e.g., Iterable, Braze), subscription/paywall (e.g., Piano), CDP / marketing cloud (e.g., Salesforce Marketing Cloud, Adobe Experience Platform), identity (e.g., LiveRamp).",
   service:
-    "Service (Customer Care / DTC Subscriber Service / Affiliate Service). Stand-up of standalone subscriber care for CNBC Pro, GolfPass, MS NOW community (summer 2026), Fandango. Affiliate service for distribution partners. Hard floor: brand-defining moments stay human, AI handles deflection, intent classification, knowledge retrieval, and case routing. Vendor stack tilts toward Salesforce, ServiceNow, Iterable, Braze, OpenAI / Anthropic for grounded RAG.",
+    "Service (Customer Care / DTC Subscriber Service / Affiliate Service). Stand-up of standalone subscriber care for CNBC Pro, GolfPass, MS NOW community (summer 2026), Fandango. Affiliate service for distribution partners. Hard floor: brand-defining moments stay human; AI handles deflection, intent classification, knowledge retrieval, and case routing. Illustrative vendor anchors: CRM / case (e.g., Salesforce, ServiceNow), engagement (e.g., Iterable, Braze), grounded RAG / LLMs (e.g., OpenAI, Anthropic).",
   "editorial-news":
-    "Editorial & News (President MS NOW Rebecca Kutler, President CNBC KC Sullivan, CPTO News Deep Bagchee). Owns MS NOW (progressive politics, DTC community launching summer 2026, election-night audience leader), CNBC (global #1 business news, CNBC Pro, Kalshi partnership, StockStory acquisition integration in flight, Nikkei CNBC JV), and Sports News under Matthew Hong. Editorial AI gatekeeper is Brian Carovillano (SVP Standards & Editorial). Hard floor: anchors, reporters, fact-checking, political coverage stay onshore and human — AI is co-pilot in the newsroom, never byline. Crisis detection on MS NOW must respect progressive voice without flattening it. Vendor stack tilts toward Reuters Connect, AP, Factiva, Bloomberg Terminal, iNEWS, ENPS, Veritone, Deepgram, AssemblyAI, Speechmatics, Descript.",
+    "Editorial & News. Owns MS NOW (progressive politics, DTC community launching summer 2026, election-night audience leader) under the President MS NOW, CNBC (global #1 business news, CNBC Pro, Kalshi partnership, StockStory acquisition integration in flight, Nikkei CNBC JV) under the President CNBC, and Sports News under the President Sports. The CPTO News owns the digital product stack. Editorial AI gatekeeper is the SVP Standards & Editorial — every newsroom AI gate gets that role's sign-off. Hard floor: anchors, reporters, fact-checking, political coverage stay onshore and human — AI is co-pilot in the newsroom, never byline. Crisis detection on MS NOW must respect progressive voice without flattening it. Illustrative vendor anchors: wires (e.g., Reuters Connect, AP, Factiva), market data (e.g., Bloomberg Terminal), newsroom systems (e.g., iNEWS, ENPS), media intelligence / transcription (e.g., Veritone, Deepgram, AssemblyAI, Speechmatics, Descript).",
   production:
-    "Production. Owns in-studio production, post-production, live event production, sports production (USGA through 2032, Olympics windows on USA/CNBC, Rory McIlroy / Firethorn JV, NHL/NFL where applicable). ~$2.45B programming and production cost — biggest single OpEx line — most of which lives across this tower and Programming & Development. Live production is physical and talent-relationship-driven; post-production is the highest-leverage automation surface (transcription, rough cuts, captioning, archive search). Vendor stack tilts toward Avid Media Composer, Adobe Premiere / Audition / Sensei, Veritone, Descript, Wisecut, Captions.ai, Vizrt, Ross Video, Telestream, ElevenLabs, Runway, Sora.",
+    "Production. Owns in-studio production, post-production, live event production, sports production (USGA through 2032, Olympics windows on USA/CNBC, Rory McIlroy / Firethorn JV, NHL/NFL where applicable). ~$2.45B programming and production cost — biggest single OpEx line — most of which lives across this tower and Programming & Development. Live production is physical and talent-relationship-driven; post-production is the highest-leverage automation surface (transcription, rough cuts, captioning, archive search). Illustrative vendor anchors: NLEs (e.g., Avid Media Composer, Adobe Premiere Pro, Adobe Audition), AI editing / transcription (e.g., Veritone, Descript, Wisecut, Captions.ai), graphics (e.g., Vizrt, Ross Video), quality (e.g., Telestream), generative AI for audio/video (e.g., ElevenLabs, Runway, Sora).",
   "programming-dev":
-    "Programming & Development. Owns commissioning, scheduling, content acquisition, talent deal-shape (relationship-driven), and rights administration. Split-rights complexity (Kardashians-style: on-air retained at Versant, streaming sold to Hulu) means rights and metadata reconciliation is non-trivial. Sports rights anchor the schedule (USGA through 2032, Olympics windows on USA/CNBC, Rory McIlroy / Firethorn JV). Hard floor: greenlight and talent negotiation is human; AI accelerates research, treatment evaluation, scheduling optimization, and rights tracking. Vendor stack tilts toward Rightsline, FilmTrack, Whip Media, Vistex, Avid, Adobe Sensei, Bloomberg Terminal.",
+    "Programming & Development. Owns commissioning, scheduling, content acquisition, talent deal-shape (relationship-driven), and rights administration. Split-rights complexity (Kardashians-style: on-air retained at Versant, streaming sold to Hulu) means rights and metadata reconciliation is non-trivial. Sports rights anchor the schedule (USGA through 2032, Olympics windows on USA/CNBC, Rory McIlroy / Firethorn JV). Hard floor: greenlight and talent negotiation is human; AI accelerates research, treatment evaluation, scheduling optimization, and rights tracking. Illustrative vendor anchors: rights management (e.g., Rightsline, FilmTrack, Whip Media, Vistex), NLE / creative AI (e.g., Avid, Adobe Sensei), market data (e.g., Bloomberg Terminal).",
 };
 
 /** Helper: returns a tower's context paragraph or a safe fallback string. */
@@ -483,7 +550,11 @@ export const HEDGE_PHRASES: readonly string[] = [
 export const VERSANT_VOICE_RULES = [
   "VOICE — declarative, executive-grade, Versant-specific.",
   "  - Write in present tense. Describe what the AI does and the evidence it works.",
-  "  - Name a Versant brand, person, or structural constraint in every paragraph. If you could swap 'Versant' for 'any media company' and the sentence still works, rewrite it.",
+  "  - Name a Versant brand or structural constraint in every paragraph. If you could swap 'Versant' for 'any media company' and the sentence still works, rewrite it.",
+  "  - PEOPLE: refer to Versant executives by ROLE ONLY (e.g., 'the CFO', 'the SVP Standards and Editorial', 'the President MS NOW'). NEVER write a Versant executive's name. The role catalog is in EXECUTIVE_ROLES. If you do not know which role owns a decision, say 'the responsible executive' rather than inventing a name.",
+  "  - VENDORS — illustrative by default. Any vendor mention in a post-state field (Workbench tools, Digital Core platforms, Agents `toolsUsed`, briefs, narrative) MUST be phrased as a category + 1-3 named anchors prefixed with `e.g.,`. Example: 'AI close-orchestration platform (e.g., BlackLine, FloQast)' — NEVER a bare 'BlackLine' with no category and no `e.g.,`. Industry-standard infrastructure (e.g., Nielsen ratings, EDGAR SEC filing, AP/Reuters wire, AWS/Azure/GCP) follows the same illustrative rule.",
+  "  - VENDORS — committed exception. If a tower's `committedVendors` section is provided in the prompt (a specific capability/vendor pair Versant has already chosen via intake), THAT pair may be rendered definitively (no `e.g.,`) for that capability in that tower. Every other vendor stays illustrative.",
+  "  - VAGUE-VENDOR FORBIDDEN. Do not write 'an AI platform', 'an AI vendor', 'a leading vendor', or any unnamed proxy. Either give the category + illustrative anchors, or say 'TBD — subject to discovery'.",
   "  - Quantify only when the deterministic engine has not already rendered the number. Do NOT echo dollars, percentages, headcount totals, or revenue figures from the Versant context block — the engine prints those.",
   "  - Forbidden hedge / fluff phrases (case-insensitive): " +
     HEDGE_PHRASES.join(", ") +
@@ -585,8 +656,19 @@ export function buildVoiceRulesBlock(): string {
 }
 
 /**
- * Builds the brand / people / vendor allow-list block. Use for any prompt
- * whose output names brands, people, or post-state vendors.
+ * Builds the brand / executive-role / vendor-category block. Use for any
+ * prompt whose output names brands, refers to leadership, or names
+ * post-state vendors.
+ *
+ * Important shape changes vs. the prior version:
+ *   - PEOPLE: the executive role catalog is shipped (not names). Names
+ *     never reach the model from this kit. If a caller has its own
+ *     reason to ground a name (e.g., the /ask layer recognizes a
+ *     user-typed name), it must do that itself in the user message;
+ *     this kit's system block stays role-only.
+ *   - VENDORS: the categorized catalog is shipped with explicit
+ *     illustrative-by-default framing. The flat allow-list is no longer
+ *     surfaced to the model.
  */
 export function buildAllowListsBlock(opts?: {
   includePeople?: boolean;
@@ -604,21 +686,47 @@ export function buildAllowListsBlock(opts?: {
     parts.push(
       "",
       "===========================================================================",
-      "ALLOWED PEOPLE (only when relevant to the active tower)",
+      "EXECUTIVE ROLES (use roles only — NEVER names of Versant executives)",
       "===========================================================================",
-      ALLOWED_PEOPLE.join(", "),
+      EXECUTIVE_ROLES.join(", "),
     );
   }
   if (includeVendors) {
+    const catalogLines: string[] = [];
+    for (const [category, anchors] of Object.entries(VENDOR_CATEGORY_CATALOG)) {
+      catalogLines.push(`  - ${category}: e.g., ${anchors.join(", ")}`);
+    }
     parts.push(
       "",
       "===========================================================================",
-      "ALLOWED VENDORS (post-state Workbench, Digital Core examples, Agents toolsUsed)",
+      "VENDOR CATEGORY CATALOG (ILLUSTRATIVE — phrase every vendor mention as 'category (e.g., Anchor1, Anchor2)'. NEVER bare-name a vendor without category + e.g.,)",
       "===========================================================================",
-      ALLOWED_VENDORS.join(", "),
+      ...catalogLines,
     );
   }
   return parts.join("\n");
+}
+
+/**
+ * Builds an optional "committed vendors" block for a tower. Pass the
+ * tower's `committedVendors` array (typically empty until intake forms
+ * are collected). When non-empty, the model is told these specific
+ * capability/vendor pairs may be rendered definitively (without
+ * `e.g.,`) — every other vendor remains illustrative.
+ */
+export function buildCommittedVendorsBlock(
+  committed?: ReadonlyArray<{ capability: string; vendor: string }>,
+): string | null {
+  if (!committed || committed.length === 0) return null;
+  const lines = committed.map(
+    (c) => `  - ${c.capability} → ${c.vendor} (committed via Versant intake — render definitively for this tower)`,
+  );
+  return [
+    "===========================================================================",
+    "COMMITTED VENDORS (this tower has confirmed these capability/vendor pairs)",
+    "===========================================================================",
+    ...lines,
+  ].join("\n");
 }
 
 /**

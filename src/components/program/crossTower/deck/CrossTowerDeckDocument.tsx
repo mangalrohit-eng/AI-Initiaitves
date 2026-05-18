@@ -49,7 +49,7 @@ function AppendixProjectSlide({
     return (
       <div className="flex h-full flex-col">
         <p className="font-mono text-[10px] font-semibold uppercase tracking-wider text-forge-hint">
-          AI Project
+          AI Solution
         </p>
         <h2 className="mt-1 font-display text-xl font-semibold text-forge-ink">
           {project.name}
@@ -57,7 +57,7 @@ function AppendixProjectSlide({
         <p className="mt-1 text-sm text-forge-subtle">{project.primaryTowerName}</p>
         <p className="mt-6 rounded-lg border border-accent-amber/40 bg-accent-amber/5 px-3 py-2 text-sm text-forge-body">
           Authoring incomplete for this cohort — regenerate the plan or retry the
-          project from the Cross-Tower AI Plan page.
+          solution from the Cross-Tower AI Plan page.
         </p>
       </div>
     );
@@ -68,7 +68,7 @@ function AppendixProjectSlide({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-wider text-forge-hint">
-            AI Project
+            AI Solution
           </p>
           <h2 className="mt-1 font-display text-xl font-semibold text-forge-ink">
             {project.name}
@@ -166,7 +166,7 @@ export function CrossTowerDeckDocument({ payload }: { payload: CrossTowerDeckPay
             </h1>
             <p className="mt-3 max-w-2xl text-sm text-forge-subtle">
               24-month agentic AI plan across thirteen towers — sourced from
-              the L3 AI Initiatives curated in each tower workshop.
+              the AI Solutions curated in each tower workshop.
             </p>
           </div>
           <p className="font-mono text-xs text-forge-hint">
@@ -352,17 +352,17 @@ export function CrossTowerDeckDocument({ payload }: { payload: CrossTowerDeckPay
           Appendix
         </p>
         <h2 className="mt-2 font-display text-2xl font-semibold text-forge-ink">
-          AI Project briefs
+          AI Solution briefs
         </h2>
         <p className="mt-4 font-mono text-sm text-forge-subtle">
-          {projects.length} slide{projects.length === 1 ? "" : "s"} follow — one page per project.
+          {projects.length} slide{projects.length === 1 ? "" : "s"} follow — one page per solution.
         </p>
       </DeckSlide>
 
       {projects.length === 0 ? (
         <DeckSlide isLast>
           <p className="text-sm text-forge-subtle">
-            No AI Projects were included in this export.
+            No AI Solutions were included in this export.
           </p>
         </DeckSlide>
       ) : (

@@ -1,8 +1,11 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
+  ArrowRight,
+  Coins,
   Layers,
   RefreshCw,
   Sparkles,
@@ -15,8 +18,16 @@ import type {
   OutcomeCluster,
   StrategistInitiative,
   ValueCategory,
-  ValueSizingTier,
 } from "@/lib/strategist/types";
+import type { AIProjectResolved } from "@/lib/cross-tower/aiProjects";
+import {
+  clusterRollupUsd,
+  deriveValueTier,
+  initiativeRollupUsd,
+  type DerivedValueTier,
+} from "@/lib/strategist/rollups";
+import { formatUsdCompact } from "@/lib/format";
+import { useRedactDollars } from "@/lib/clientMode";
 import { towers as ALL_TOWERS } from "@/data/towers";
 
 /**
@@ -36,10 +47,17 @@ import { towers as ALL_TOWERS } from "@/data/towers";
 export function OutcomeClustersTab({
   scope,
   api,
+  projects,
   onJumpToOrchestration,
 }: {
   scope: BaseScope;
   api: UseStrategistOutputsApi;
+  /**
+   * Tower-specific AI Solutions used to compute the deterministic
+   * dollar rollup that drives each cluster / initiative's tier pill
+   * and the modeled $ chip in the card header.
+   */
+  projects: ReadonlyArray<AIProjectResolved>;
   onJumpToOrchestration?: () => void;
 }) {
   const { state, generate, isStale } = api;
@@ -105,6 +123,7 @@ export function OutcomeClustersTab({
           <ClusterGrid
             clusters={state.outputs.clusters}
             initiatives={state.outputs.initiatives}
+            projects={projects}
           />
           {onJumpToOrchestration ? (
             <button
@@ -392,9 +411,11 @@ function StrategistLoadingPanel() {
 function ClusterGrid({
   clusters,
   initiatives,
+  projects,
 }: {
   clusters: OutcomeCluster[];
   initiatives: StrategistInitiative[];
+  projects: ReadonlyArray<AIProjectResolved>;
 }) {
   if (clusters.length === 0) {
     return (
@@ -413,6 +434,7 @@ function ClusterGrid({
             key={cluster.id}
             cluster={cluster}
             initiatives={inits}
+            projects={projects}
           />
         );
       })}
@@ -423,39 +445,63 @@ function ClusterGrid({
 function ClusterCard({
   cluster,
   initiatives,
+  projects,
 }: {
   cluster: OutcomeCluster;
   initiatives: StrategistInitiative[];
+  projects: ReadonlyArray<AIProjectResolved>;
 }) {
+  const rollupUsd = clusterRollupUsd(cluster, initiatives, projects);
+  const tier = deriveValueTier(rollupUsd);
+  const detailHref = `/program/cross-tower-ai-plan/outcome/${cluster.id}`;
+  const anchoredCount = new Set(
+    initiatives.flatMap((i) => i.constituentSolutionIds ?? []),
+  ).size;
   return (
     <section
       id={`cluster-${cluster.id}`}
-      className="rounded-xl border border-forge-border bg-forge-surface p-5 shadow-sm"
+      className="rounded-xl border border-forge-border bg-forge-surface p-5 shadow-sm transition hover:border-accent-purple/40 hover:shadow-[0_0_0_1px_rgba(161,0,255,0.18)]"
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-lg font-semibold tracking-tight text-forge-ink">
             <span className="font-mono text-accent-purple-dark">&gt;</span>{" "}
-            {cluster.title}
+            <Link
+              href={detailHref}
+              className="hover:text-accent-purple-dark hover:underline decoration-accent-purple/40 underline-offset-4"
+            >
+              {cluster.title}
+            </Link>
           </h3>
           <p className="mt-1.5 text-[13px] leading-relaxed text-forge-body">
             {cluster.narrative}
           </p>
-          {cluster.headlineMetric ? (
-            <p className="mt-2 text-[11.5px] text-forge-subtle">
-              Headline metric:{" "}
-              <span className="font-mono text-forge-body">
-                {cluster.headlineMetric}
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-forge-subtle">
+            {cluster.headlineMetric ? (
+              <span>
+                Headline metric:{" "}
+                <span className="font-mono text-forge-body">
+                  {cluster.headlineMetric}
+                </span>
               </span>
-            </p>
-          ) : null}
+            ) : null}
+            <DollarRollupChip usd={rollupUsd} anchoredCount={anchoredCount} />
+          </div>
         </div>
-        <TowerChipRow towers={cluster.towers} />
+        <div className="flex flex-col items-end gap-2">
+          <ValueTierBadge tier={tier} />
+          <TowerChipRow towers={cluster.towers} />
+        </div>
       </header>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {initiatives.map((i) => (
-          <InitiativeCard key={i.id} initiative={i} />
+          <InitiativeCard
+            key={i.id}
+            initiative={i}
+            clusterId={cluster.id}
+            projects={projects}
+          />
         ))}
         {initiatives.length === 0 ? (
           <div className="col-span-full rounded-md border border-dashed border-forge-border bg-forge-well/40 p-3 text-[12px] text-forge-subtle">
@@ -463,22 +509,53 @@ function ClusterCard({
           </div>
         ) : null}
       </div>
+
+      <footer className="mt-4 flex justify-end">
+        <Link
+          href={detailHref}
+          className="inline-flex items-center gap-1.5 rounded-full border border-accent-purple/30 bg-accent-purple/5 px-3 py-1.5 text-[11px] font-medium text-accent-purple-dark transition hover:border-accent-purple/55 hover:bg-accent-purple/10"
+        >
+          Open outcome brief
+          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+        </Link>
+      </footer>
     </section>
   );
 }
 
-function InitiativeCard({ initiative }: { initiative: StrategistInitiative }) {
+function InitiativeCard({
+  initiative,
+  clusterId,
+  projects,
+}: {
+  initiative: StrategistInitiative;
+  clusterId: string;
+  projects: ReadonlyArray<AIProjectResolved>;
+}) {
+  const rollupUsd = initiativeRollupUsd(initiative, projects);
+  const tier = deriveValueTier(rollupUsd);
+  const detailHref = `/program/cross-tower-ai-plan/outcome/${clusterId}/initiative/${initiative.id}`;
   return (
     <article
       id={`strategist-initiative-${initiative.id}`}
-      className="flex flex-col gap-3 rounded-lg border border-forge-border bg-forge-well/30 p-4"
+      className="flex flex-col gap-3 rounded-lg border border-forge-border bg-forge-well/30 p-4 transition hover:border-accent-purple/40 hover:bg-forge-well/45"
     >
       <header className="flex items-start justify-between gap-2">
         <h4 className="font-display text-[14px] font-semibold leading-tight text-forge-ink">
-          {initiative.name}
+          <Link
+            href={detailHref}
+            className="hover:text-accent-purple-dark hover:underline decoration-accent-purple/40 underline-offset-4"
+          >
+            {initiative.name}
+          </Link>
         </h4>
-        <ValueTierBadge tier={initiative.valueTier} />
+        <ValueTierBadge tier={tier} />
       </header>
+      <DollarRollupChip
+        usd={rollupUsd}
+        anchoredCount={(initiative.constituentSolutionIds ?? []).length}
+        dense
+      />
       <TowerChipRow towers={initiative.towers} dense />
       <div className="grid gap-2 text-[12px] leading-relaxed text-forge-body sm:grid-cols-2">
         <div>
@@ -507,22 +584,81 @@ function InitiativeCard({ initiative }: { initiative: StrategistInitiative }) {
           </ul>
         </div>
       ) : null}
+      <Link
+        href={detailHref}
+        className="mt-1 inline-flex items-center gap-1.5 self-start text-[11px] font-semibold text-accent-purple-dark transition hover:text-accent-purple"
+      >
+        Open initiative brief
+        <ArrowRight className="h-3 w-3" aria-hidden />
+      </Link>
     </article>
   );
 }
 
-function ValueTierBadge({ tier }: { tier: ValueSizingTier }) {
+/**
+ * Modeled-$ pill driven by the deterministic anchored rollup. Pairs
+ * with `ValueTierBadge` so the tier and the number always agree by
+ * construction. Renders the mandated "TBD — subject to discovery"
+ * fallback when no tower-specific AI Solutions are anchored.
+ */
+function DollarRollupChip({
+  usd,
+  anchoredCount,
+  dense,
+}: {
+  usd: number | null;
+  anchoredCount: number;
+  dense?: boolean;
+}) {
+  const redact = useRedactDollars();
+  const pad = dense ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-0.5 text-[11px]";
+  if (usd === null || anchoredCount === 0) {
+    return (
+      <span
+        title="The strategist did not anchor this to any in-flight AI Solution. Regenerate to refresh."
+        className={`inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-well/60 ${pad} font-medium text-forge-subtle`}
+      >
+        <Coins className="h-3 w-3" aria-hidden />
+        Modeled $: TBD — subject to discovery
+      </span>
+    );
+  }
+  const label = redact ? "—" : formatUsdCompact(usd, { decimals: 1 });
+  const suffix =
+    anchoredCount === 1
+      ? "from 1 AI Solution"
+      : `from ${anchoredCount} AI Solutions`;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border border-accent-purple/30 bg-accent-purple/5 ${pad} font-medium text-accent-purple-dark`}
+    >
+      <Coins className="h-3 w-3" aria-hidden />
+      <span className="font-mono">{label}</span>
+      <span className="text-forge-subtle">· {suffix}</span>
+    </span>
+  );
+}
+
+function ValueTierBadge({ tier }: { tier: DerivedValueTier }) {
   const cls =
     tier === "HIGH"
       ? "border-red-400/40 bg-red-50 text-red-700"
       : tier === "MEDIUM"
         ? "border-amber-400/40 bg-amber-50 text-amber-800"
-        : "border-teal-400/40 bg-teal-50 text-teal-800";
+        : tier === "LOW"
+          ? "border-teal-400/40 bg-teal-50 text-teal-800"
+          : "border-forge-border bg-forge-well/60 text-forge-subtle";
+  const label = tier === "UNSIZED" ? "Unsized" : tier;
+  const title =
+    tier === "UNSIZED"
+      ? "No anchored AI Solutions yet — TBD subject to discovery"
+      : `Derived from the rolled-up modeled $ of anchored AI Solutions`;
   return (
     <span
+      title={title}
       className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${cls}`}
     >
-      {tier}
+      {label}
     </span>
   );
 }

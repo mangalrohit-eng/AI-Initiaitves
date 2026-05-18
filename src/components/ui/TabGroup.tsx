@@ -4,7 +4,14 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 
-export type TabItem = { id: string; label: string; content: React.ReactNode };
+export type TabItem = {
+  id: string;
+  label: string;
+  content: React.ReactNode;
+  /** Optional native tooltip on the tab button — useful when the label
+   *  carries a compact count and the breakdown matters on hover. */
+  title?: string;
+};
 
 /**
  * `TabGroup` works in either uncontrolled (default) or controlled mode.
@@ -73,6 +80,7 @@ export function TabGroup({
               type="button"
               role="tab"
               aria-selected={selected}
+              title={t.title}
               onClick={() => setActive(t.id)}
               className={cn(
                 "whitespace-nowrap rounded-full border px-4 py-2 text-sm transition",

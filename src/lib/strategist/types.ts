@@ -59,8 +59,22 @@ export type StrategistInitiative = {
   futureState: string;
   /** Value category — one or more. */
   valueCategories: ValueCategory[];
-  /** HIGH / MEDIUM / LOW — relative impact, NOT dollar figures. */
-  valueTier: ValueSizingTier;
+  /**
+   * Stable ids of the tower-specific AI Solutions (`L3Initiative.id`)
+   * that anchor this cross-tower initiative. Drives the deterministic
+   * dollar rollup, the build-vs-buy mix, and the agent footprint on
+   * the cluster / initiative detail pages.
+   *
+   * Empty array means the strategist did not anchor — the UI renders
+   * the "Unsized" tier and the exact phrase "TBD — subject to
+   * discovery" rather than inventing a number.
+   *
+   * The legacy `valueTier` field was retired in strategist.v1.1: the
+   * pill is now deterministically derived from the rolled-up dollars
+   * of the anchored solutions (`deriveValueTier` in
+   * `@/lib/strategist/rollups`).
+   */
+  constituentSolutionIds: string[];
   /** Data, systems, or other initiatives this depends on. */
   dependencies: string[];
 };

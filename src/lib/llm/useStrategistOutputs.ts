@@ -44,10 +44,32 @@ export function readPersistedStrategistOutputs(): StrategistOutputs | null {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { outputs?: StrategistOutputs };
-    return parsed?.outputs ?? null;
+    if (!parsed?.outputs) return null;
+    return migrateLegacyStrategistOutputs(parsed.outputs);
   } catch {
     return null;
   }
+}
+
+/**
+ * Forward-compat shim for strategist payloads persisted before
+ * `strategist.v1.1` introduced `StrategistInitiative.constituentSolutionIds`.
+ * v1.0 payloads omit the field, so every initiative gets an empty
+ * anchored set — the UI then surfaces the "Unsized · TBD subject to
+ * discovery" state and prompts a regenerate, rather than crashing on
+ * the `for…of` iteration.
+ */
+function migrateLegacyStrategistOutputs(
+  outputs: StrategistOutputs,
+): StrategistOutputs {
+  let mutated = false;
+  const migratedInitiatives = outputs.initiatives.map((init) => {
+    if (Array.isArray(init.constituentSolutionIds)) return init;
+    mutated = true;
+    return { ...init, constituentSolutionIds: [] };
+  });
+  if (!mutated) return outputs;
+  return { ...outputs, initiatives: migratedInitiatives };
 }
 
 /** SSR-safe read-only subscription to the persisted strategist outputs. */

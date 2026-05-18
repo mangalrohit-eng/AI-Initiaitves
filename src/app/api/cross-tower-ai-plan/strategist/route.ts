@@ -219,6 +219,7 @@ function sanitizeInFlight(
 ): StrategistPromptInput["inFlightInitiatives"] {
   if (!Array.isArray(raw)) return [];
   const out: Array<{
+    id: string;
     towerName: string;
     l3: string;
     solutionName: string;
@@ -227,11 +228,17 @@ function sanitizeInFlight(
   for (const r of raw) {
     if (!r || typeof r !== "object") continue;
     const o = r as Record<string, unknown>;
+    const id = typeof o.id === "string" ? o.id : "";
     const towerName = typeof o.towerName === "string" ? o.towerName : "";
     const l3 = typeof o.l3 === "string" ? o.l3 : "";
     const solutionName = typeof o.solutionName === "string" ? o.solutionName : "";
-    if (!towerName || !l3 || !solutionName) continue;
+    // `id` was added in strategist.v1.1 so the LLM can anchor cross-
+    // tower initiatives back to the tower-specific solution rows that
+    // power them. Drop entries missing it — they're either pre-v1.1
+    // payloads or malformed input.
+    if (!id || !towerName || !l3 || !solutionName) continue;
     out.push({
+      id,
       towerName,
       l3,
       solutionName,

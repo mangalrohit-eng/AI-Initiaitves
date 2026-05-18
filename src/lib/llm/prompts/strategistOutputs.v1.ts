@@ -19,7 +19,7 @@ import {
   VERSANT_CONTEXT_BLOCK,
 } from "@/lib/llm/prompts/versantPromptKit";
 
-export const STRATEGIST_PROMPT_VERSION = "strategist.v1.0";
+export const STRATEGIST_PROMPT_VERSION = "strategist.v1.1";
 
 export type StrategistTowerInput = {
   id: TowerId;
@@ -47,8 +47,16 @@ export type StrategistPromptInput = {
   baseScopeLabel: string;
   /** Compact per-tower input. */
   towers: StrategistTowerInput[];
-  /** Already-cured AI Solutions, by tower — referenced as "AI tools already in flight". */
+  /**
+   * Already-curated tower-specific AI Solutions ("AI tools already in
+   * flight"). The stable `id` is the anchor key — every cross-tower
+   * initiative the strategist emits must declare which of these
+   * `id`s power it, so the UI can deterministically roll up the
+   * modeled dollars, agents, and build-vs-buy mix from the underlying
+   * tower briefs.
+   */
   inFlightInitiatives: ReadonlyArray<{
+    id: string;
     towerName: string;
     l3: string;
     solutionName: string;
@@ -91,6 +99,15 @@ export function buildStrategistSystemPrompt(): string {
     "  - `orchestration.blockedInitiativeIds` MUST be a subset of `initiative.id` values you emit.",
     "",
     "===========================================================================",
+    "ID ANCHORING (CRITICAL — drives the deterministic dollar rollup)",
+    "===========================================================================",
+    "  - Every entry in the 'AI TOOLS ALREADY IN FLIGHT AT VERSANT' input carries a stable id of the form `tower-rowhash-slug` — those are the canonical tower-specific AI Solutions for which the workshop has already authored a four-lens brief and a modeled dollar value.",
+    "  - For EVERY initiative you emit, `initiative.constituentSolutionIds` MUST be an array of those exact ids — the subset of in-flight solutions whose work this cross-tower initiative composes / absorbs / orchestrates.",
+    "  - Use ONLY ids from the supplied in-flight list. Do NOT invent ids. Do NOT slugify the solution name; use the supplied id verbatim.",
+    "  - 1-6 anchored ids per initiative is the expected range. If genuinely no in-flight solution serves the work, return an empty array (the UI will display 'TBD — subject to discovery'). Empty is preferable to a wrong anchor.",
+    "  - An anchored solution may appear under multiple initiatives if its work spans them — the rollup helper de-duplicates by id at the cluster level so dollars are not double-counted.",
+    "",
+    "===========================================================================",
     "ALLOWED BRANDS",
     "===========================================================================",
     ALLOWED_BRANDS.join(", "),
@@ -128,7 +145,7 @@ export function buildStrategistSystemPrompt(): string {
     '      "currentState": "...",                    // 1-3 sentences. Name FTE work + any AI tool Versant already deployed for it.',
     '      "futureState": "...",                     // 1-3 sentences. What agents/models/automation will do instead.',
     '      "valueCategories": ["Cost avoidance" | "FTE redeployment" | "Revenue acceleration" | "Risk reduction"],',
-    '      "valueTier": "HIGH" | "MEDIUM" | "LOW",   // relative impact, NOT dollar figures',
+    '      "constituentSolutionIds": ["..."],        // ids from the AI TOOLS ALREADY IN FLIGHT list — drives the deterministic dollar rollup',
     '      "dependencies": ["..."]                    // data/systems/initiatives this needs',
     "    }",
     "  ],",
@@ -175,7 +192,7 @@ export function buildStrategistUserPrompt(input: StrategistPromptInput): string 
           .slice(0, 60)
           .map(
             (i) =>
-              `  - ${i.towerName} / ${i.l3}: ${i.solutionName}${i.vendor ? ` [${i.vendor}]` : ""}`,
+              `  - id="${i.id}" · ${i.towerName} / ${i.l3}: ${i.solutionName}${i.vendor ? ` [${i.vendor}]` : ""}`,
           )
           .join("\n");
 

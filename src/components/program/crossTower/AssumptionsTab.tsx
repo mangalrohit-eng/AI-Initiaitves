@@ -104,7 +104,7 @@ export function AssumptionsTab({
       <Panel
         icon={<Layers className="h-4 w-4 text-accent-purple" aria-hidden />}
         title="Plan threshold"
-        subtitle="Minimum parent L4 Activity Group prize for inclusion. Same grain as the program tier 2x2."
+        subtitle="Minimum parent activity-group prize for inclusion. Same grain as the program-tier 2x2."
         affectsLlm
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
@@ -136,10 +136,10 @@ export function AssumptionsTab({
         </div>
         <p className="mt-2 text-[11px] text-forge-subtle">
           {assumptions.planThresholdUsd === 0
-            ? "No threshold — every above-the-2x2-line initiative is in plan."
+            ? "No threshold — every above-the-2x2-line solution is in plan."
             : excludedCount === 0
-              ? `Every in-plan L5 rolls up to an L4 Activity Group prize at or above ${formatUsdCompact(assumptions.planThresholdUsd)}.`
-              : `${excludedCount} initiative${excludedCount === 1 ? "" : "s"} · ${formatUsdCompact(excludedAiUsd)} fall below threshold and are deferred as opportunistic.`}
+              ? `Every in-plan activity rolls up to an activity-group prize at or above ${formatUsdCompact(assumptions.planThresholdUsd)}.`
+              : `${excludedCount} solution${excludedCount === 1 ? "" : "s"} · ${formatUsdCompact(excludedAiUsd)} fall below threshold and are deferred as opportunistic.`}
         </p>
       </Panel>
 

@@ -43,7 +43,10 @@ import { ProjectsValueBuildupModule } from "./ProjectsValueBuildupModule";
 import { AIProjectsModule } from "./AIProjectsModule";
 import { ValueEffortMatrix } from "./ValueEffortMatrix";
 import { ProjectsRoadmapModule } from "./ProjectsRoadmapModule";
-import { ProgramArchitecturePanel } from "./ProgramArchitecturePanel";
+import {
+  ProgramArchitectureNarratives,
+  ProgramArchitectureRollups,
+} from "./ProgramArchitecturePanel";
 import { ProgramRisksPanel } from "./ProgramRisksPanel";
 import { AssumptionsTab } from "./AssumptionsTab";
 import { OutcomeClustersTab } from "./OutcomeClustersTab";
@@ -411,13 +414,54 @@ export function CrossTowerAiPlanClient() {
     !isReady || state.projects.length === 0 || isLoading || debouncing;
 
   // TabGroup runs in controlled mode so the Approach tab's CTAs can deep-link
-  // into Lineage, Projects, Matrix, Roadmap, and Assumptions. Default to
-  // Approach so first paint surfaces the methodology rather than the
-  // (often empty) Overview chart.
+  // into the Plan / Cross-tower outcomes / Assumptions tabs and scroll to a
+  // named section within them. Defaults to Approach so first paint surfaces
+  // the methodology rather than the (often empty) Plan chart stack.
   const [activeTabId, setActiveTabId] = React.useState<string>("approach");
 
+  // Deep-link handler shared by ApproachTab CTAs and the consolidated
+  // Cross-tower outcomes tab. `sectionId` is matched against `id="..."`
+  // on a wrapper inside the target tab; we wait one frame for the tab
+  // panel to mount before scrolling.
+  const handleJump = React.useCallback(
+    (tabId: string, sectionId?: string) => {
+      setActiveTabId(tabId);
+      if (!sectionId) return;
+      if (typeof window === "undefined") return;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = document.getElementById(sectionId);
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        });
+      });
+    },
+    [],
+  );
+
+  // Approach tab needs strategist counts for the Track B stat tiles.
+  const strategistOutputs = strategistApi.state.outputs;
+  const strategistIsGenerated = strategistApi.state.status === "ready";
+  const strategistCounts = React.useMemo(
+    () => ({
+      clusterCount: strategistOutputs?.clusters.length ?? null,
+      initiativeCount: strategistOutputs?.initiatives.length ?? null,
+      isGenerated: strategistIsGenerated,
+    }),
+    [strategistOutputs, strategistIsGenerated],
+  );
+
   // ---------------------------------------------------------------------
-  //   Tab definitions
+  //   Tab definitions — five sections:
+  //     approach              → methodology (two-track rail)
+  //     plan                  → AI Solutions, 2×2, roadmap, buildup, rollups
+  //     cross-tower-outcomes  → outcome clusters, orchestration, architecture narratives
+  //     assumptions           → editable knobs
+  //     risks                 → LLM-authored risk catalog
+  //
+  // Anchor ids inside each tab body let the Approach tab's CTAs deep-link
+  // into specific sections via `handleJump(tabId, sectionId)`.
   // ---------------------------------------------------------------------
   const tabs: TabItem[] = React.useMemo(
     () => [
@@ -429,91 +473,50 @@ export function CrossTowerAiPlanClient() {
             program={filteredProgram}
             projects={filteredProjects}
             kpis={filteredKpis}
-            onJump={setActiveTabId}
+            strategist={strategistCounts}
+            onJump={handleJump}
           />
         ),
       },
-      {
-        id: "outcome-clusters",
-        label: "Outcome Clusters",
-        content: (
-          <OutcomeClustersTab
-            scope={baseScope}
-            api={strategistApi}
-            onJumpToOrchestration={() => setActiveTabId("orchestration")}
-          />
-        ),
-      },
-      {
-        id: "orchestration",
-        label: "Orchestration & Data Layer",
-        content: (
-          <OrchestrationLayerTab
-            scope={baseScope}
-            api={strategistApi}
-          />
-        ),
-      },
-      {
-        id: "overview",
-        label: "Overview",
-        content: (
-          <div className="space-y-6">
-            <ProjectsValueBuildupModule
+      (() => {
+        // The Plan count matches the KPI strip's "AI Solutions in plan"
+        // metric (live projects only — stubs and deprioritized excluded).
+        // The full population breakdown surfaces as a hover tooltip so
+        // power users can still see what was filtered out.
+        const planLive = filteredKpis.liveProjects;
+        const planExcluded =
+          filteredKpis.stubProjects + filteredKpis.deprioritizedProjects;
+        return {
+          id: "plan",
+          label: planLive > 0 ? `Plan (${planLive})` : "Plan",
+          title:
+            planExcluded > 0
+              ? `${planLive} live · ${planExcluded} stub or deprioritized`
+              : undefined,
+          content: (
+            <PlanTabContent
+              projects={filteredProjects}
+              kpis={filteredKpis}
               buildup={filteredBuildup}
-              fullScaleRunRateUsd={filteredKpis.fullScaleRunRateUsd}
+              synthesis={state.synthesis}
               assumptions={assumptions}
-              bare
+              openProject={openProject}
+              viewFiltersActive={viewFiltersActive}
             />
-          </div>
-        ),
-      },
+          ),
+        };
+      })(),
       {
-        id: "projects",
-        label: `AI Solutions${filteredProjects.length > 0 ? ` (${filteredProjects.length})` : ""}`,
+        id: "cross-tower-outcomes",
+        label: "Cross-tower outcomes",
         content: (
-          <AIProjectsModule projects={filteredProjects} bare />
-        ),
-      },
-      {
-        id: "matrix",
-        label: "Value × Effort",
-        content: (
-          <ValueEffortMatrix
+          <CrossTowerOutcomesTabContent
+            scope={baseScope}
+            strategistApi={strategistApi}
+            synthesis={state.synthesis}
             projects={filteredProjects}
-            onSelect={openProject}
-            bare
+            viewFiltersActive={viewFiltersActive}
           />
-        ),
-      },
-      {
-        id: "roadmap",
-        label: "Roadmap",
-        content: (
-          <div className="space-y-4">
-            {viewFiltersActive ? <ViewFilterNarrativeNotice /> : null}
-            <ProjectsRoadmapModule
-              projects={filteredProjects}
-              synthesis={state.synthesis}
-              assumptions={assumptions}
-              onSelectProject={openProject}
-              bare
-            />
-          </div>
-        ),
-      },
-      {
-        id: "architecture",
-        label: "Architecture",
-        content: (
-          <div className="space-y-4">
-            {viewFiltersActive ? <ViewFilterNarrativeNotice /> : null}
-            <ProgramArchitecturePanel
-              projects={filteredProjects}
-              synthesis={state.synthesis}
-              bare
-            />
-          </div>
         ),
       },
       {
@@ -548,13 +551,16 @@ export function CrossTowerAiPlanClient() {
       filteredKpis,
       filteredProgram,
       filteredProjects,
+      handleJump,
       isStale,
       openProject,
-      program,
+      program.threshold.excludedAiUsd,
+      program.threshold.excludedCount,
+      reset,
       state.synthesis,
       strategistApi,
+      strategistCounts,
       update,
-      reset,
       viewFiltersActive,
     ],
   );
@@ -685,7 +691,7 @@ export function CrossTowerAiPlanClient() {
             </div>
             <BaseScopeSelector />
             <p className="max-w-xs text-right text-[10.5px] leading-snug text-forge-hint">
-              Base scope drives the Outcome Clusters and Orchestration tabs.
+              Base scope drives the Cross-tower outcomes tab.
             </p>
             {exportError ? (
               <p className="max-w-sm text-right text-[11px] text-accent-red">
@@ -738,14 +744,13 @@ export function CrossTowerAiPlanClient() {
         ) : null}
 
         {intakeNudge ? (
-          <div className="mt-4 rounded-lg border border-accent-teal/40 bg-accent-teal/5 px-3 py-2 text-xs text-forge-body">
-            <span className="font-semibold text-accent-teal">
-              Tower AI readiness questionnaire updated
+          <p className="mt-3 text-[11px] leading-snug text-forge-subtle">
+            <span className="font-medium text-accent-teal">
+              Tower AI readiness intake updated
             </span>{" "}
-            after this plan was generated. Regenerate to refresh program narrative
-            (risks, roadmap, architecture commentary) with the latest tower lead
-            intake.
-          </div>
+            after this plan was generated. Regenerate to refresh program
+            narrative.
+          </p>
         ) : null}
 
         {/* ============= VIEW FILTERS ============= */}
@@ -898,6 +903,168 @@ function ViewFilterNarrativeNotice() {
   );
 }
 
+// ---------------------------------------------------------------------------
+//   Consolidated tab content — Plan
+// ---------------------------------------------------------------------------
+
+import type { ProjectKpis, BuildupPoint } from "@/lib/cross-tower/composeProjects";
+
+const PLAN_TAB_SECTIONS: ReadonlyArray<{ id: string; label: string }> = [
+  { id: "plan-solutions", label: "Solutions" },
+  { id: "plan-matrix", label: "2×2" },
+  { id: "plan-roadmap", label: "Roadmap" },
+  { id: "plan-buildup", label: "Buildup" },
+  { id: "plan-rollups", label: "Rollups" },
+];
+
+function PlanTabContent({
+  projects,
+  kpis,
+  buildup,
+  synthesis,
+  assumptions,
+  openProject,
+  viewFiltersActive,
+}: {
+  projects: AIProjectResolved[];
+  kpis: ProjectKpis;
+  buildup: BuildupPoint[];
+  synthesis: CrossTowerPlanV6State["synthesis"];
+  assumptions: CrossTowerAssumptions;
+  openProject: (p: AIProjectResolved) => void;
+  viewFiltersActive: boolean;
+}) {
+  return (
+    <div className="space-y-10">
+      <PlanTabAnchorNav sections={PLAN_TAB_SECTIONS} />
+      {viewFiltersActive ? <ViewFilterNarrativeNotice /> : null}
+
+      <section id="plan-solutions" className="scroll-mt-24">
+        <AIProjectsModule projects={projects} bare />
+      </section>
+
+      <section id="plan-matrix" className="scroll-mt-24">
+        <ValueEffortMatrix
+          projects={projects}
+          onSelect={openProject}
+          bare
+        />
+      </section>
+
+      <section id="plan-roadmap" className="scroll-mt-24">
+        <ProjectsRoadmapModule
+          projects={projects}
+          synthesis={synthesis}
+          assumptions={assumptions}
+          onSelectProject={openProject}
+          bare
+        />
+      </section>
+
+      <section id="plan-buildup" className="scroll-mt-24">
+        <ProjectsValueBuildupModule
+          buildup={buildup}
+          fullScaleRunRateUsd={kpis.fullScaleRunRateUsd}
+          assumptions={assumptions}
+          bare
+        />
+      </section>
+
+      <section id="plan-rollups" className="scroll-mt-24">
+        <ProgramArchitectureRollups projects={projects} bare />
+      </section>
+    </div>
+  );
+}
+
+function PlanTabAnchorNav({
+  sections,
+}: {
+  sections: ReadonlyArray<{ id: string; label: string }>;
+}) {
+  const onClick = React.useCallback((id: string) => {
+    if (typeof window === "undefined") return;
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+  return (
+    <nav
+      aria-label="Jump to plan section"
+      className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-1.5 rounded-xl border border-forge-border bg-forge-surface/95 px-3 py-2 shadow-sm backdrop-blur"
+    >
+      <span className="select-none font-mono text-[10px] font-semibold uppercase tracking-wider text-forge-subtle">
+        <span className="text-forge-hint" aria-hidden>
+          &gt;{" "}
+        </span>
+        Jump to
+      </span>
+      {sections.map((s) => (
+        <button
+          key={s.id}
+          type="button"
+          onClick={() => onClick(s.id)}
+          className="rounded-full border border-forge-border bg-forge-well/40 px-2.5 py-1 text-[11px] font-medium text-forge-body transition hover:border-accent-purple/40 hover:text-accent-purple-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-purple/40"
+        >
+          {s.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+// ---------------------------------------------------------------------------
+//   Consolidated tab content — Cross-tower outcomes
+// ---------------------------------------------------------------------------
+
+import type { UseStrategistOutputsApi } from "@/lib/llm/useStrategistOutputs";
+import type { BaseScope } from "@/lib/scope/baseScope";
+
+function CrossTowerOutcomesTabContent({
+  scope,
+  strategistApi,
+  synthesis,
+  projects,
+  viewFiltersActive,
+}: {
+  scope: BaseScope;
+  strategistApi: UseStrategistOutputsApi;
+  synthesis: CrossTowerPlanV6State["synthesis"];
+  projects: AIProjectResolved[];
+  viewFiltersActive: boolean;
+}) {
+  const scrollTo = React.useCallback((id: string) => {
+    if (typeof window === "undefined") return;
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+  return (
+    <div className="space-y-10">
+      {viewFiltersActive ? <ViewFilterNarrativeNotice /> : null}
+
+      <section id="clusters" className="scroll-mt-24">
+        <OutcomeClustersTab
+          scope={scope}
+          api={strategistApi}
+          projects={projects}
+          onJumpToOrchestration={() => scrollTo("orchestration")}
+        />
+      </section>
+
+      <section id="orchestration" className="scroll-mt-24">
+        <OrchestrationLayerTab
+          scope={scope}
+          api={strategistApi}
+          hideHeader
+        />
+      </section>
+
+      <section id="architecture-narratives" className="scroll-mt-24">
+        <ProgramArchitectureNarratives synthesis={synthesis} bare />
+      </section>
+    </div>
+  );
+}
+
 /** Short tower key for dense filter pills (full name in `title`). */
 function compactTowerPillLabel(towerId: string): string {
   if (towerId === "hr") return "HR";
@@ -1000,7 +1167,7 @@ function RegenerateAction({
     mode === "hydrating"
       ? "Loading saved plan…"
       : mode === "loading"
-        ? "Authoring with the Versant model…"
+        ? "Generating…"
         : mode === "firstRun"
           ? "Generate plan"
           : mode === "stale"
@@ -1016,24 +1183,24 @@ function RegenerateAction({
           ? "Refresh stale cross-tower AI plan"
           : "Regenerate cross-tower AI plan";
 
+  // Tight one-liners — the previous multi-clause captions leaked
+  // implementation language ("per-cohort fan-out", "0-token") into the
+  // executive surface.
   const caption =
     mode === "hydrating"
-      ? "Restoring the last saved plan from the workshop database."
+      ? "Restoring the last saved plan."
       : mode === "loading"
-        ? "Calling the Versant model — per-cohort fan-out + program synthesis in flight. Typically 60-180 seconds for a full program; don't refresh."
+        ? "Authoring solutions, scoring, and program synthesis. 60-180 seconds."
         : mode === "firstRun"
-          ? persistenceMode === "unconfigured"
-            ? "Click to author the Versant-grounded plan for this scenario. Persistence disabled — set DATABASE_URL to save plans across reloads."
-            : "Click to author the Versant-grounded plan for this scenario. One model call per cohort (six in parallel), then a program synthesis pass."
+          ? "Author the Versant-grounded plan for this scenario."
           : mode === "stale"
-            ? "Plan stale — assumptions or program substrate changed since last generation. Click to refresh."
-            : "Refreshes every project brief, the 2x2 scoring, and the program synthesis. Timing knobs are 0-token (no LLM call).";
+            ? "Inputs changed since last generation. Click to refresh."
+            : "Refreshes every solution brief, 2×2 scoring, and program synthesis.";
 
   const persistenceFootnote =
     persistenceMode === "unconfigured" &&
     mode !== "hydrating" &&
-    mode !== "loading" &&
-    mode !== "firstRun"
+    mode !== "loading"
       ? "Persistence disabled — set DATABASE_URL to retain the plan across reloads."
       : null;
 
@@ -1115,7 +1282,7 @@ function formatAuditLine(
 
 function defaultExecutiveSummary(isFirstRun: boolean): string {
   if (isFirstRun) {
-    return "Versant's cross-tower AI plan, sourced directly from the L3 AI Initiatives curated in each tower workshop. Click Regenerate plan to score every solution on the Value × Effort 2x2, sequence them across a 24-month roadmap, and roll up the program-level executive summary, risks, and architecture. Numerics and the value buildup curve update deterministically.";
+    return "Versant's cross-tower AI plan, sourced directly from the AI Solutions curated in each tower workshop. Click Regenerate plan to score every solution on the Value × Effort 2x2, sequence them across a 24-month roadmap, and roll up the program-level executive summary, risks, and architecture. Numerics and the value buildup curve update deterministically.";
   }
-  return "Cross-tower AI plan, sourced directly from the L3 AI Initiatives in scope. Each solution carries its own deep-dive brief, is scored on Value × Effort, and threads into the 24-month roadmap. Click any solution to open its Work / Workforce / Workbench / Digital Core brief.";
+  return "Cross-tower AI plan, sourced directly from the AI Solutions in scope. Each solution carries its own deep-dive brief, is scored on Value × Effort, and threads into the 24-month roadmap. Click any solution to open its Work / Workforce / Workbench / Digital Core brief.";
 }

@@ -78,6 +78,7 @@ export async function buildStrategistInput(
 ): Promise<StrategistInputAndHash> {
   const towers: StrategistTowerInput[] = [];
   const inFlight: Array<{
+    id: string;
     towerName: string;
     l3: string;
     solutionName: string;
@@ -128,6 +129,7 @@ export async function buildStrategistInput(
 
       for (const init of l3.l3Initiatives ?? []) {
         inFlight.push({
+          id: init.id,
           towerName: t.name,
           l3: l3.l3,
           solutionName: init.solutionName,
@@ -172,7 +174,12 @@ async function hashStrategistInput(
           .sort((a, b) => a.l3.localeCompare(b.l3)),
       }))
       .sort((a, b) => a.id.localeCompare(b.id)),
-    inFlight: input.inFlightInitiatives.map((i) => i.solutionName).sort(),
+    // The id is part of the hash so cache keys move when a solution is
+    // renamed, removed, or added — the strategist's anchoring depends
+    // on the exact in-flight inventory it saw.
+    inFlight: input.inFlightInitiatives
+      .map((i) => `${i.id}::${i.solutionName}`)
+      .sort(),
   });
   if (typeof crypto !== "undefined" && crypto.subtle) {
     const buffer = await crypto.subtle.digest(

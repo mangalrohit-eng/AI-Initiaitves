@@ -29,7 +29,6 @@ import type {
   StrategistInitiative,
   StrategistOutputs,
   ValueCategory,
-  ValueSizingTier,
 } from "@/lib/strategist/types";
 import { slugifyForId } from "@/lib/strategist/types";
 import type { TowerId } from "@/data/assess/types";
@@ -101,7 +100,14 @@ export async function generateStrategistOutputs(
       maxOutputTokens: DEFAULT_MAX_TOKENS,
       reasoningEffort: "medium",
     });
-    const validation = validateStrategistOutputs(result.parsed);
+    const validSolutionIds = new Set<string>(
+      options.input.inFlightInitiatives.map((i) => i.id),
+    );
+    const validation = validateStrategistOutputs(
+      result.parsed,
+      validSolutionIds,
+    );
+    for (const w of validation.warnings ?? []) warnings.push(w);
     if (!validation.ok) {
       warnings.push(
         `Strategist validation failed: ${validation.reasons.join("; ")} — returning deterministic stub.`,
@@ -156,11 +162,17 @@ type ValidateResult =
   | {
       ok: true;
       outputs: Pick<StrategistOutputs, "clusters" | "initiatives" | "orchestration">;
+      /** Soft warnings — kept for the UI banner but don't fail the run. */
+      warnings: string[];
     }
-  | { ok: false; reasons: string[] };
+  | { ok: false; reasons: string[]; warnings?: string[] };
 
-function validateStrategistOutputs(raw: unknown): ValidateResult {
+function validateStrategistOutputs(
+  raw: unknown,
+  validSolutionIds: ReadonlySet<string>,
+): ValidateResult {
   const reasons: string[] = [];
+  const warnings: string[] = [];
   if (!raw || typeof raw !== "object") {
     return { ok: false, reasons: ["Payload is not an object"] };
   }
@@ -170,7 +182,13 @@ function validateStrategistOutputs(raw: unknown): ValidateResult {
   if (clusters.length < 3) reasons.push("Need at least 3 clusters");
 
   const clusterIds = new Set(clusters.map((c) => c.id));
-  const initiatives = sanitizeInitiatives(r.initiatives, clusterIds, reasons);
+  const initiatives = sanitizeInitiatives(
+    r.initiatives,
+    clusterIds,
+    validSolutionIds,
+    reasons,
+    warnings,
+  );
   if (initiatives.length < 6) reasons.push("Need at least 6 initiatives total");
 
   const orchestration = sanitizeOrchestration(
@@ -180,10 +198,11 @@ function validateStrategistOutputs(raw: unknown): ValidateResult {
   );
   if (!orchestration) reasons.push("Missing or invalid orchestration block");
 
-  if (reasons.length > 0) return { ok: false, reasons };
+  if (reasons.length > 0) return { ok: false, reasons, warnings };
   return {
     ok: true,
     outputs: { clusters, initiatives, orchestration: orchestration! },
+    warnings,
   };
 }
 
@@ -244,7 +263,9 @@ function sanitizeClusters(
 function sanitizeInitiatives(
   raw: unknown,
   validClusterIds: ReadonlySet<string>,
+  validSolutionIds: ReadonlySet<string>,
   reasons: string[],
+  warnings: string[],
 ): StrategistInitiative[] {
   if (!Array.isArray(raw)) {
     reasons.push("`initiatives` is not an array");
@@ -303,11 +324,18 @@ function sanitizeInitiatives(
       reasons.push(`Initiative "${name}" missing valueCategories`);
       continue;
     }
-    const valueTier = sanitizeValueTier(r.valueTier);
-    if (!valueTier) {
-      reasons.push(`Initiative "${name}" missing valueTier`);
-      continue;
-    }
+    // constituentSolutionIds (added in strategist.v1.1) — anchor the
+    // cross-tower initiative to the curated tower-specific AI Solutions
+    // that already carry modeled dollars and four-lens briefs. Unknown
+    // ids are dropped with a soft warning; an empty array is allowed
+    // and surfaces in the UI as the "Unsized — TBD subject to
+    // discovery" state rather than failing the run.
+    const constituentSolutionIds = sanitizeConstituentSolutionIds(
+      r.constituentSolutionIds,
+      validSolutionIds,
+      name,
+      warnings,
+    );
     const dependencies = sanitizeStringArray(r.dependencies);
     out.push({
       id,
@@ -317,9 +345,38 @@ function sanitizeInitiatives(
       currentState,
       futureState,
       valueCategories,
-      valueTier,
+      constituentSolutionIds,
       dependencies,
     });
+  }
+  return out;
+}
+
+function sanitizeConstituentSolutionIds(
+  raw: unknown,
+  validSolutionIds: ReadonlySet<string>,
+  initiativeName: string,
+  warnings: string[],
+): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const dropped: string[] = [];
+  const seen = new Set<string>();
+  for (const v of raw) {
+    if (typeof v !== "string") continue;
+    const id = v.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    if (validSolutionIds.has(id)) {
+      out.push(id);
+    } else {
+      dropped.push(id);
+    }
+  }
+  if (dropped.length > 0) {
+    warnings.push(
+      `Initiative "${initiativeName}" anchored to unknown solution id(s): ${dropped.join(", ")} — dropped.`,
+    );
   }
   return out;
 }
@@ -407,11 +464,6 @@ function sanitizeValueCategories(v: unknown): ValueCategory[] {
     }
   }
   return Array.from(new Set(out));
-}
-
-function sanitizeValueTier(v: unknown): ValueSizingTier | null {
-  if (v === "HIGH" || v === "MEDIUM" || v === "LOW") return v;
-  return null;
 }
 
 function sanitizeStringArray(v: unknown): string[] {

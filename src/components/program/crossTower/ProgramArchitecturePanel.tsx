@@ -11,32 +11,36 @@ import {
 } from "@/lib/assess/towerReadinessIntake";
 
 /**
- * Cross-Tower AI Plan — program architecture panel.
+ * Cross-Tower AI Plan — program architecture surfaces.
  *
- * Three LLM-authored narrative blocks from `ProgramSynthesisLLMV6`:
+ * Split into two independently exported components so the consolidated tab
+ * layout can place each in its natural home:
  *
- *   - `architectureDelivery`  — agentic-pattern + delivery commentary.
- *   - `architectureVendors`   — vendor stack commentary.
- *   - `architectureDataCore`  — data + digital core commentary.
+ *   - `ProgramArchitectureNarratives` — three LLM-authored narrative blocks
+ *     (orchestration & delivery / vendor stack / data + digital core).
+ *     Lives on the Cross-tower outcomes tab alongside Outcome Clusters and
+ *     Orchestration & Data Layer.
  *
- * Deterministic rollups derived from the resolved project set:
+ *   - `ProgramArchitectureRollups` — three deterministic rollups derived
+ *     from the resolved project set (vendor partners / tower coverage /
+ *     feasibility mix). Program-wide; lives on the Plan tab alongside KPIs
+ *     and the roadmap.
  *
- *   - **Vendor partners** — every named primary vendor pulled off the
- *     L3 AI Initiatives at curation time. Initiative bodies are lazy
- *     and not in scope at the cross-tower view.
- *   - **Tower coverage** — count of in-plan AI Solutions per tower.
- *   - **Feasibility mix** — High / Medium / Low ship-readiness mix.
+ * The legacy `ProgramArchitecturePanel` is preserved as a thin composition
+ * for any callers that still render both blocks together (e.g. exports).
  */
-export function ProgramArchitecturePanel({
-  projects,
+
+// ===========================================================================
+//   Narratives — LLM authored, cross-tower commentary
+// ===========================================================================
+
+export function ProgramArchitectureNarratives({
   synthesis,
   bare,
 }: {
-  projects: AIProjectResolved[];
   synthesis: ProgramSynthesisLLMV6 | null;
   bare?: boolean;
 }) {
-  const rollups = React.useMemo(() => buildRollups(projects), [projects]);
   const [hasProgramIntake, setHasProgramIntake] = React.useState(false);
   React.useEffect(() => {
     const sync = () =>
@@ -52,12 +56,12 @@ export function ProgramArchitecturePanel({
       <div>
         <h2 className="font-display text-lg font-semibold text-forge-ink">
           <span className="font-mono text-accent-purple-dark">&gt;</span>{" "}
-          Program architecture
+          Cross-cutting architecture
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
-          Aggregate view of vendor partners and tower coverage across the AI
-          Solutions in plan. Per-solution agent fleets and orchestration
-          patterns are authored on each solution&apos;s deep-dive page.
+          Orchestration, vendor stack, and data-core commentary for the
+          portfolio. Per-solution agent fleets and integration patterns live
+          on each solution&apos;s deep-dive page.
         </p>
         {synthesis && hasProgramIntake ? (
           <p className="mt-2 max-w-3xl text-[10px] leading-snug text-forge-hint">
@@ -75,59 +79,22 @@ export function ProgramArchitecturePanel({
   );
 
   const Body = (
-    <div className="space-y-5">
-      {/* Narrative blocks — three columns */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <NarrativeBlock
-          icon={<Workflow className="h-3.5 w-3.5" aria-hidden />}
-          title="Orchestration & delivery"
-          body={synthesis?.architectureDelivery}
-        />
-        <NarrativeBlock
-          icon={<Cpu className="h-3.5 w-3.5" aria-hidden />}
-          title="Vendor stack"
-          body={synthesis?.architectureVendors}
-        />
-        <NarrativeBlock
-          icon={<Database className="h-3.5 w-3.5" aria-hidden />}
-          title="Data + digital core"
-          body={synthesis?.architectureDataCore}
-        />
-      </div>
-
-      {/* Deterministic rollups */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <RollupCard
-          icon={
-            <Network className="h-3.5 w-3.5 text-accent-green" aria-hidden />
-          }
-          title="Vendor partners"
-          total={rollups.vendorStack.length}
-          totalLabel="distinct named vendors"
-          rows={rollups.vendorStack.slice(0, 10).map((v) => ({
-            label: v.vendor,
-            count: v.count,
-          }))}
-        />
-        <RollupCard
-          icon={
-            <Workflow className="h-3.5 w-3.5 text-accent-teal" aria-hidden />
-          }
-          title="Tower coverage"
-          total={rollups.towerCoverage.length}
-          totalLabel="towers in plan"
-          rows={rollups.towerCoverage.slice(0, 10)}
-        />
-        <RollupCard
-          icon={
-            <Cpu className="h-3.5 w-3.5 text-accent-purple-dark" aria-hidden />
-          }
-          title="Feasibility mix"
-          total={rollups.feasibilityMix.reduce((s, r) => s + r.count, 0)}
-          totalLabel="solutions classified"
-          rows={rollups.feasibilityMix}
-        />
-      </div>
+    <div className="grid gap-4 lg:grid-cols-3">
+      <NarrativeBlock
+        icon={<Workflow className="h-3.5 w-3.5" aria-hidden />}
+        title="Orchestration & delivery"
+        body={synthesis?.architectureDelivery}
+      />
+      <NarrativeBlock
+        icon={<Cpu className="h-3.5 w-3.5" aria-hidden />}
+        title="Vendor stack"
+        body={synthesis?.architectureVendors}
+      />
+      <NarrativeBlock
+        icon={<Database className="h-3.5 w-3.5" aria-hidden />}
+        title="Data + digital core"
+        body={synthesis?.architectureDataCore}
+      />
     </div>
   );
 
@@ -143,6 +110,113 @@ export function ProgramArchitecturePanel({
     <section className="rounded-2xl border border-forge-border bg-forge-surface p-5 shadow-card">
       {Header}
       <div className="mt-5">{Body}</div>
+    </section>
+  );
+}
+
+// ===========================================================================
+//   Rollups — deterministic, program-wide
+// ===========================================================================
+
+export function ProgramArchitectureRollups({
+  projects,
+  bare,
+}: {
+  projects: AIProjectResolved[];
+  bare?: boolean;
+}) {
+  const rollups = React.useMemo(() => buildRollups(projects), [projects]);
+
+  const Header = (
+    <header>
+      <h2 className="font-display text-lg font-semibold text-forge-ink">
+        <span className="font-mono text-accent-purple-dark">&gt;</span>{" "}
+        Program rollups
+      </h2>
+      <p className="mt-1 max-w-3xl text-sm text-forge-subtle">
+        Vendor partners named on the AI Solutions in plan, tower coverage,
+        and feasibility mix. All three are computed deterministically from
+        the curated solution set.
+      </p>
+    </header>
+  );
+
+  const Body = (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <RollupCard
+        icon={
+          <Network className="h-3.5 w-3.5 text-accent-green" aria-hidden />
+        }
+        title="Vendor partners"
+        total={rollups.vendorStack.length}
+        totalLabel="distinct named vendors"
+        rows={rollups.vendorStack.slice(0, 10).map((v) => ({
+          label: v.vendor,
+          count: v.count,
+        }))}
+      />
+      <RollupCard
+        icon={
+          <Workflow className="h-3.5 w-3.5 text-accent-teal" aria-hidden />
+        }
+        title="Tower coverage"
+        total={rollups.towerCoverage.length}
+        totalLabel="towers in plan"
+        rows={rollups.towerCoverage.slice(0, 10)}
+      />
+      <RollupCard
+        icon={
+          <Cpu className="h-3.5 w-3.5 text-accent-purple-dark" aria-hidden />
+        }
+        title="Feasibility mix"
+        total={rollups.feasibilityMix.reduce((s, r) => s + r.count, 0)}
+        totalLabel="solutions classified"
+        rows={rollups.feasibilityMix}
+      />
+    </div>
+  );
+
+  if (bare) {
+    return (
+      <div className="space-y-5">
+        {Header}
+        {Body}
+      </div>
+    );
+  }
+  return (
+    <section className="rounded-2xl border border-forge-border bg-forge-surface p-5 shadow-card">
+      {Header}
+      <div className="mt-5">{Body}</div>
+    </section>
+  );
+}
+
+// ===========================================================================
+//   Composing wrapper — preserved for any callers that want both blocks together
+// ===========================================================================
+
+export function ProgramArchitecturePanel({
+  projects,
+  synthesis,
+  bare,
+}: {
+  projects: AIProjectResolved[];
+  synthesis: ProgramSynthesisLLMV6 | null;
+  bare?: boolean;
+}) {
+  if (bare) {
+    return (
+      <div className="space-y-6">
+        <ProgramArchitectureNarratives synthesis={synthesis} bare />
+        <ProgramArchitectureRollups projects={projects} bare />
+      </div>
+    );
+  }
+  return (
+    <section className="space-y-6">
+      <ProgramArchitectureNarratives synthesis={synthesis} />
+      <ProgramArchitectureRollups projects={projects} />
     </section>
   );
 }
@@ -220,7 +294,7 @@ function RollupCard({
         </ul>
       ) : (
         <p className="mt-3 text-[11px] italic text-forge-subtle">
-          No data — projects not yet authored.
+          No data — solutions not yet authored.
         </p>
       )}
     </div>

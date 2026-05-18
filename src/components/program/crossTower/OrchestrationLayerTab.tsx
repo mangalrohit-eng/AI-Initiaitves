@@ -34,9 +34,17 @@ import type {
 export function OrchestrationLayerTab({
   scope,
   api,
+  hideHeader,
 }: {
   scope: BaseScope;
   api: UseStrategistOutputsApi;
+  /**
+   * Suppress the strategist status / regenerate header bar. Set this when
+   * the orchestration view is rendered below an Outcome Clusters block
+   * that already carries the canonical strategist header — otherwise two
+   * identical "Generated X · Regenerate" bars stack on the page.
+   */
+  hideHeader?: boolean;
 }) {
   const { state, generate, isStale } = api;
   const isLoading = state.status === "loading";
@@ -45,15 +53,17 @@ export function OrchestrationLayerTab({
 
   return (
     <div className="space-y-6">
-      <Header
-        scope={scope}
-        status={state.status}
-        generatedAt={state.generatedAt}
-        isStale={isStale}
-        isLoading={isLoading}
-        onGenerate={() => void generate({ forceRegenerate: false })}
-        onRegenerate={() => void generate({ forceRegenerate: true })}
-      />
+      {hideHeader ? null : (
+        <Header
+          scope={scope}
+          status={state.status}
+          generatedAt={state.generatedAt}
+          isStale={isStale}
+          isLoading={isLoading}
+          onGenerate={() => void generate({ forceRegenerate: false })}
+          onRegenerate={() => void generate({ forceRegenerate: true })}
+        />
+      )}
 
       {errored ? (
         <div

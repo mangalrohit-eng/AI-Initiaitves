@@ -25,6 +25,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  BadgeCheck,
+  Building2,
   Layers,
   Loader2,
   RefreshCw,
@@ -60,13 +62,14 @@ import { BusinessCase } from "@/components/processes/BusinessCase";
 import { SolutionBriefView } from "@/components/initiatives/SolutionBriefView";
 import { SolutionIcon } from "@/components/towers/SolutionIcon";
 import { feasibilityChip } from "@/lib/feasibilityChip";
+import { isVendorConfirmed } from "@/lib/initiatives/vendorStack";
 import type {
   AssessProgramV2,
   L3Initiative,
   L3WorkforceRowV6,
   TowerId,
 } from "@/data/assess/types";
-import type { Process } from "@/data/types";
+import type { Process, Tower } from "@/data/types";
 
 type Params = { slug: string; rowId: string; initiativeId: string };
 
@@ -385,9 +388,9 @@ export default function V6InitiativePage() {
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-forge-hint">
               {initiative.primaryVendor ? (
-                <Pill
-                  icon={<Sparkles className="h-3 w-3" />}
-                  label={`Vendor · ${initiative.primaryVendor}`}
+                <VendorPill
+                  primaryVendor={initiative.primaryVendor}
+                  tower={tower}
                 />
               ) : null}
               {totalChildren > 0 ? (
@@ -683,6 +686,60 @@ function Pill({ icon, label }: { icon: React.ReactNode; label: string }) {
     <span className="inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-well/40 px-2 py-0.5 text-forge-body">
       {icon}
       <span>{label}</span>
+    </span>
+  );
+}
+
+/**
+ * Vendor pill with two variants driven by `tower.committedVendors`:
+ *
+ *   - Indicative (default) — neutral chrome with a `Building2` icon and
+ *     `Indicative vendor · {name}` copy. Tooltip explains that this is
+ *     an illustrative anchor, not a Versant procurement decision.
+ *   - Versant-selected (when `isVendorConfirmed` returns true) — teal
+ *     accent with a `BadgeCheck` icon and `Versant-selected vendor ·
+ *     {name}` copy. Tooltip lists the matched `committedVendors`
+ *     capability values for audit clarity.
+ *
+ * "Every component must match" semantics live in `isVendorConfirmed`
+ * so a partial match (e.g., `BlackLine + HighRadius` with only
+ * BlackLine confirmed) still renders as indicative.
+ */
+function VendorPill({
+  primaryVendor,
+  tower,
+}: {
+  primaryVendor: string;
+  tower: Tower;
+}) {
+  const { confirmed, matchedCapabilities } = isVendorConfirmed(
+    primaryVendor,
+    tower.committedVendors,
+  );
+
+  if (confirmed) {
+    const tooltip =
+      matchedCapabilities.length > 0
+        ? `Versant-confirmed pick for: ${matchedCapabilities.join(", ")}`
+        : "Versant-confirmed vendor";
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full border border-accent-teal/40 bg-accent-teal/10 px-2 py-0.5 text-accent-teal"
+        title={tooltip}
+      >
+        <BadgeCheck className="h-3 w-3" aria-hidden />
+        <span>Versant-selected vendor · {primaryVendor}</span>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full border border-forge-border bg-forge-well/40 px-2 py-0.5 text-forge-body"
+      title="Illustrative anchor — Versant has not confirmed a vendor for this capability yet. Final pick is a procurement decision."
+    >
+      <Building2 className="h-3 w-3" aria-hidden />
+      <span>Indicative vendor · {primaryVendor}</span>
     </span>
   );
 }

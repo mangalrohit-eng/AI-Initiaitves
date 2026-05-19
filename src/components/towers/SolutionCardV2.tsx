@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUpRight, Building2, Layers, Sparkles } from "lucide-react";
+import { ArrowUpRight, Layers, Sparkles, Trash2, Upload } from "lucide-react";
 import type {
   InitiativeReview,
   TowerAiReadinessIntake,
@@ -59,6 +59,7 @@ export function SolutionCardV2({
   review,
   actions,
   towerIntake,
+  onDeleteManual,
 }: {
   init: V6InitiativeCard;
   /** V6 L3 row — needed by the validate/reject snapshot. */
@@ -90,6 +91,14 @@ export function SolutionCardV2({
    * gallery (e.g. in storybook / preview surfaces).
    */
   towerIntake?: TowerAiReadinessIntake | string | null;
+  /**
+   * Optional callback fired when the user confirms deletion of a
+   * `source: "manual"` initiative via the trash affordance on the card.
+   * The gallery owns the delete (state + toast); the card only surfaces
+   * the affordance for manual entries and gates it behind a two-step
+   * inline confirm so the action stays distinct from the reject flow.
+   */
+  onDeleteManual?: (initId: string) => void;
 }) {
   const redact = useRedactDollars();
   const feas = init.isPlaceholder ? null : feasibilityChip(init.feasibility);
@@ -98,6 +107,16 @@ export function SolutionCardV2({
   const intakeStatus = init.intakeStatus;
   const intakeStatusStale = intakeStatusIsStale(intakeStatus, towerIntake);
   const [intakeEvidenceOpen, setIntakeEvidenceOpen] = React.useState(false);
+  const [deleteConfirming, setDeleteConfirming] = React.useState(false);
+  // Reset the two-step confirm if the card sits idle for 4s — the
+  // affordance shouldn't stay armed indefinitely after the first click.
+  React.useEffect(() => {
+    if (!deleteConfirming) return;
+    const id = window.setTimeout(() => setDeleteConfirming(false), 4000);
+    return () => window.clearTimeout(id);
+  }, [deleteConfirming]);
+  const canDeleteManual =
+    !init.isPlaceholder && init.source === "manual" && !!onDeleteManual;
   const workbenchSurfaceName = React.useMemo(
     () => resolveWorkbenchSurfaceName(init, towerId),
     [init, towerId],
@@ -139,15 +158,6 @@ export function SolutionCardV2({
                 {feas.label}
               </span>
             ) : null}
-            {init.primaryVendor ? (
-              <span
-                className="inline-flex items-center gap-1 rounded-full border border-forge-border bg-near-black/40 px-1.5 py-0 font-mono text-[10px] text-forge-body"
-                title="Anchored vendor or stack for this solution"
-              >
-                <Building2 className="h-2.5 w-2.5 text-forge-hint" aria-hidden />
-                {init.primaryVendor}
-              </span>
-            ) : null}
             {intakeStatus ? (
               <IntakeStatusPill
                 intakeStatus={intakeStatus}
@@ -164,6 +174,15 @@ export function SolutionCardV2({
               >
                 <Layers className="h-2.5 w-2.5 text-forge-hint" aria-hidden />
                 covers {init.coversL4RowIds.length}
+              </span>
+            ) : null}
+            {init.source === "manual" ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-accent-teal/40 bg-accent-teal/5 px-1.5 py-0 font-mono text-[10px] uppercase tracking-wider text-accent-teal"
+                title="Seeded from an uploaded initiatives list. LLM enriched the rationale + vendor; the Solution Name is preserved verbatim."
+              >
+                <Upload className="h-2.5 w-2.5" aria-hidden />
+                Uploaded
               </span>
             ) : null}
           </div>
@@ -229,6 +248,63 @@ export function SolutionCardV2({
           ) : null}
         </span>
         <div className="flex shrink-0 items-center gap-2">
+          {canDeleteManual ? (
+            deleteConfirming ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-accent-red/50 bg-accent-red/10 px-1.5 py-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }}
+              >
+                <span className="font-mono text-[10px] uppercase tracking-wider text-accent-red">
+                  Delete?
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onDeleteManual?.(init.id);
+                    setDeleteConfirming(false);
+                  }}
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent-red text-white transition hover:bg-[#e23200]"
+                  title="Confirm delete"
+                  aria-label="Confirm delete uploaded initiative"
+                >
+                  <Trash2 className="h-2.5 w-2.5" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setDeleteConfirming(false);
+                  }}
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-forge-border bg-near-black/40 text-forge-body transition hover:text-forge-ink"
+                  title="Cancel"
+                  aria-label="Cancel delete"
+                >
+                  <ArrowUpRight className="hidden" aria-hidden />
+                  <span aria-hidden className="text-[10px]">×</span>
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setDeleteConfirming(true);
+                }}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-forge-border bg-near-black/40 text-forge-subtle transition hover:border-accent-red/50 hover:bg-accent-red/10 hover:text-accent-red"
+                title="Delete this uploaded initiative"
+                aria-label="Delete uploaded initiative"
+              >
+                <Trash2 className="h-3 w-3" aria-hidden />
+              </button>
+            )
+          ) : null}
           <InitiativeReviewActionsV6
             init={init}
             row={row}

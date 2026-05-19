@@ -139,3 +139,117 @@ function parseLine(line: string): CurateL3InitiativesStreamEvent {
 
 /** MIME type the route emits and the client requests. */
 export const CURATE_L3_STREAM_CONTENT_TYPE = "application/x-ndjson; charset=utf-8";
+
+// ===========================================================================
+//   Upload-initiatives enrichment protocol — sibling stream for the
+//   "user supplies the list; LLM only enriches" path. Same NDJSON
+//   envelope, distinct event union so the decoder branches by `kind`.
+// ===========================================================================
+
+/**
+ * One enriched initiative on the wire. Uses the same `CurateL3InitiativePayload`
+ * shape as the discovery stream so downstream rendering (`SolutionCardV2`,
+ * `selectV6`) needs zero new types. The `matchedRowId` tells the orchestrator
+ * which L3 row the initiative attaches to — either client-supplied (when
+ * the upload matched an L3 by name) or LLM-picked (when the upload's L3
+ * column was blank or unmatched).
+ */
+export type EnrichUploadInitiativePayload = CurateL3InitiativePayload;
+
+export type EnrichUploadStreamEvent =
+  | {
+      kind: "started";
+      /** Number of upload rows the server is about to enrich. */
+      totalUploads: number;
+    }
+  | {
+      kind: "row";
+      /** Client-stable id echoed back so the orchestrator can reconcile. */
+      uploadRowId: string;
+      /** L3WorkforceRowV6 id this enriched initiative attaches to. */
+      matchedRowId: string;
+      /** One-sentence justification for the chosen L3 when the LLM auto-matched. */
+      l3MatchRationale?: string;
+      /** Single enriched initiative payload (always 1 per upload row). */
+      payload: EnrichUploadInitiativePayload;
+      /** "llm" when OpenAI was reached; "fallback" when the deterministic
+       *  passthrough ran (no API key, per-row error, or timeout). The
+       *  STORED `L3Initiative.source` stays "manual" either way because
+       *  the human provided the seed — `source` here is wire-only. */
+      source: CurateL3RowSource;
+      /** Per-row warning string (truncated server-side). */
+      warning?: string;
+    }
+  | {
+      kind: "done";
+      source: CurateL3OverallSource;
+      /** Tower-level warning (e.g. "OPENAI_API_KEY not set"). */
+      warning?: string;
+    }
+  | {
+      kind: "error";
+      code:
+        | "unauthorized"
+        | "bad_request"
+        | "payload_too_large"
+        | "internal";
+      message: string;
+    };
+
+/** Encode one enrichment event as a UTF-8 byte chunk. */
+export function encodeEnrichUploadStreamEvent(
+  ev: EnrichUploadStreamEvent,
+): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(ev) + "\n");
+}
+
+/**
+ * Async iterator over the enrichment stream body. Symmetric with
+ * `decodeL3StreamEvents` — same buffering, distinct event union.
+ */
+export async function* decodeEnrichUploadStreamEvents(
+  body: ReadableStream<Uint8Array>,
+): AsyncGenerator<EnrichUploadStreamEvent, void, void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let nlIdx = buffer.indexOf("\n");
+      while (nlIdx !== -1) {
+        const line = buffer.slice(0, nlIdx).trim();
+        buffer = buffer.slice(nlIdx + 1);
+        if (line) yield parseEnrichLine(line);
+        nlIdx = buffer.indexOf("\n");
+      }
+    }
+    const tail = buffer.trim();
+    if (tail) yield parseEnrichLine(tail);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function parseEnrichLine(line: string): EnrichUploadStreamEvent {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch (e) {
+    throw new Error(
+      `Enrich-upload stream: malformed event line — ${(e as Error).message}`,
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || !("kind" in parsed)) {
+    throw new Error("Enrich-upload stream: event missing `kind` field");
+  }
+  return parsed as EnrichUploadStreamEvent;
+}
+
+/** MIME type for the enrichment stream — same NDJSON envelope. */
+export const ENRICH_UPLOAD_STREAM_CONTENT_TYPE =
+  "application/x-ndjson; charset=utf-8";

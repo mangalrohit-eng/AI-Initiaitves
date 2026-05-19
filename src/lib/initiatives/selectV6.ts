@@ -187,6 +187,14 @@ export type V6InitiativeCard = {
    * filtering and never renders an evidence pill.
    */
   intakeStatus?: IntakeStatusEntry;
+  /**
+   * Provenance of this initiative — drives the "Uploaded" badge in the
+   * gallery and the Source filter chip. `"manual"` means the user
+   * uploaded the seed via the Step 4 enrichment path; `"llm"` and
+   * `"fallback"` come from the discovery pipeline. Placeholder cards
+   * use `"llm"` as a safe default (they're not really uploaded).
+   */
+  source: "llm" | "fallback" | "manual";
 };
 
 export type V6L3Row = {
@@ -421,6 +429,7 @@ function buildCardFromInitiative(
     promptVersion: init.promptVersion,
     attributedAiUsd: 0,
     l3FteDataMissing: false,
+    source: init.source,
     ...(init.intakeStatus ? { intakeStatus: init.intakeStatus } : {}),
   };
 }
@@ -441,5 +450,6 @@ function buildPlaceholderCard(
     isPlaceholder: true,
     attributedAiUsd: 0,
     l3FteDataMissing: false,
+    source: "llm",
   };
 }

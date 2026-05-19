@@ -18,6 +18,7 @@
     "test:intake-status": "tsx scripts/intakeStatusValidatorTest.ts",
     "test:intake-flow": "tsx scripts/intakeStatusFlowTest.ts",
     "test:http-smoke": "node scripts/httpSmoke.mjs",
+    "test:upload-initiatives": "tsx scripts/uploadInitiativesE2E.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

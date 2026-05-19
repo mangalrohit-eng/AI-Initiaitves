@@ -19,6 +19,7 @@ import type {
   CurateL3InitiativePayload,
   CurateL3OverallSource,
   CurateL3RowSource,
+  EnrichUploadStreamEvent,
 } from "@/lib/assess/curateL3InitiativesStreamProtocol";
 
 /**
@@ -285,6 +286,182 @@ export async function streamCurateL3Initiatives(
     result: {
       source: finalSource,
       rows: orderedRows,
+      warning,
+    },
+  };
+}
+
+// ===========================================================================
+//   Enrich-initiatives-from-upload — streaming client wrapper
+// ===========================================================================
+
+export type EnrichUploadInputRow = {
+  uploadRowId: string;
+  solutionName: string;
+  solutionDescription: string;
+  tech?: string;
+  preMatchedL3RowId?: string;
+  l3Hint?: string;
+};
+
+export type EnrichUploadRosterEntry = {
+  rowId: string;
+  l1: string;
+  l2: string;
+  l3: string;
+  childL4Names?: string[];
+};
+
+export type StreamEnrichUploadRowEvent = {
+  uploadRowId: string;
+  matchedRowId: string;
+  l3MatchRationale?: string;
+  payload: CurateL3InitiativePayload;
+  source: CurateL3RowSource;
+  warning?: string;
+};
+
+export type StreamEnrichUploadOpts = {
+  signal?: AbortSignal;
+  onStarted?: (info: { totalUploads: number }) => void;
+  onRow?: (ev: StreamEnrichUploadRowEvent) => void;
+  towerIntakeDigest?: string;
+  intakeFields?: CurateL3IntakeFields;
+  intakeImportedAt?: string;
+};
+
+export type EnrichUploadResult = {
+  source: CurateL3OverallSource;
+  /** Rows in COMPLETION order, not input order. */
+  rows: StreamEnrichUploadRowEvent[];
+  warning?: string;
+};
+
+/**
+ * Stream the per-upload-row enrichment as it lands. Sends `Accept:
+ * application/x-ndjson` so the route emits the upload-enrichment NDJSON
+ * event protocol (`EnrichUploadStreamEvent`). Failure modes mirror the
+ * discovery stream.
+ */
+export async function streamEnrichInitiativesFromUpload(
+  towerId: TowerId,
+  uploads: EnrichUploadInputRow[],
+  l3Roster: EnrichUploadRosterEntry[],
+  opts: StreamEnrichUploadOpts = {},
+): Promise<
+  | { ok: true; result: EnrichUploadResult }
+  | { ok: false; error: string; status: number }
+> {
+  const {
+    decodeEnrichUploadStreamEvents,
+    ENRICH_UPLOAD_STREAM_CONTENT_TYPE,
+  } = await import("./curateL3InitiativesStreamProtocol");
+
+  let res: Response;
+  try {
+    res = await fetch("/api/assess/enrich-initiatives-from-upload", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: ENRICH_UPLOAD_STREAM_CONTENT_TYPE,
+      },
+      body: JSON.stringify({
+        towerId,
+        uploads,
+        l3Roster,
+        ...(opts.towerIntakeDigest
+          ? { towerIntakeDigest: opts.towerIntakeDigest }
+          : {}),
+        ...(opts.intakeFields ? { intakeFields: opts.intakeFields } : {}),
+        ...(opts.intakeImportedAt
+          ? { intakeImportedAt: opts.intakeImportedAt }
+          : {}),
+      }),
+      signal: opts.signal,
+    });
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Network error",
+      status: 0,
+    };
+  }
+
+  if (!res.body) {
+    return {
+      ok: false,
+      error: "Enrich-upload stream returned no body",
+      status: res.status,
+    };
+  }
+
+  const collected: StreamEnrichUploadRowEvent[] = [];
+  let finalSource: CurateL3OverallSource | undefined;
+  let warning: string | undefined;
+  let serverError: { code: string; message: string } | undefined;
+
+  try {
+    for await (const ev of decodeEnrichUploadStreamEvents(
+      res.body,
+    ) as AsyncGenerator<EnrichUploadStreamEvent>) {
+      if (ev.kind === "started") {
+        opts.onStarted?.({ totalUploads: ev.totalUploads });
+      } else if (ev.kind === "row") {
+        const rowEv: StreamEnrichUploadRowEvent = {
+          uploadRowId: ev.uploadRowId,
+          matchedRowId: ev.matchedRowId,
+          payload: ev.payload,
+          source: ev.source,
+          ...(ev.l3MatchRationale
+            ? { l3MatchRationale: ev.l3MatchRationale }
+            : {}),
+          ...(ev.warning ? { warning: ev.warning } : {}),
+        };
+        collected.push(rowEv);
+        opts.onRow?.(rowEv);
+      } else if (ev.kind === "done") {
+        finalSource = ev.source;
+        if (ev.warning) warning = ev.warning;
+      } else if (ev.kind === "error") {
+        serverError = { code: ev.code, message: ev.message };
+        break;
+      }
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      error:
+        e instanceof Error ? e.message : "Enrich-upload stream interrupted",
+      status: res.status,
+    };
+  }
+
+  if (serverError) {
+    const status =
+      serverError.code === "unauthorized"
+        ? 401
+        : serverError.code === "bad_request"
+          ? 400
+          : serverError.code === "payload_too_large"
+            ? 413
+            : 500;
+    return { ok: false, error: serverError.message, status };
+  }
+
+  if (!finalSource) {
+    return {
+      ok: false,
+      error: "Enrich-upload stream ended without 'done' event",
+      status: res.status,
+    };
+  }
+
+  return {
+    ok: true,
+    result: {
+      source: finalSource,
+      rows: collected,
       warning,
     },
   };

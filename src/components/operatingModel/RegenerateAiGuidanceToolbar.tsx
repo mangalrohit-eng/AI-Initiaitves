@@ -12,6 +12,7 @@ import {
 } from "@/lib/localStore";
 import { hasInFlightRows } from "@/lib/initiatives/curationHash";
 import {
+  countManualInitiativesForRows,
   runForL3Rows,
   unstickInterruptedCurationRows,
   type RunV6Summary,
@@ -106,6 +107,11 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
   const legacyCount = React.useMemo(
     () => legacyPromptVersionRowCount(v6L3Rows),
     [v6L3Rows],
+  );
+
+  const manualInitiativeCount = React.useMemo(
+    () => countManualInitiativesForRows(towerId, rowIds),
+    [towerId, rowIds],
   );
 
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -308,6 +314,16 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
               Job Famil{rowIds.length === 1 ? "y" : "ies"} where the AI dial is
               above zero. Cached AI Solutions for those rows are replaced.
             </p>
+            {manualInitiativeCount > 0 ? (
+              <p className="rounded-lg border border-accent-teal/40 bg-accent-teal/5 px-3 py-2 text-xs text-forge-body">
+                <span className="font-semibold text-accent-teal">
+                  {manualInitiativeCount} uploaded initiative
+                  {manualInitiativeCount === 1 ? "" : "s"}
+                </span>{" "}
+                on these Job Families will be preserved across the regenerate —
+                only LLM-discovered cards are replaced.
+              </p>
+            ) : null}
             <p>
               When the amber banner shows a capability map change, use{" "}
               <span className="font-semibold text-forge-ink">Refresh AI guidance</span>{" "}

@@ -18,6 +18,7 @@ import {
   BulkGenerateBriefsToolbar,
   useBulkBriefSummary,
 } from "@/components/towers/BulkGenerateBriefsToolbar";
+import { UploadInitiativesPanel } from "@/components/towers/UploadInitiativesPanel";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "workshop-tools-drawer-open-v1";
@@ -44,7 +45,7 @@ type BriefSummary = ReturnType<typeof useBulkBriefSummary>;
 function useWorkshopStepCompletion(
   towerId: TowerId,
   briefSummary: BriefSummary,
-): { step1: boolean; step2: boolean; step3: boolean } {
+): { step1: boolean; step2: boolean; step3: boolean; step4: boolean } {
   const [program, setProgram] = React.useState<AssessProgramV2 | null>(null);
   React.useEffect(() => {
     setProgram(getAssessProgram());
@@ -55,13 +56,19 @@ function useWorkshopStepCompletion(
     const intake = program?.towers[towerId]?.aiReadinessIntake;
     const step1 = intakeHasMinimumSubstance(intake);
     const l3 = program?.towers[towerId]?.l3Rows ?? [];
-    const step2 =
-      briefSummary.totalInitiatives > 0 && !hasQueuedRowsV6(l3);
+    // Step 2 (Upload list) is optional — mark complete only when the
+    // tower actually has user-uploaded initiatives. Otherwise the chip
+    // stays neutral so it doesn't pretend the lead has done something.
+    const step2 = l3.some((r) =>
+      (r.l3Initiatives ?? []).some((it) => it.source === "manual"),
+    );
     const step3 =
+      briefSummary.totalInitiatives > 0 && !hasQueuedRowsV6(l3);
+    const step4 =
       briefSummary.totalInitiatives > 0 &&
       briefSummary.missingCount === 0 &&
       briefSummary.staleCount === 0;
-    return { step1, step2, step3 };
+    return { step1, step2, step3, step4 };
   }, [program, towerId, briefSummary]);
 }
 
@@ -201,7 +208,7 @@ export function WorkshopToolsDrawer({
               ) : null}
             </div>
             <div className="text-[11px] text-forge-subtle">
-              Facilitator-only. Intake &rsaquo; Regenerate AI guidance &rsaquo; Generate briefs.
+              Facilitator-only. Intake &rsaquo; Upload list &rsaquo; Regenerate guidance &rsaquo; Generate briefs.
             </div>
           </div>
         </div>
@@ -225,7 +232,7 @@ export function WorkshopToolsDrawer({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <ol className="grid grid-cols-1 gap-3 px-4 py-4 md:grid-cols-3 md:items-stretch">
+            <ol className="grid grid-cols-1 gap-3 px-4 py-4 md:grid-cols-2 md:items-stretch xl:grid-cols-4">
               <DrawerStep
                 index={1}
                 title="Import tower AI readiness intake"
@@ -236,17 +243,25 @@ export function WorkshopToolsDrawer({
               </DrawerStep>
               <DrawerStep
                 index={2}
-                title="Regenerate AI guidance"
-                helper="Rebuilds AI Solutions for every eligible L3 Job Family. Use the amber banner above for a queued-only refresh after a capability-map edit."
+                title="Upload initiatives list"
+                helper="Optional. Bring a pre-made CSV/XLSX — the LLM only enriches each row into a card, it does not propose new solutions."
                 complete={stepCompletion.step2}
+              >
+                <UploadInitiativesPanel tower={tower} compact />
+              </DrawerStep>
+              <DrawerStep
+                index={3}
+                title="Regenerate AI guidance"
+                helper="Rebuilds AI Solutions for every eligible L3 Job Family. Uploaded entries are preserved."
+                complete={stepCompletion.step3}
               >
                 <RegenerateAiGuidanceToolbar towerId={towerId} />
               </DrawerStep>
               <DrawerStep
-                index={3}
+                index={4}
                 title="Generate AI Solution briefs"
                 helper="Fills the six-section narrative for each AI Solution. Runs sequentially, 30–90s per brief."
-                complete={stepCompletion.step3}
+                complete={stepCompletion.step4}
               >
                 <BulkGenerateBriefsToolbar towerId={towerId} compact />
               </DrawerStep>

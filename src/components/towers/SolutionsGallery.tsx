@@ -3,7 +3,6 @@
 import * as React from "react";
 import {
   ArrowDownAZ,
-  Building2,
   CheckCircle2,
   Circle,
   ClipboardList,
@@ -17,6 +16,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Target,
+  Upload,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -29,6 +29,10 @@ import type {
 } from "@/lib/initiatives/selectV6";
 import { SolutionCardV2 } from "@/components/towers/SolutionCardV2";
 import { MultiSelectFilter } from "@/components/towers/MultiSelectFilter";
+import { deleteManualInitiative } from "@/lib/assess/curationPipelineV6";
+import { useAssessSync } from "@/components/assess/AssessSyncProvider";
+import { useOptionalToast } from "@/components/feedback/ToastProvider";
+import type { TowerId } from "@/data/assess/types";
 import {
   assignQuadrants,
   QUADRANT_HINTS,
@@ -43,6 +47,12 @@ import { cn } from "@/lib/utils";
 
 type SortKey = "value-desc" | "feasibility-then-value" | "name";
 type FeasibilityFilter = "all" | "high" | "low";
+/**
+ * Source-of-truth filter for the gallery. Drives the "Uploaded only"
+ * segment — useful for tower leads who want to audit their uploaded
+ * list against discovery results.
+ */
+type SourceFilter = "all" | "manual" | "discovery";
 
 /**
  * Done / In Progress / Not Done filter — matches against
@@ -82,18 +92,22 @@ type GalleryState = {
   feasibility: FeasibilityFilter;
   applicability: ApplicabilityFilter;
   intakeStatus: IntakeStatusFilter;
+  source: SourceFilter;
   jobFamilies: string[];
-  vendors: string[];
   quadrants: Quadrant[];
   query: string;
 };
 
 /**
- * Bumped from `2` → `3` when the `intakeStatus` filter was introduced.
- * Stale localStorage payloads from v2 are dropped so users don't end up
- * with a missing key reading `undefined` and a broken segmented control.
+ * Bumped from `2` → `3` when the `intakeStatus` filter was introduced,
+ * then from `3` → `4` when the Vendor filter was removed (vendors now
+ * live only on the deep-dive brief, labeled indicative vs. Versant-
+ * selected), then `4` → `5` when the `source` filter (Uploaded vs.
+ * Discovery) was introduced. Stale localStorage payloads from older
+ * versions are dropped so a missing key never leaves the segmented
+ * controls in a broken `undefined` state.
  */
-const STATE_VERSION = 3;
+const STATE_VERSION = 5;
 
 function storageKey(towerId: string): string {
   return `solutions-gallery-state-v${STATE_VERSION}-${towerId}`;
@@ -105,31 +119,11 @@ function defaultState(): GalleryState {
     feasibility: "all",
     applicability: "all",
     intakeStatus: "all",
+    source: "all",
     jobFamilies: [],
-    vendors: [],
     quadrants: [],
     query: "",
   };
-}
-
-/**
- * Split a `primaryVendor` string into the individual named vendors.
- * The curator LLM is told to use ` + ` as the separator between
- * stack components ("BlackLine + HighRadius"); we also tolerate `,`
- * and `&` separators in case older cached entries used them.
- *
- * Returns an empty array for `undefined` / "TBD …" placeholders so
- * those don't pollute the vendor filter list.
- */
-function splitVendors(s: string | undefined): string[] {
-  if (!s) return [];
-  const cleaned = s.trim();
-  if (!cleaned) return [];
-  if (/^TBD/i.test(cleaned)) return [];
-  return cleaned
-    .split(/\s*[+,&]\s*/g)
-    .map((v) => v.trim())
-    .filter((v) => v.length > 0 && !/^TBD/i.test(v));
 }
 
 const QUADRANT_ORDER: Quadrant[] = [
@@ -198,8 +192,40 @@ const APPLICABILITY_OPTIONS: ReadonlyArray<{
  */
 export function SolutionsGallery({ tower }: { tower: Tower }) {
   const { result, reviews, actions } = useInitiativeReviewsV6(tower);
+  const sync = useAssessSync();
+  const toast = useOptionalToast();
   const [state, setState] = React.useState<GalleryState>(() => defaultState());
   const [hydrated, setHydrated] = React.useState(false);
+
+  /**
+   * Hard-delete a manual-source initiative by id. The card surfaces the
+   * affordance and the inline two-step confirm; the gallery owns the
+   * write so persistence + toast feedback live in one place. Discovery
+   * cards never reach this path — the trash button is hidden on them.
+   */
+  const handleDeleteManual = React.useCallback(
+    (initiativeId: string) => {
+      const removed = deleteManualInitiative(tower.id as TowerId, initiativeId);
+      if (!removed) {
+        toast?.error({
+          title: "Couldn't delete initiative",
+          description:
+            "Only uploaded initiatives can be deleted from the card. Use Reject for LLM-discovered solutions.",
+        });
+        return;
+      }
+      if (sync?.flushSave) {
+        void sync.flushSave();
+      }
+      toast?.success({
+        title: "Uploaded initiative deleted",
+        description:
+          "Re-run Regenerate AI guidance to repopulate this Job Family with discovery solutions.",
+        durationMs: 6000,
+      });
+    },
+    [tower.id, sync, toast],
+  );
 
   React.useEffect(() => {
     setHydrated(true);
@@ -249,14 +275,6 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [allRows]);
 
-  const allVendors = React.useMemo(() => {
-    const set = new Set<string>();
-    for (const r of allRows) {
-      for (const v of splitVendors(r.init.primaryVendor)) set.add(v);
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [allRows]);
-
   const quadrantById = React.useMemo(
     () =>
       assignQuadrants(
@@ -286,7 +304,6 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
   const filtered = React.useMemo(() => {
     const q = state.query.trim().toLowerCase();
     const jfSet = new Set(state.jobFamilies);
-    const venSet = new Set(state.vendors);
     const quadSet = new Set(state.quadrants);
     return allRows.filter((row) => {
       if (
@@ -311,12 +328,13 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
         const rowStatus = row.init.intakeStatus?.status ?? "not-done";
         if (rowStatus !== state.intakeStatus) return false;
       }
-      if (jfSet.size > 0 && !jfSet.has(row.l3Name)) return false;
-      if (venSet.size > 0) {
-        const rowVendors = splitVendors(row.init.primaryVendor);
-        if (rowVendors.length === 0) return false;
-        if (!rowVendors.some((v) => venSet.has(v))) return false;
+      if (state.source === "manual" && row.init.source !== "manual") {
+        return false;
       }
+      if (state.source === "discovery" && row.init.source === "manual") {
+        return false;
+      }
+      if (jfSet.size > 0 && !jfSet.has(row.l3Name)) return false;
       if (quadSet.size > 0) {
         const q = quadrantById.get(row.init.id);
         if (!q || !quadSet.has(q)) return false;
@@ -378,10 +396,26 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
     state.feasibility !== "all" ||
     state.applicability !== "all" ||
     state.intakeStatus !== "all" ||
+    state.source !== "all" ||
     state.jobFamilies.length > 0 ||
-    state.vendors.length > 0 ||
     state.quadrants.length > 0 ||
     state.query.trim().length > 0;
+
+  /**
+   * Counts for the Source segmented control. Computed off `allRows`
+   * (the unfiltered gallery) so the badge numbers reflect the tower-
+   * wide total — same shape as `intakeStatusCounts`.
+   */
+  const sourceCounts = React.useMemo(() => {
+    let manual = 0;
+    let discovery = 0;
+    for (const r of allRows) {
+      if (r.init.isPlaceholder) continue;
+      if (r.init.source === "manual") manual += 1;
+      else discovery += 1;
+    }
+    return { manual, discovery };
+  }, [allRows]);
 
   const clearAll = () =>
     setState((s) => ({
@@ -389,8 +423,8 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
       feasibility: "all",
       applicability: "all",
       intakeStatus: "all",
+      source: "all",
       jobFamilies: [],
-      vendors: [],
       quadrants: [],
       query: "",
     }));
@@ -403,9 +437,9 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
         totalAvailable={allRows.length}
         totalShown={totalShown}
         allJobFamilies={allJobFamilies}
-        allVendors={allVendors}
         quadrantCounts={quadrantCounts}
         intakeStatusCounts={intakeStatusCounts}
+        sourceCounts={sourceCounts}
         intakeMeta={result.intakeMeta}
         hasActiveFilters={hasActiveFilters}
         onClearAll={clearAll}
@@ -428,6 +462,7 @@ export function SolutionsGallery({ tower }: { tower: Tower }) {
               review={reviews[row.init.id]}
               actions={actions}
               towerIntake={result.intakeMeta.importedAt ?? undefined}
+              onDeleteManual={handleDeleteManual}
             />
           ))}
         </div>
@@ -446,9 +481,9 @@ function Toolbar({
   totalAvailable,
   totalShown,
   allJobFamilies,
-  allVendors,
   quadrantCounts,
   intakeStatusCounts,
+  sourceCounts,
   intakeMeta,
   hasActiveFilters,
   onClearAll,
@@ -458,9 +493,9 @@ function Toolbar({
   totalAvailable: number;
   totalShown: number;
   allJobFamilies: string[];
-  allVendors: string[];
   quadrantCounts: Record<Quadrant, number>;
   intakeStatusCounts: Record<IntakeStatusEntry["status"], number>;
+  sourceCounts: { manual: number; discovery: number };
   intakeMeta: { present: boolean; importedAt: string | null };
   hasActiveFilters: boolean;
   onClearAll: () => void;
@@ -470,6 +505,13 @@ function Toolbar({
       <div className="flex flex-wrap items-center gap-2">
         <ApplicabilityToggle state={state} setState={setState} />
         <FeasibilityToggle state={state} setState={setState} />
+        {sourceCounts.manual > 0 ? (
+          <SourceToggle
+            state={state}
+            setState={setState}
+            counts={sourceCounts}
+          />
+        ) : null}
         {intakeMeta.present ? (
           <IntakeStatusToggle
             state={state}
@@ -502,17 +544,6 @@ function Toolbar({
           }
           emptyHint="No quadrants match."
         />
-        {allVendors.length > 0 ? (
-          <MultiSelectFilter
-            label="Vendor"
-            triggerIcon={Building2}
-            options={allVendors.map((v) => ({ id: v, label: v }))}
-            selected={state.vendors}
-            onChange={(next) =>
-              setState((s) => ({ ...s, vendors: next }))
-            }
-          />
-        ) : null}
         <SortMenu state={state} setState={setState} />
         <SearchInput state={state} setState={setState} />
         <span className="ml-auto inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.16em] text-forge-hint">
@@ -724,6 +755,87 @@ function IntakeStatusMissingHint() {
       <ClipboardList className="h-3.5 w-3.5" aria-hidden />
       <span>Import intake to see Done / In Progress</span>
     </Link>
+  );
+}
+
+/**
+ * Source segmented control — All / Uploaded only / Discovery only.
+ * Surfaces only when the tower actually has at least one uploaded
+ * initiative (otherwise the toggle is noise). Pill rhythm matches
+ * `FeasibilityToggle` so the segmented controls read as a row.
+ */
+function SourceToggle({
+  state,
+  setState,
+  counts,
+}: {
+  state: GalleryState;
+  setState: React.Dispatch<React.SetStateAction<GalleryState>>;
+  counts: { manual: number; discovery: number };
+}) {
+  const options: ReadonlyArray<{
+    id: SourceFilter;
+    label: string;
+    Icon: React.ComponentType<{ className?: string }>;
+    hint: string;
+    count?: number;
+  }> = [
+    {
+      id: "all",
+      label: "All sources",
+      Icon: Layers,
+      hint: "Show every AI Solution regardless of where it came from.",
+    },
+    {
+      id: "manual",
+      label: "Uploaded",
+      Icon: Upload,
+      hint: "Only solutions seeded from an uploaded list (the LLM enriched these, the Solution Name is preserved verbatim).",
+      count: counts.manual,
+    },
+    {
+      id: "discovery",
+      label: "Discovery",
+      Icon: Sparkles,
+      hint: "Only solutions discovered by the per-L3 LLM curation pipeline.",
+      count: counts.discovery,
+    },
+  ];
+  return (
+    <div
+      role="group"
+      aria-label="Filter by initiative source"
+      className="inline-flex rounded-full border border-forge-border bg-forge-well/40 p-0.5"
+    >
+      {options.map(({ id, label, Icon, hint, count }) => {
+        const active = state.source === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setState((s) => ({ ...s, source: id }))}
+            title={hint}
+            aria-pressed={active}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition",
+              active
+                ? id === "manual"
+                  ? "bg-accent-teal/15 text-accent-teal"
+                  : "bg-accent-purple/15 text-accent-purple-light"
+                : "text-forge-body hover:bg-forge-well",
+            )}
+          >
+            <Icon className="h-3.5 w-3.5" aria-hidden />
+            <span>{label}</span>
+            {typeof count === "number" ? (
+              <span className="font-mono text-[10px] text-forge-hint">
+                {count}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

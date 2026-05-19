@@ -27,9 +27,10 @@ import { cn } from "@/lib/utils";
  *
  * Lives inside `WorkshopToolsDrawer` on the `/tower/[slug]` page and
  * fires the same `clientCurateBrief` call as the per-initiative detail
- * page — one initiative at a time, sequentially, so the per-call LLM
- * timeout stays predictable and a transient failure doesn't poison the
- * whole batch.
+ * page — fanned out across a bounded worker pool
+ * (`BULK_BRIEF_CONCURRENCY`, default 10) so per-call LLM timeouts stay
+ * predictable and a transient failure doesn't poison the whole batch.
+ * Mirrors the worker-pool pattern in `curateL3InitiativesPerRow`.
  *
  * Three actions in the same toolbar:
  *   1. PRIMARY  — "Generate {N} missing briefs"  (only initiatives
@@ -43,11 +44,37 @@ import { cn } from "@/lib/utils";
  *                  irrespective of cache state.)
  *
  * Each action surfaces a confirm dialog before kicking off the
- * sequential run, a streaming progress chip during the run, and a
- * cancel button that stops the loop after the in-flight request
- * resolves (we never tear down a fetch mid-flight to avoid leaving
- * the workshop_assess Postgres row in an inconsistent state).
+ * parallel run, a streaming progress chip during the run, and a
+ * cancel button that stops new work from being picked up after the
+ * in-flight requests resolve (we never tear down a fetch mid-flight
+ * to avoid leaving the workshop_assess Postgres row in an inconsistent
+ * state). With the default pool size, clicking Cancel can let up to 10
+ * already-dispatched briefs complete before the run stops.
  */
+/**
+ * How many `clientCurateBrief` calls run in parallel during a bulk run.
+ *
+ * Tuned for Vercel Pro (`maxDuration: 300s` actually takes effect, no
+ * 60s function-kill cliff) and an OpenAI Enterprise key (TPM/RPM is
+ * effectively unbounded for this workload). Mirrors the
+ * `MAX_CONCURRENT_L3_CALLS` precedent in `curateL3InitiativesPerRow`.
+ *
+ * Why 10 (not 4, not 50):
+ *   - Sequential ~50 min for 50 briefs; 10-wide ~5-6 min; 25-wide ~3 min;
+ *     50-wide ~1-2 min. Going from 1→10 is the big win; doubling beyond
+ *     buys minutes, not multiples.
+ *   - Failure correlation: one OpenAI blip costs ≤ N briefs to retry, so
+ *     a smaller pool contains the blast radius.
+ *   - React re-render burst: every completed brief triggers a toolbar
+ *     re-render via the `subscribe("assessProgram", ...)` listener; 50
+ *     simultaneous completions = 50 renders in a tight microtask burst.
+ *
+ * Bump toward 20-25 if you want shorter wall-clock and accept a larger
+ * failure blast radius per hiccup. Lower if rate-limit errors start
+ * appearing in the cancelled/failed toasts.
+ */
+const BULK_BRIEF_CONCURRENCY = 10;
+
 export function BulkGenerateBriefsToolbar({
   towerId,
   /**
@@ -77,13 +104,15 @@ export function BulkGenerateBriefsToolbar({
     towerId,
   ]);
 
-  // Sequential runner state.
+  // Worker-pool runner state. `completed` is finished-task count (success
+  // OR failure); `inFlight` is the live worker count. There is no single
+  // "current" task under a parallel pool.
   const [running, setRunning] = React.useState(false);
   const [progress, setProgress] = React.useState<{
     completed: number;
     total: number;
-    current?: string;
-  }>({ completed: 0, total: 0 });
+    inFlight: number;
+  }>({ completed: 0, total: 0, inFlight: 0 });
   const cancelRef = React.useRef<boolean>(false);
 
   // Confirm dialog state — one shared dialog whose copy + handler swap
@@ -109,23 +138,29 @@ export function BulkGenerateBriefsToolbar({
       }
       cancelRef.current = false;
       setRunning(true);
-      setProgress({ completed: 0, total: targets.length });
+      setProgress({ completed: 0, total: targets.length, inFlight: 0 });
 
       const digest = buildTowerReadinessDigest(
         fresh.towers[towerId]?.aiReadinessIntake,
       );
 
+      // Shared state across worker IIFEs. These are plain closure `let`s
+      // mutated from multiple workers — safe because JS continuations
+      // don't interleave between `await` boundaries, so every
+      // increment-then-`setProgress` runs as one synchronous chunk.
+      // React state is updated only via `setProgress`.
       let succeeded = 0;
       let failed = 0;
+      let completed = 0;
+      let inFlight = 0;
       const errors: string[] = [];
-      for (let i = 0; i < targets.length; i += 1) {
-        if (cancelRef.current) break;
-        const t = targets[i]!;
-        setProgress({
-          completed: i,
-          total: targets.length,
-          current: t.solutionName,
-        });
+
+      // One-task processor. Extracted so a `return` from inside the
+      // try/catch exits ONLY the current task — under a worker IIFE a
+      // bare `return` from inside `try` would kill the whole worker.
+      const processOne = async (t: Target) => {
+        inFlight += 1;
+        setProgress({ completed, total: targets.length, inFlight });
         try {
           const res = await clientCurateBrief({
             towerId,
@@ -140,15 +175,19 @@ export function BulkGenerateBriefsToolbar({
           if (!res.ok) {
             failed += 1;
             errors.push(`${t.solutionName}: ${res.error}`);
-            continue;
+            return;
           }
           // Read-modify-write off the latest snapshot so concurrent
           // mutations from the assess sync provider don't clobber.
+          // Atomic per-continuation: getAssessProgram() and
+          // setTowerAssess() run synchronously between awaits, so the
+          // sibling worker that resolved a microtask later sees this
+          // write in its own read.
           const snap = getAssessProgram().towers[towerId];
           if (!snap || !snap.l3Rows) {
             failed += 1;
             errors.push(`${t.solutionName}: tower state missing`);
-            continue;
+            return;
           }
           const stamped = feasibilityFromGeneratedProcess(
             res.result.generatedProcess,
@@ -177,12 +216,39 @@ export function BulkGenerateBriefsToolbar({
           errors.push(
             `${t.solutionName}: ${e instanceof Error ? e.message : String(e)}`,
           );
+        } finally {
+          inFlight -= 1;
+          completed += 1;
+          setProgress({ completed, total: targets.length, inFlight });
         }
+      };
+
+      // Bounded fan-out. `cursor` is the shared queue index; each worker
+      // grabs the next unclaimed target. Cancellation stops new work
+      // from being picked up — already-dispatched briefs run to
+      // completion so we never abandon a Postgres write mid-flight.
+      let cursor = 0;
+      const poolSize = Math.min(BULK_BRIEF_CONCURRENCY, targets.length);
+      const workers: Promise<void>[] = [];
+      for (let w = 0; w < poolSize; w += 1) {
+        workers.push(
+          (async () => {
+            while (!cancelRef.current) {
+              const idx = cursor;
+              cursor += 1;
+              if (idx >= targets.length) return;
+              await processOne(targets[idx]!);
+            }
+          })(),
+        );
       }
+      await Promise.all(workers);
 
       // Make sure the persistence pipeline flushes before the toast
       // claims the batch is "saved" — otherwise a flaky network on the
-      // last entry leaves the toast stale.
+      // last entry leaves the toast stale. `Promise.all` already
+      // guarantees every worker has drained, so this is a single flush
+      // at the true end of the batch.
       if (sync?.canSync) {
         try {
           await sync.flushSave();
@@ -194,7 +260,7 @@ export function BulkGenerateBriefsToolbar({
       setRunning(false);
       const cancelled = cancelRef.current;
       cancelRef.current = false;
-      setProgress({ completed: 0, total: 0 });
+      setProgress({ completed: 0, total: 0, inFlight: 0 });
 
       if (cancelled) {
         toast.info({
@@ -394,11 +460,22 @@ export function BulkGenerateBriefsToolbar({
             <span className="font-mono uppercase tracking-[0.14em] text-accent-purple-light">
               &gt; Generating
             </span>{" "}
-            brief {progress.completed + 1} of {progress.total}
-            {progress.current ? (
-              <span className="text-forge-subtle"> · {progress.current}</span>
+            <span className="font-mono text-forge-ink">
+              {progress.completed}
+            </span>{" "}
+            of{" "}
+            <span className="font-mono text-forge-ink">{progress.total}</span>{" "}
+            saved
+            {progress.inFlight > 0 ? (
+              <>
+                {" · "}
+                <span className="font-mono text-forge-ink">
+                  {progress.inFlight}
+                </span>{" "}
+                in flight
+              </>
             ) : null}
-            {". "}Cancellation will stop after the in-flight request finishes.
+            {". "}Cancellation will stop after in-flight requests finish.
           </span>
         </div>
       ) : null}
@@ -430,11 +507,19 @@ export function BulkGenerateBriefsToolbar({
         description={
           <div className="space-y-2 text-sm leading-relaxed text-forge-body">
             <p>
-              Briefs run one at a time so per-call LLM timeouts stay predictable
-              and a transient failure won&apos;t poison the whole batch. Typical
-              wall-clock is{" "}
+              Briefs run in parallel batches of{" "}
               <span className="font-mono text-accent-purple-dark">
-                30–90 seconds per brief
+                {BULK_BRIEF_CONCURRENCY}
+              </span>
+              , so per-call LLM timeouts stay predictable and a transient
+              failure won&apos;t poison the whole batch. Each individual brief
+              takes{" "}
+              <span className="font-mono text-accent-purple-dark">
+                30–90 seconds
+              </span>{" "}
+              end-to-end; a tower of ~50 finishes in roughly{" "}
+              <span className="font-mono text-accent-purple-dark">
+                5–6 minutes
               </span>
               .
             </p>
@@ -446,7 +531,9 @@ export function BulkGenerateBriefsToolbar({
                   : `Every existing brief cache will be replaced. Only run this when the prompt or schema has changed in a way the stale-only refresh can't catch.`}
             </p>
             <p className="text-xs text-forge-subtle">
-              You can cancel mid-batch — already-saved briefs persist.
+              You can cancel mid-batch — already-saved briefs persist, and up
+              to {BULK_BRIEF_CONCURRENCY} in-flight requests will finish before
+              the run stops.
             </p>
           </div>
         }

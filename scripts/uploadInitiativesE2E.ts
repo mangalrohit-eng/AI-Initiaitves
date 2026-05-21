@@ -52,6 +52,11 @@ import {
   buildInitiativeUploadTemplateCsv,
   normalizeL3ForMatch,
 } from "../src/lib/assess/parseInitiativeUploadFile";
+import { buildPendingFallbackRows } from "../src/lib/assess/enrichUploadFallbackDrain";
+import type {
+  EnrichUploadRowInput,
+  L3RosterEntry,
+} from "../src/lib/assess/enrichUploadedInitiativesLLM";
 import {
   encodeEnrichUploadStreamEvent,
   decodeEnrichUploadStreamEvents,
@@ -1222,6 +1227,174 @@ async function runDeleteSuite(): Promise<void> {
 }
 
 // ===========================================================================
+//   8. ROUTE-LEVEL FALLBACK DRAIN — covers the "47 of 49" prod symptom
+//      where the bounded-concurrency worker pool either threw mid-batch
+//      or returned silently on an aborted signal, leaving some rows
+//      unemitted. The fix is a by-uploadRowId set-difference drain that
+//      runs unconditionally after the LLM step.
+// ===========================================================================
+
+async function runRouteFallbackDrainSuite(): Promise<void> {
+  console.log("\n8. Route-level fallback drain (buildPendingFallbackRows)");
+
+  const roster: L3RosterEntry[] = [
+    {
+      rowId: "finance::corp-finance::close-and-consolidation",
+      l1: "Finance",
+      l2: "Corporate Finance",
+      l3: "Close and Consolidation",
+      childL4Names: [],
+    },
+    {
+      rowId: "finance::treasury::cash-and-covenant",
+      l1: "Finance",
+      l2: "Treasury",
+      l3: "Cash and Covenant Management",
+      childL4Names: [],
+    },
+  ];
+  const makeUploads = (n: number): EnrichUploadRowInput[] =>
+    Array.from({ length: n }, (_, i) => ({
+      uploadRowId: `upload-${i}`,
+      solutionName: `Solution ${i}`,
+      solutionDescription: `Description ${i}`,
+      tech: "",
+      preMatchedL3RowId: roster[0]!.rowId,
+    }));
+
+  await check(
+    "emits a fallback row for every input when emittedRowIds is empty",
+    () => {
+      const uploads = makeUploads(49);
+      const out = buildPendingFallbackRows(
+        "finance",
+        uploads,
+        roster,
+        new Set<string>(),
+      );
+      assert.equal(out.length, 49);
+      for (let i = 0; i < 49; i += 1) {
+        assert.equal(out[i]!.uploadRowId, `upload-${i}`);
+        assert.equal(out[i]!.source, "fallback");
+      }
+    },
+  );
+
+  await check("emits zero rows when every uploadRowId is already emitted", () => {
+    const uploads = makeUploads(49);
+    const emitted = new Set(uploads.map((u) => u.uploadRowId));
+    const out = buildPendingFallbackRows("finance", uploads, roster, emitted);
+    assert.equal(out.length, 0);
+  });
+
+  await check(
+    "reproduces the prod 47-of-49 bug: drains the actual non-positional gaps",
+    () => {
+      // The bounded-concurrency worker pool can complete uploads
+      // out-of-order. Simulate the actual buggy state the user saw:
+      // 47 of the 49 rows emitted, but the gap is in the MIDDLE of the
+      // input array (positions 12 and 35), not at the end. The OLD
+      // positional `uploads.slice(emittedCount)` would have re-emitted
+      // positions 47 and 48 and silently dropped 12 and 35. The new
+      // set-difference drain must emit fallback for exactly 12 and 35.
+      const uploads = makeUploads(49);
+      const emitted = new Set<string>();
+      for (let i = 0; i < 49; i += 1) {
+        if (i === 12 || i === 35) continue;
+        emitted.add(`upload-${i}`);
+      }
+      assert.equal(emitted.size, 47);
+
+      const out = buildPendingFallbackRows("finance", uploads, roster, emitted);
+      assert.equal(
+        out.length,
+        2,
+        "drain emits exactly the 2 gaps, not the last 2 positional uploads",
+      );
+      const ids = out.map((r) => r.uploadRowId).sort();
+      assert.deepEqual(
+        ids,
+        ["upload-12", "upload-35"],
+        "drained ids are the actual unemitted ones",
+      );
+    },
+  );
+
+  await check(
+    "drain attaches every row to roster[0] when no preMatchedL3RowId is set",
+    () => {
+      const uploads = makeUploads(3).map((u) => ({
+        ...u,
+        preMatchedL3RowId: undefined,
+      }));
+      const out = buildPendingFallbackRows(
+        "finance",
+        uploads,
+        roster,
+        new Set<string>(),
+      );
+      assert.equal(out.length, 3);
+      for (const r of out) {
+        assert.equal(
+          r.matchedRowId,
+          roster[0]!.rowId,
+          "no preMatch → roster[0] per fallback contract",
+        );
+      }
+    },
+  );
+
+  await check(
+    "drain honors valid preMatchedL3RowId on each upload",
+    () => {
+      const uploads: EnrichUploadRowInput[] = [
+        {
+          uploadRowId: "u1",
+          solutionName: "S1",
+          solutionDescription: "D1",
+          tech: "",
+          preMatchedL3RowId: "finance::treasury::cash-and-covenant",
+        },
+        {
+          uploadRowId: "u2",
+          solutionName: "S2",
+          solutionDescription: "D2",
+          tech: "",
+          preMatchedL3RowId: "not-in-roster",
+        },
+      ];
+      const out = buildPendingFallbackRows(
+        "finance",
+        uploads,
+        roster,
+        new Set<string>(),
+      );
+      assert.equal(out.length, 2);
+      assert.equal(
+        out[0]!.matchedRowId,
+        "finance::treasury::cash-and-covenant",
+        "valid preMatch → use it",
+      );
+      assert.equal(
+        out[1]!.matchedRowId,
+        roster[0]!.rowId,
+        "invalid preMatch → roster[0]",
+      );
+    },
+  );
+
+  await check("empty roster yields an empty drain (defensive guard)", () => {
+    const out = buildPendingFallbackRows(
+      "finance",
+      makeUploads(3),
+      [],
+      new Set<string>(),
+    );
+    assert.equal(out.length, 0);
+  });
+}
+
+// ===========================================================================
 //   Run everything
 // ===========================================================================
 
@@ -1235,6 +1408,7 @@ async function main(): Promise<void> {
   await runOrchestratorSuite();
   await runRegenGuardrailSuite();
   await runDeleteSuite();
+  await runRouteFallbackDrainSuite();
 
   console.log();
   if (failures > 0) {

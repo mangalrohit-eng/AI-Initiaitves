@@ -59,6 +59,7 @@ import {
   type CurateL3OverallSource,
   type EnrichUploadStreamEvent,
 } from "@/lib/assess/curateL3InitiativesStreamProtocol";
+import { buildPendingFallbackRows } from "@/lib/assess/enrichUploadFallbackDrain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -371,6 +372,24 @@ function runStreamingEnrichment(
 
       send({ kind: "started", totalUploads: uploads.length });
 
+      // Belt-and-suspenders accounting: every row event emitted to the
+      // client is also tracked by `uploadRowId`. After the LLM step
+      // returns — whether it resolved, threw, or exited silently because
+      // the request signal aborted mid-batch — we drain any input rows
+      // whose id never made it onto the wire, emitting deterministic
+      // fallback rows for them. This is the single safety net that
+      // prevents server-side silent drops (was: a positional
+      // `uploads.slice(emittedCount)` in the catch block that re-emitted
+      // the LAST N inputs regardless of which ones actually emitted —
+      // wrong with bounded-concurrency out-of-order completion).
+      const emittedRowIds = new Set<string>();
+      const sendRowEvent = (
+        ev: EnrichUploadStreamEvent & { kind: "row" },
+      ): void => {
+        send(ev);
+        emittedRowIds.add(ev.uploadRowId);
+      };
+
       let llmRowCount = 0;
       let fallbackRowCount = 0;
       let towerWarning: string | undefined;
@@ -384,7 +403,7 @@ function runStreamingEnrichment(
           if (req.signal.aborted) break;
           const row = buildFallbackRow(towerId, input, roster);
           fallbackRowCount += 1;
-          send({
+          sendRowEvent({
             kind: "row",
             uploadRowId: row.uploadRowId,
             matchedRowId: row.matchedRowId,
@@ -405,7 +424,7 @@ function runStreamingEnrichment(
               if (!input) return;
               if (outcome.ok) {
                 llmRowCount += 1;
-                send({
+                sendRowEvent({
                   kind: "row",
                   uploadRowId: outcome.uploadRowId,
                   matchedRowId: outcome.matchedRowId,
@@ -423,7 +442,7 @@ function runStreamingEnrichment(
               }
               fallbackRowCount += 1;
               const fb = buildFallbackRow(towerId, input, roster);
-              send({
+              sendRowEvent({
                 kind: "row",
                 uploadRowId: fb.uploadRowId,
                 matchedRowId: fb.matchedRowId,
@@ -441,21 +460,48 @@ function runStreamingEnrichment(
             "Enrichment orchestration failed mid-batch; user-supplied text passed through for remaining rows. " +
             message +
             ` [env=${describeRuntimeEnv()}]`;
-          const emittedCount = llmRowCount + fallbackRowCount;
-          if (emittedCount < uploads.length) {
-            for (const input of uploads.slice(emittedCount)) {
-              if (req.signal.aborted) break;
-              const fb = buildFallbackRow(towerId, input, roster);
-              fallbackRowCount += 1;
-              send({
-                kind: "row",
-                uploadRowId: fb.uploadRowId,
-                matchedRowId: fb.matchedRowId,
-                payload: fb.payload,
-                source: "fallback",
-              });
-            }
-          }
+          // No positional slice here — the post-await drain below uses
+          // the by-uploadRowId set difference, which is correct for
+          // bounded-concurrency out-of-order completion.
+        }
+      }
+
+      // Drain any uploads whose row event never went out. Covers:
+      //   - LLM function threw mid-batch (catch above set towerWarning,
+      //     but already-pending workers may have left rows unemitted in
+      //     non-positional gaps).
+      //   - LLM function returned cleanly after `signal.aborted` flipped
+      //     to true mid-loop and workers exited silently without
+      //     claiming the remaining indices (the silent-drop path that
+      //     the previous catch-only handler couldn't see).
+      //   - Any future per-row exception path in `onRowComplete` that
+      //     might short-circuit before the row event ships.
+      if (!req.signal.aborted) {
+        const pending = buildPendingFallbackRows(
+          towerId,
+          uploads,
+          roster,
+          emittedRowIds,
+        );
+        for (const fb of pending) {
+          if (req.signal.aborted) break;
+          fallbackRowCount += 1;
+          sendRowEvent({
+            kind: "row",
+            uploadRowId: fb.uploadRowId,
+            matchedRowId: fb.matchedRowId,
+            payload: fb.payload,
+            source: "fallback",
+            warning:
+              "LLM enrichment did not emit this row; user-supplied text passed through verbatim.",
+          });
+        }
+        if (pending.length > 0 && !towerWarning) {
+          // Record the silent-drop drain in the done event so the client
+          // (and any future log-scraper) sees "we patched N missing rows".
+          towerWarning =
+            `LLM enrichment exited without emitting ${pending.length} row(s); ` +
+            "user-supplied text passed through verbatim for the missing rows.";
         }
       }
 
@@ -526,6 +572,7 @@ function buildFallbackRow(
     source: "fallback",
   };
 }
+
 
 function computeOverallSource(
   llmCount: number,

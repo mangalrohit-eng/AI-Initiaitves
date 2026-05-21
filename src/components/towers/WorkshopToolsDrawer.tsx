@@ -19,6 +19,10 @@ import {
   useBulkBriefSummary,
 } from "@/components/towers/BulkGenerateBriefsToolbar";
 import { UploadInitiativesPanel } from "@/components/towers/UploadInitiativesPanel";
+import {
+  deriveTowerInitiativeMode,
+  type TowerInitiativeMode,
+} from "@/lib/initiatives/towerMode";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "workshop-tools-drawer-open-v1";
@@ -45,7 +49,19 @@ type BriefSummary = ReturnType<typeof useBulkBriefSummary>;
 function useWorkshopStepCompletion(
   towerId: TowerId,
   briefSummary: BriefSummary,
-): { step1: boolean; step2: boolean; step3: boolean; step4: boolean } {
+): {
+  step1: boolean;
+  step2: boolean;
+  step3: boolean;
+  step4: boolean;
+  /**
+   * Source-exclusivity mode for the tower's initiative slate.
+   * Drives the symmetric hard-grey gating on the Upload panel
+   * (disabled when `"llm-discovered"`) and the Regenerate toolbar
+   * (disabled when `"user-uploaded"`).
+   */
+  initiativeMode: TowerInitiativeMode;
+} {
   const [program, setProgram] = React.useState<AssessProgramV2 | null>(null);
   React.useEffect(() => {
     setProgram(getAssessProgram());
@@ -56,19 +72,19 @@ function useWorkshopStepCompletion(
     const intake = program?.towers[towerId]?.aiReadinessIntake;
     const step1 = intakeHasMinimumSubstance(intake);
     const l3 = program?.towers[towerId]?.l3Rows ?? [];
+    const allInitiatives = l3.flatMap((r) => r.l3Initiatives ?? []);
+    const initiativeMode = deriveTowerInitiativeMode(allInitiatives);
     // Step 2 (Upload list) is optional — mark complete only when the
     // tower actually has user-uploaded initiatives. Otherwise the chip
     // stays neutral so it doesn't pretend the lead has done something.
-    const step2 = l3.some((r) =>
-      (r.l3Initiatives ?? []).some((it) => it.source === "manual"),
-    );
+    const step2 = initiativeMode === "user-uploaded";
     const step3 =
       briefSummary.totalInitiatives > 0 && !hasQueuedRowsV6(l3);
     const step4 =
       briefSummary.totalInitiatives > 0 &&
       briefSummary.missingCount === 0 &&
       briefSummary.staleCount === 0;
-    return { step1, step2, step3, step4 };
+    return { step1, step2, step3, step4, initiativeMode };
   }, [program, towerId, briefSummary]);
 }
 
@@ -244,18 +260,25 @@ export function WorkshopToolsDrawer({
               <DrawerStep
                 index={2}
                 title="Upload initiatives list"
-                helper="Optional. Bring a pre-made CSV/XLSX — the LLM only enriches each row into a card, it does not propose new solutions."
+                helper="Optional. Bring a pre-made CSV/XLSX — new rows are added to your manual slate. Disabled while LLM-discovered cards are live; clear them first to switch modes."
                 complete={stepCompletion.step2}
               >
-                <UploadInitiativesPanel tower={tower} compact />
+                <UploadInitiativesPanel
+                  tower={tower}
+                  compact
+                  initiativeMode={stepCompletion.initiativeMode}
+                />
               </DrawerStep>
               <DrawerStep
                 index={3}
                 title="Regenerate AI guidance"
-                helper="Rebuilds AI Solutions for every eligible L3 Job Family. Uploaded entries are preserved."
+                helper="Rebuilds AI Solutions for every eligible L3 Job Family. Disabled while user-uploaded cards are live; clear them first to switch modes."
                 complete={stepCompletion.step3}
               >
-                <RegenerateAiGuidanceToolbar towerId={towerId} />
+                <RegenerateAiGuidanceToolbar
+                  towerId={towerId}
+                  initiativeMode={stepCompletion.initiativeMode}
+                />
               </DrawerStep>
               <DrawerStep
                 index={4}

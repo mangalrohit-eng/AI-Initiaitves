@@ -487,7 +487,38 @@ export type L3Initiative = {
    * decision) — both axes coexist on every card.
    */
   intakeStatus?: IntakeStatusEntry;
+  /**
+   * Raw `(solutionName | solutionDescription | tech)` fingerprint —
+   * lowercased + trimmed — for incremental-upload dedupe. Set on every
+   * `source: "manual"` card stamped after the incremental-upload
+   * migration. Pre-migration manual cards lack this field; the upload
+   * orchestrator falls back to a name-only equality check for those,
+   * so re-uploading the same xlsx still skips legacy entries cleanly.
+   *
+   * Lets the user upload only the rows that didn't make it (e.g., 2 of
+   * 49) without producing duplicates for the 47 that already landed.
+   */
+  uploadFingerprint?: string;
 };
+
+/**
+ * Build the incremental-upload dedupe key from the raw upload cells.
+ * Pure: lowercased + trimmed join of name + description + tech. Two
+ * uploaded rows produce the same fingerprint iff every cell matches
+ * after normalization — any edit to name, description, or tech makes
+ * the row distinct (new card) on re-upload.
+ */
+export function computeUploadFingerprint(
+  solutionName: string,
+  solutionDescription: string,
+  tech: string,
+): string {
+  return [
+    solutionName.trim().toLowerCase(),
+    solutionDescription.trim().toLowerCase(),
+    tech.trim().toLowerCase(),
+  ].join("|");
+}
 
 /**
  * Intake fields permitted to back a positive (`done` / `in-progress`)

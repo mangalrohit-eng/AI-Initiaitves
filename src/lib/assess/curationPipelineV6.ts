@@ -28,8 +28,10 @@ import type {
   CurationStage,
   L3Initiative,
   L3WorkforceRowV6,
+  TowerAssessState,
   TowerId,
 } from "@/data/assess/types";
+import { computeUploadFingerprint } from "@/data/assess/types";
 import { getAssessProgram, setTowerAssess } from "@/lib/localStore";
 import { buildTowerReadinessDigest } from "@/lib/assess/towerReadinessIntake";
 import {
@@ -433,28 +435,86 @@ export function countAllManualInitiatives(towerId: TowerId): number {
 }
 
 /**
+ * Internal — shared body for `clearManualInitiativesForTower` and
+ * `clearLLMInitiativesForTower`. Removes every initiative whose
+ * `source` matches one of the given provenances and also drops any
+ * `initiativeReviews` entries pointed at the removed initiatives. The
+ * review cleanup is essential — a stale `rejected` review keyed to a
+ * removed initiative's id will silently hide a future re-stamp of the
+ * same id (the Finance-tower 49→44 bug).
+ */
+function clearInitiativesBySource(
+  towerId: TowerId,
+  sourcesToRemove: ReadonlyArray<L3Initiative["source"]>,
+): number {
+  const t = getAssessProgram().towers[towerId];
+  if (!t || !t.l3Rows) return 0;
+  const removeSet = new Set(sourcesToRemove);
+  const removedIds = new Set<string>();
+  const nextL3 = t.l3Rows.map((r) => {
+    const existing = r.l3Initiatives ?? [];
+    const kept = existing.filter((it) => {
+      if (removeSet.has(it.source)) {
+        removedIds.add(it.id);
+        return false;
+      }
+      return true;
+    });
+    if (kept.length === existing.length) return r;
+    return { ...r, l3Initiatives: kept } as L3WorkforceRowV6;
+  });
+  if (removedIds.size === 0) return 0;
+
+  const patch: Partial<TowerAssessState> = { l3Rows: nextL3 };
+
+  if (t.initiativeReviews && Object.keys(t.initiativeReviews).length > 0) {
+    const surviving: Record<string, NonNullable<TowerAssessState["initiativeReviews"]>[string]> = {};
+    let cleared = 0;
+    for (const [id, review] of Object.entries(t.initiativeReviews)) {
+      if (removedIds.has(id)) {
+        cleared += 1;
+        continue;
+      }
+      surviving[id] = review;
+    }
+    if (cleared > 0) {
+      patch.initiativeReviews =
+        Object.keys(surviving).length > 0 ? surviving : undefined;
+    }
+  }
+
+  setTowerAssess(towerId, patch);
+  return removedIds.size;
+}
+
+/**
  * Hard-delete every `source: "manual"` initiative on the tower. The
- * symmetric inverse of `runEnrichmentFromUpload` — undoes a bad upload
- * so discovery can re-run cleanly without the manual entries clinging
- * to L3 rows. LLM-discovered (`"llm"`) and deterministic-fallback
- * (`"fallback"`) initiatives are left untouched.
+ * symmetric inverse of `runEnrichmentFromUpload` — clears the user-
+ * uploaded slate so the tower can switch into LLM-discovered mode.
+ * Also clears `initiativeReviews` entries pointed at the removed
+ * initiatives so a stale rejection can't silently hide a future
+ * re-upload (the Finance-tower 49→44 bug).
  *
  * Returns the number of initiatives removed.
  */
 export function clearManualInitiativesForTower(towerId: TowerId): number {
-  const t = getAssessProgram().towers[towerId];
-  if (!t || !t.l3Rows) return 0;
-  let removed = 0;
-  const nextL3 = t.l3Rows.map((r) => {
-    const existing = r.l3Initiatives ?? [];
-    const kept = existing.filter((it) => it.source !== "manual");
-    if (kept.length === existing.length) return r;
-    removed += existing.length - kept.length;
-    return { ...r, l3Initiatives: kept } as L3WorkforceRowV6;
-  });
-  if (removed === 0) return 0;
-  setTowerAssess(towerId, { l3Rows: nextL3 });
-  return removed;
+  return clearInitiativesBySource(towerId, ["manual"]);
+}
+
+/**
+ * Hard-delete every LLM-discovered + deterministic-fallback initiative
+ * on the tower. The symmetric inverse of "Regenerate AI guidance" —
+ * clears the LLM slate so the tower can switch into user-uploaded mode
+ * without two provenances coexisting on the same L3 row. Also clears
+ * `initiativeReviews` entries pointed at the removed initiatives.
+ *
+ * Manual (uploaded) cards are left untouched — they have their own
+ * `clearManualInitiativesForTower` symmetric helper.
+ *
+ * Returns the number of initiatives removed.
+ */
+export function clearLLMInitiativesForTower(towerId: TowerId): number {
+  return clearInitiativesBySource(towerId, ["llm", "fallback"]);
 }
 
 /**
@@ -517,27 +577,19 @@ export type RunEnrichmentSummary = {
   totalUploads: number;
   enriched: number;
   failed: number;
+  /**
+   * Rows skipped because their `(solutionName, solutionDescription,
+   * tech)` fingerprint already lives on the tower (existing manual
+   * card) OR appears earlier in the same upload file. The toast
+   * surfaces this as `Added X new, skipped Y already on tower` so a
+   * re-upload of the same xlsx is a no-op rather than a duplicate
+   * stamp. Pre-migration manual cards (no `uploadFingerprint` field)
+   * are matched on `solutionName` only — covers the legacy case
+   * cleanly without re-stamping.
+   */
+  skippedDuplicates: number;
   /** Number of rows whose L3 was LLM-picked (no client-side match). */
   llmMatchedL3Count: number;
-  /**
-   * How many pre-existing initiative cards were wiped on this tower at
-   * the start of the run. Includes LLM-discovered, fallback, and prior
-   * manual entries — the upload is the new source of truth.
-   */
-  wipedCount: number;
-  /**
-   * Subset of `wipedCount` whose cached brief (`generatedProcess`) was
-   * carried forward onto a new card with the same `solutionName`. Lets
-   * the toast surface "M briefs preserved" so the user knows they won't
-   * pay the 30-90s brief regen cost.
-   */
-  briefsPreservedCount: number;
-  /**
-   * `true` when the tower was wiped at the start of the run but every
-   * enrichment chunk failed, leaving the tower empty. UI surfaces a
-   * recovery hint ("re-upload or run Regenerate AI guidance").
-   */
-  wipedButFailed: boolean;
   source?: CurateL3OverallSource;
   warning?: string;
 };
@@ -546,23 +598,29 @@ const MAX_UPLOADS_PER_REQUEST = 50;
 
 /**
  * Drive the per-upload enrichment LLM stream across a parsed list of
- * uploaded initiatives. The upload is the new source of truth — the
- * orchestrator wipes every existing initiative card on the tower
- * (LLM-discovered, fallback, and prior manual entries) before stamping
- * the parsed rows as the only remaining cards.
+ * uploaded initiatives. INCREMENTAL — the upload is additive to the
+ * tower's existing manual slate, not a replacement. Source-exclusive
+ * by construction: this path only runs when the tower is in
+ * `"empty"` or `"user-uploaded"` mode (the UI gates the entry point
+ * via `deriveTowerInitiativeMode`); LLM-discovered cards never live
+ * alongside manual ones.
  *
  *   1. Loads the tower's L3 roster and pre-matches each parsed row's
  *      L3 column (exact / case-insensitive / normalized) against it.
- *   2. Snapshots every existing card's id + `generatedProcess` keyed
- *      by lowercased `solutionName` so a same-name re-upload can carry
- *      forward the cached brief (avoids the 30-90s regen cost).
- *   3. Wipes `l3Initiatives = []` on every L3 row in a single atomic
- *      `setTowerAssess` patch.
- *   4. Chunks the uploads into batches of `MAX_UPLOADS_PER_REQUEST` (50)
- *      to respect the route's per-call cap.
+ *   2. Builds the set of `(solutionName, solutionDescription, tech)`
+ *      fingerprints from existing manual cards on the tower (incl.
+ *      legacy name-only fallback for pre-migration cards).
+ *   3. Pre-dedupes the parsed rows against the existing-fingerprint
+ *      set and against itself (in-file dupes). Skipped rows are
+ *      counted in `summary.skippedDuplicates` and never reach the
+ *      LLM.
+ *   4. Chunks the unique rows into batches of `MAX_UPLOADS_PER_REQUEST`
+ *      (50) to respect the route's per-call cap.
  *   5. For each batch, streams the enrichment NDJSON. Each `row` event
  *      atomically appends to the matched L3 row's `l3Initiatives` with
- *      `source: "manual"`. Within-file duplicates auto-suffix `(N)`.
+ *      `source: "manual"` and stamps `uploadFingerprint`. Same-name
+ *      genuinely-distinct rows get a `(N)` display suffix; tower-wide
+ *      id collisions get a numeric suffix.
  *   6. Calls `flushSave()` once at end-of-run so Postgres drains in
  *      one shot (mirrors `BulkGenerateBriefsToolbar`).
  *
@@ -577,10 +635,8 @@ export async function runEnrichmentFromUpload(
     totalUploads: opts.parsedRows.length,
     enriched: 0,
     failed: 0,
+    skippedDuplicates: 0,
     llmMatchedL3Count: 0,
-    wipedCount: 0,
-    briefsPreservedCount: 0,
-    wipedButFailed: false,
   };
 
   if (opts.parsedRows.length === 0) return summary;
@@ -616,14 +672,93 @@ export async function runEnrichmentFromUpload(
     if (norm) rosterByNormalizedL3.set(norm, r.rowId);
   }
 
-  // Build the API inputs: stable client-side `uploadRowId`s, pre-match
-  // when the user typed an exact L3 we recognize.
-  const apiInputs: EnrichUploadInputRow[] = opts.parsedRows.map((row, i) => {
+  // -------------------------------------------------------------------
+  // INCREMENTAL DEDUPE — gather existing manual fingerprints first.
+  // -------------------------------------------------------------------
+  //
+  // Manual cards stamped under this migration carry `uploadFingerprint`
+  // (lowercased `name|description|tech`). Pre-migration manual cards
+  // don't — we fall back to a name-only key for those so a re-upload of
+  // the same xlsx still skips legacy entries cleanly without re-stamping.
+  const existingFingerprints = new Set<string>();
+  const existingNameOnly = new Set<string>();
+  for (const r of towerState.l3Rows) {
+    for (const it of r.l3Initiatives ?? []) {
+      if (it.source !== "manual") continue;
+      if (it.uploadFingerprint) {
+        existingFingerprints.add(it.uploadFingerprint);
+      } else {
+        existingNameOnly.add(it.solutionName.trim().toLowerCase());
+      }
+    }
+  }
+
+  // Pre-dedupe parsed rows. Skipped rows never reach the LLM.
+  type Kept = { row: ParsedInitiativeUploadRow; fingerprint: string };
+  const uniqueRows: Kept[] = [];
+  const seenInFile = new Set<string>();
+  for (const row of opts.parsedRows) {
+    const fp = computeUploadFingerprint(
+      row.solutionName,
+      row.solutionDescription,
+      row.tech,
+    );
+    if (existingFingerprints.has(fp)) {
+      summary.skippedDuplicates += 1;
+      continue;
+    }
+    if (
+      !existingFingerprints.size &&
+      existingNameOnly.has(row.solutionName.trim().toLowerCase())
+    ) {
+      // Legacy fallback: tower has only pre-migration manual cards
+      // (none with `uploadFingerprint`) — match on name alone.
+      summary.skippedDuplicates += 1;
+      continue;
+    }
+    if (
+      existingNameOnly.has(row.solutionName.trim().toLowerCase()) &&
+      !existingFingerprints.has(fp)
+    ) {
+      // Mixed-vintage case: at least one fingerprinted card exists
+      // (so the tower is mid-migration), but a legacy name-only
+      // collision still indicates the user already added this
+      // solution. Skip to keep idempotency promises.
+      summary.skippedDuplicates += 1;
+      continue;
+    }
+    if (seenInFile.has(fp)) {
+      summary.skippedDuplicates += 1;
+      continue;
+    }
+    seenInFile.add(fp);
+    uniqueRows.push({ row, fingerprint: fp });
+  }
+
+  if (uniqueRows.length === 0) {
+    uploadEnrichLog("dedupe:no-new-rows", {
+      totalUploads: opts.parsedRows.length,
+      skippedDuplicates: summary.skippedDuplicates,
+    });
+    onProgress?.({
+      total: summary.totalUploads,
+      enriched: 0,
+      failed: 0,
+    });
+    return summary;
+  }
+
+  // Build the API inputs from the deduped slate. Stable client-side
+  // `uploadRowId`s let `stampOne` look up the matching fingerprint.
+  const fingerprintByUploadRowId = new Map<string, string>();
+  const apiInputs: EnrichUploadInputRow[] = uniqueRows.map(({ row, fingerprint }, i) => {
+    const uploadRowId = `upload-${row.index}-${i}`;
+    fingerprintByUploadRowId.set(uploadRowId, fingerprint);
     const normalized = normalizeL3ForMatch(row.l3Raw);
     const preMatched = normalized ? rosterByNormalizedL3.get(normalized) : undefined;
     if (!preMatched) summary.llmMatchedL3Count += 1;
     return {
-      uploadRowId: `upload-${row.index}-${i}`,
+      uploadRowId,
       solutionName: row.solutionName,
       solutionDescription: row.solutionDescription,
       tech: row.tech,
@@ -645,88 +780,26 @@ export async function runEnrichmentFromUpload(
     : undefined;
   const intakeImportedAt = intake?.importedAt;
 
-  // -------------------------------------------------------------------
-  // WIPE — the upload is the new source of truth for this tower.
-  // -------------------------------------------------------------------
-  //
-  // Snapshot existing cards keyed by lowercased solutionName so a same-
-  // name re-upload can carry forward the cached `generatedProcess`
-  // (avoids the 30-90s brief regen cost). We keep only the id and the
-  // cached brief — provenance, tagline, rationale, etc. all come from
-  // the new enrichment payload.
-  type BriefSnapshot = {
-    id: string;
-    generatedProcess?: L3Initiative["generatedProcess"];
-  };
-  const briefCacheByName = new Map<string, BriefSnapshot>();
-  const wipedInitiativeIds = new Set<string>();
-  let wipedCount = 0;
-  for (const r of towerState.l3Rows) {
-    for (const it of r.l3Initiatives ?? []) {
-      wipedCount += 1;
-      wipedInitiativeIds.add(it.id);
-      const key = it.solutionName.trim().toLowerCase();
-      if (!key) continue;
-      // Prefer the entry that already has a cached brief; if multiple
-      // duplicates exist (shouldn't, but be defensive), the first one
-      // with a cache wins.
-      const prior = briefCacheByName.get(key);
-      if (!prior || (it.generatedProcess && !prior.generatedProcess)) {
-        briefCacheByName.set(key, {
-          id: it.id,
-          ...(it.generatedProcess ? { generatedProcess: it.generatedProcess } : {}),
-        });
-      }
-    }
-  }
-  summary.wipedCount = wipedCount;
-  // Drop any approve/reject reviews that pointed at wiped initiatives.
-  // The brief-cache reattach can give a fresh uploaded card the same `id`
-  // as a wiped LLM card on a name match — if a stale "rejected" review
-  // survives the wipe, `useInitiativeReviewsV6` silently hides the new
-  // card and the gallery shows N-rejected uploads (the symptom we saw on
-  // the Finance tower: 49 ingested, 44 visible after 5 prior rejections).
-  // Uploads are the new source of truth; reviews on wiped cards are stale
-  // by definition.
-  let staleReviewsCleared = 0;
-  let nextReviews: typeof towerState.initiativeReviews | undefined =
-    towerState.initiativeReviews;
-  if (
-    towerState.initiativeReviews &&
-    Object.keys(towerState.initiativeReviews).length > 0 &&
-    wipedInitiativeIds.size > 0
-  ) {
-    const surviving: Record<string, NonNullable<typeof towerState.initiativeReviews>[string]> = {};
-    for (const [id, review] of Object.entries(towerState.initiativeReviews)) {
-      if (wipedInitiativeIds.has(id)) {
-        staleReviewsCleared += 1;
-        continue;
-      }
-      surviving[id] = review;
-    }
-    nextReviews = Object.keys(surviving).length > 0 ? surviving : undefined;
-  }
-  if (wipedCount > 0) {
-    setTowerAssess(opts.towerId, {
-      l3Rows: towerState.l3Rows.map(
-        (r) =>
-          ({ ...r, l3Initiatives: [] }) as L3WorkforceRowV6,
-      ),
-      ...(staleReviewsCleared > 0 ? { initiativeReviews: nextReviews } : {}),
-    });
-  }
-  uploadEnrichLog("start", {
+  uploadEnrichLog("start-incremental", {
     totalUploads: opts.parsedRows.length,
+    afterDedupe: uniqueRows.length,
+    skippedDuplicates: summary.skippedDuplicates,
     rosterSize: roster.length,
-    wipedCount,
-    briefCacheSize: briefCacheByName.size,
-    staleReviewsCleared,
+    existingManualFingerprints: existingFingerprints.size,
+    existingManualLegacyNames: existingNameOnly.size,
     llmMatchedL3Count: summary.llmMatchedL3Count,
   });
 
-  // Atomic per-row stamper. Within-file duplicates get a `(N)` suffix.
-  // Cached briefs are re-attached by exact-name match against the
-  // pre-wipe snapshot.
+  // Atomic per-row stamper.
+  //   - Same-name suffix `(N)` for display disambiguation when two
+  //     deduped rows share a solutionName but differ on description/tech.
+  //   - Tower-wide id-collision suffix protects against truncated-slug
+  //     collisions (slugifySolutionName is hard-capped at 48 chars; two
+  //     distinct long names that share the first 48 chars after
+  //     slugification would otherwise produce the same React key, and
+  //     React silently renders only one).
+  //   - Stamps `uploadFingerprint` on every new card so a future
+  //     re-upload of the same row is idempotent (skipped here).
   const stampOne = (ev: StreamEnrichUploadRowEvent): void => {
     const fresh = getAssessProgram().towers[opts.towerId];
     if (!fresh || !fresh.l3Rows) {
@@ -752,8 +825,9 @@ export async function runEnrichmentFromUpload(
     }
     const existing = targetRow.l3Initiatives ?? [];
 
-    // Within-file dedupe: if the SAME solutionName already landed on
-    // this L3 in this run, auto-suffix the second arrival with `(N)`.
+    // Same-name display disambiguation on this L3 row. Fingerprint
+    // pre-dedupe already filtered exact duplicates, so this only
+    // fires for genuinely distinct rows that happen to share a name.
     let finalName = payload.solutionName;
     let finalId = payload.id;
     const baseLower = payload.solutionName.trim().toLowerCase();
@@ -763,25 +837,32 @@ export async function runEnrichmentFromUpload(
     if (lowerExisting.has(baseLower)) {
       let n = 2;
       const baseName = payload.solutionName.trim();
-      while (
-        lowerExisting.has(`${baseName} (${n})`.toLowerCase())
-      ) {
+      while (lowerExisting.has(`${baseName} (${n})`.toLowerCase())) {
         n += 1;
       }
       finalName = `${baseName} (${n})`;
       finalId = payload.id.replace(/[^:]*$/, slugifyForId(finalName));
     }
 
-    // Brief-cache reattachment by exact (case-insensitive) name match.
-    const cacheHit = briefCacheByName.get(finalName.trim().toLowerCase());
-    const reuseId = cacheHit?.id;
-    const reuseBrief = cacheHit?.generatedProcess;
-    if (cacheHit) {
-      summary.briefsPreservedCount += 1;
+    // Tower-wide id-collision suffix. Two distinct names whose
+    // slugified-and-truncated forms collide would otherwise produce
+    // the same React key — the second card would silently disappear.
+    const allIdsOnTower = new Set<string>();
+    for (const r of fresh.l3Rows) {
+      for (const it of r.l3Initiatives ?? []) {
+        allIdsOnTower.add(it.id);
+      }
+    }
+    if (allIdsOnTower.has(finalId)) {
+      let n = 2;
+      while (allIdsOnTower.has(`${finalId}-${n}`)) n += 1;
+      finalId = `${finalId}-${n}`;
     }
 
+    const uploadFingerprint = fingerprintByUploadRowId.get(ev.uploadRowId);
+
     const newInitiative: L3Initiative = {
-      id: reuseId ?? finalId,
+      id: finalId,
       solutionName: finalName,
       tagline: payload.tagline,
       aiRationale: payload.aiRationale,
@@ -793,7 +874,7 @@ export async function runEnrichmentFromUpload(
         : {}),
       ...(payload.promptVersion ? { promptVersion: payload.promptVersion } : {}),
       ...(payload.intakeStatus ? { intakeStatus: payload.intakeStatus } : {}),
-      ...(reuseBrief ? { generatedProcess: reuseBrief } : {}),
+      ...(uploadFingerprint ? { uploadFingerprint } : {}),
       source: "manual",
       generatedAt,
     };
@@ -813,10 +894,9 @@ export async function runEnrichmentFromUpload(
     uploadEnrichLog("stamp:ok", {
       uploadRowId: ev.uploadRowId,
       matchedRowId: targetRowId,
-      finalId: newInitiative.id,
+      finalId,
       finalName: finalName.slice(0, 80),
       source: ev.source,
-      reusedFromCache: !!cacheHit,
       withinFileSuffix: finalName !== payload.solutionName,
       rowCardCountAfter: existing.length + 1,
       enriched: summary.enriched,
@@ -887,10 +967,6 @@ export async function runEnrichmentFromUpload(
 
   summary.source = computeOverallSource(llmCount, fallbackCount);
   summary.warning = summary.warning ?? lastWarning;
-  // If we wiped at the top but nothing landed, surface a recovery hint.
-  if (summary.wipedCount > 0 && summary.enriched === 0) {
-    summary.wipedButFailed = true;
-  }
 
   if (opts.flushSave && !aborted) {
     try {

@@ -33,11 +33,13 @@ import {
   type ParsedInitiativeUploadRow,
 } from "@/lib/assess/parseInitiativeUploadFile";
 import {
+  clearLLMInitiativesForTower,
   clearManualInitiativesForTower,
   countAllManualInitiatives,
   runEnrichmentFromUpload,
   type RunEnrichmentSummary,
 } from "@/lib/assess/curationPipelineV6";
+import type { TowerInitiativeMode } from "@/lib/initiatives/towerMode";
 import { cn } from "@/lib/utils";
 
 /**
@@ -48,25 +50,35 @@ import { cn } from "@/lib/utils";
  * the user's text into Versant-voice tagline + rationale, picks
  * feasibility + icon + vendor, and (when needed) auto-matches the L3.
  *
- * The upload is the new source of truth for the tower: every existing
- * card (LLM-discovered, fallback, and prior uploads) is wiped before
- * the parsed rows are stamped. Cached briefs are carried forward when
- * an uploaded `solutionName` matches a pre-wipe card exactly.
+ * INCREMENTAL — each upload adds to the manual slate; rows whose
+ * `(name, description, tech)` fingerprint already lives on the tower
+ * are skipped. Re-uploading the same xlsx is a no-op (all rows
+ * skipped). Editing a row in the xlsx then re-uploading lands the
+ * edited row as a new card. The two pipelines (manual upload vs.
+ * LLM discovery) are source-exclusive — this panel is hard-greyed
+ * when the tower has LLM-discovered cards. To switch into
+ * user-uploaded mode, the lead clears the LLM slate first.
  *
  * Stamps every enriched initiative with `source: "manual"` so the
- * gallery shows an "Uploaded" badge and the existing "Regenerate AI
- * guidance" path preserves these entries across discovery re-runs.
- *
- * Brief generation stays unchanged — once cards land, the user clicks
- * the existing "Generate N missing briefs" button to fill the brief
- * cache. The two pipelines remain separate calls.
+ * gallery shows an "Uploaded" badge. Brief generation stays unchanged
+ * — once cards land, the user clicks "Generate N missing briefs" to
+ * fill the brief cache. The two pipelines remain separate calls.
  */
 export function UploadInitiativesPanel({
   tower,
   compact = false,
+  initiativeMode = "empty",
 }: {
   tower: Tower;
   compact?: boolean;
+  /**
+   * Source-exclusivity mode for the tower. When `"llm-discovered"`,
+   * the upload button is hard-greyed and a "Clear LLM cards"
+   * affordance is shown so the lead can switch modes explicitly.
+   * Defaults to `"empty"` so the panel still works when rendered
+   * outside the WorkshopToolsDrawer (single-tower demo / tests).
+   */
+  initiativeMode?: TowerInitiativeMode;
 }) {
   const toast = useToast();
   const sync = useAssessSync();
@@ -86,6 +98,8 @@ export function UploadInitiativesPanel({
   }>({ enriched: 0, total: 0 });
   const [clearOpen, setClearOpen] = React.useState(false);
   const [clearing, setClearing] = React.useState(false);
+  const [clearLlmOpen, setClearLlmOpen] = React.useState(false);
+  const [clearingLlm, setClearingLlm] = React.useState(false);
   const cancelRef = React.useRef<AbortController | null>(null);
 
   React.useEffect(() => {
@@ -97,20 +111,27 @@ export function UploadInitiativesPanel({
     return program?.towers[towerId]?.l3Rows ?? [];
   }, [program, towerId]);
   const l3Labels = React.useMemo(() => l3Roster.map((r) => r.l3), [l3Roster]);
-  /**
-   * Total card count across every L3 row on the tower — the scope the
-   * upload will wipe. Includes LLM-discovered, fallback, and prior
-   * manual entries. Drives the destructive confirmation banner.
-   */
-  const existingCardCount = React.useMemo(() => {
-    let n = 0;
-    for (const r of l3Roster) n += r.l3Initiatives?.length ?? 0;
-    return n;
-  }, [l3Roster]);
   const manualCount = React.useMemo(() => {
     if (!program) return 0;
     return countAllManualInitiatives(towerId);
   }, [program, towerId]);
+  /**
+   * Count of LLM-discovered + deterministic-fallback initiatives on
+   * the tower. When `> 0`, the tower is in `"llm-discovered"` mode and
+   * the upload button is hard-greyed — the lead must clear the LLM
+   * slate first via the explicit "Clear LLM cards" affordance.
+   */
+  const llmCount = React.useMemo(() => {
+    let n = 0;
+    for (const r of l3Roster) {
+      for (const it of r.l3Initiatives ?? []) {
+        if (it.source === "llm" || it.source === "fallback") n += 1;
+      }
+    }
+    return n;
+  }, [l3Roster]);
+
+  const modeBlocked = initiativeMode === "llm-discovered";
 
   const onPickFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -129,6 +150,14 @@ export function UploadInitiativesPanel({
         title: "No L3 Job Families yet",
         description:
           "Import the capability map on Step 1 before uploading initiatives — every initiative attaches to an L3 row.",
+      });
+      return;
+    }
+    if (modeBlocked) {
+      toast.error({
+        title: "Tower is in LLM-discovered mode",
+        description:
+          "Clear the LLM cards first to switch into upload mode — uploaded and LLM-discovered initiatives can't coexist on the same tower.",
       });
       return;
     }
@@ -209,18 +238,9 @@ export function UploadInitiativesPanel({
     if (!summary) return;
     const total = summary.totalUploads;
     const llmL3 = summary.llmMatchedL3Count;
-    if (summary.wipedButFailed) {
-      toast.error({
-        title: "Upload failed — tower was cleared",
-        description:
-          (summary.warning ?? "Enrichment failed for every row.") +
-          ` ${summary.wipedCount} prior card${summary.wipedCount === 1 ? " was" : "s were"} cleared. Re-upload, or run "Regenerate AI guidance" to repopulate from discovery.`,
-      });
-      setParsed(null);
-      setFileLabel(null);
-      return;
-    }
-    if (summary.failed > 0 && summary.enriched === 0) {
+    const skipped = summary.skippedDuplicates;
+
+    if (summary.failed > 0 && summary.enriched === 0 && skipped === 0) {
       toast.error({
         title: "Enrichment failed",
         description:
@@ -232,10 +252,23 @@ export function UploadInitiativesPanel({
       return;
     }
 
+    // Idempotent re-upload: nothing new, everything skipped. Surface
+    // this as info — no error, no success.
+    if (summary.enriched === 0 && skipped === total && total > 0) {
+      toast.info({
+        title: "Nothing new to add",
+        description: `All ${total} initiative${total === 1 ? " was" : "s were"} already on the tower. Edit the file and re-upload to add new entries.`,
+        durationMs: 8000,
+      });
+      setParsed(null);
+      setFileLabel(null);
+      return;
+    }
+
     const notes: string[] = [];
-    if (summary.wipedCount > 0) {
+    if (skipped > 0) {
       notes.push(
-        `Replaced ${summary.wipedCount} prior card${summary.wipedCount === 1 ? "" : "s"}`,
+        `skipped ${skipped} already on tower`,
       );
     }
     if (llmL3 > 0) {
@@ -243,14 +276,9 @@ export function UploadInitiativesPanel({
         `LLM auto-matched the L3 for ${llmL3} row${llmL3 === 1 ? "" : "s"}`,
       );
     }
-    if (summary.briefsPreservedCount > 0) {
-      notes.push(
-        `${summary.briefsPreservedCount} cached brief${summary.briefsPreservedCount === 1 ? "" : "s"} preserved by name match`,
-      );
-    }
 
     toast.success({
-      title: `${summary.enriched} of ${total} initiative${total === 1 ? "" : "s"} enriched`,
+      title: `Added ${summary.enriched} new initiative${summary.enriched === 1 ? "" : "s"}`,
       description:
         (notes.length > 0 ? `${notes.join("; ")}. ` : "") +
         "Run the Generate AI Solution briefs step next to fill the six-section narrative for each.",
@@ -295,7 +323,38 @@ export function UploadInitiativesPanel({
     }
   };
 
-  const disabled = running || l3Roster.length === 0;
+  const onClearLlm = async () => {
+    setClearingLlm(true);
+    let removed = 0;
+    try {
+      removed = clearLLMInitiativesForTower(towerId);
+      if (sync?.flushSave) {
+        try {
+          await sync.flushSave();
+        } catch {
+          // best-effort; debounce will retry.
+        }
+      }
+    } finally {
+      setClearingLlm(false);
+      setClearLlmOpen(false);
+    }
+    if (removed > 0) {
+      toast.success({
+        title: `${removed} LLM-discovered card${removed === 1 ? "" : "s"} cleared`,
+        description:
+          "Tower is now empty. Upload a CSV/XLSX to add initiatives, or run Regenerate AI guidance to discover a fresh slate.",
+        durationMs: 8000,
+      });
+    } else {
+      toast.info({
+        title: "Nothing to clear",
+        description: "This tower has no LLM-discovered cards.",
+      });
+    }
+  };
+
+  const disabled = running || l3Roster.length === 0 || modeBlocked;
 
   return (
     <>
@@ -338,7 +397,9 @@ export function UploadInitiativesPanel({
             title={
               l3Roster.length === 0
                 ? "Import the capability map first — initiatives attach to L3 rows."
-                : "Upload a CSV or XLSX file"
+                : modeBlocked
+                  ? `Disabled — tower has ${llmCount} LLM-discovered card${llmCount === 1 ? "" : "s"}. Clear them first to switch into upload mode.`
+                  : "Upload a CSV or XLSX file"
             }
             className={cn(
               "inline-flex items-center gap-2 rounded-lg border border-accent-teal/50 bg-accent-teal/10 px-3 py-1.5 text-xs font-semibold text-accent-teal transition",
@@ -407,6 +468,45 @@ export function UploadInitiativesPanel({
           />
         </div>
 
+        {modeBlocked && !running ? (
+          <div
+            className="mt-1 flex items-start gap-2.5 rounded-lg border border-accent-amber/40 bg-accent-amber/5 px-3 py-2 text-[11px] leading-relaxed text-forge-body"
+            role="status"
+          >
+            <AlertTriangle
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-amber"
+              aria-hidden
+            />
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-forge-ink">
+                Upload disabled — tower is in LLM-discovered mode
+              </div>
+              <div className="mt-0.5 text-forge-subtle">
+                <span className="font-mono text-forge-body">{llmCount}</span>{" "}
+                LLM-discovered card{llmCount === 1 ? "" : "s"}{" "}
+                on this tower. Uploaded and LLM-discovered initiatives can&rsquo;t
+                coexist — clear the LLM slate first to switch modes.
+              </div>
+              <button
+                type="button"
+                onClick={() => setClearLlmOpen(true)}
+                disabled={clearingLlm}
+                className="mt-1.5 inline-flex items-center gap-1.5 rounded-md border border-accent-amber/50 bg-accent-amber/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-accent-amber transition hover:border-accent-amber hover:bg-accent-amber/15 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {clearingLlm ? (
+                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                ) : (
+                  <Trash2 className="h-3 w-3" aria-hidden />
+                )}
+                Clear LLM cards
+                <span className="ml-0.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent-amber/20 px-1 font-mono text-[10px] text-accent-amber">
+                  {llmCount}
+                </span>
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {running ? (
           <div
             className="mt-1 flex items-start gap-2 rounded-lg border border-accent-teal/30 bg-near-black/40 px-3 py-2 text-[11px] leading-relaxed text-forge-body"
@@ -437,7 +537,6 @@ export function UploadInitiativesPanel({
           parsed={parsed}
           fileLabel={fileLabel ?? ""}
           l3Roster={l3Roster}
-          existingCardCount={existingCardCount}
           onConfirm={onEnrich}
           onClose={() => setPreviewOpen(false)}
         />
@@ -458,15 +557,48 @@ export function UploadInitiativesPanel({
               This hard-deletes{" "}
               <span className="font-mono text-accent-red">{manualCount}</span>{" "}
               uploaded initiative{manualCount === 1 ? "" : "s"} across every Job
-              Family on this tower. LLM-discovered cards stay put.
+              Family on this tower, along with any approve/reject decisions on
+              those cards. LLM-discovered cards stay put.
             </p>
             <p className="text-xs text-forge-subtle">
-              Use this after a wrong file upload. To repopulate the affected Job
-              Families with LLM-discovered solutions, run{" "}
+              Use this after a wrong upload, or to switch the tower into
+              LLM-discovered mode. To repopulate from discovery, run{" "}
               <span className="font-semibold text-forge-ink">
                 Regenerate AI guidance
               </span>{" "}
               next.
+            </p>
+          </div>
+        }
+      />
+
+      <ConfirmDialog
+        open={clearLlmOpen}
+        onClose={() => setClearLlmOpen(false)}
+        onConfirm={onClearLlm}
+        title={`Clear all LLM-discovered cards on ${tower.name}?`}
+        confirmLabel="Clear LLM cards"
+        cancelLabel="Cancel"
+        variant="destructive"
+        busy={clearingLlm}
+        description={
+          <div className="space-y-2 text-sm leading-relaxed text-forge-body">
+            <p>
+              This hard-deletes{" "}
+              <span className="font-mono text-accent-red">{llmCount}</span>{" "}
+              LLM-discovered &amp; deterministic-fallback card
+              {llmCount === 1 ? "" : "s"} on this tower, along with any
+              approve/reject decisions on them. Uploaded cards aren&rsquo;t
+              affected (there are none right now).
+            </p>
+            <p className="text-xs text-forge-subtle">
+              After clearing, the tower switches into user-uploaded mode and
+              you can upload a CSV/XLSX of initiatives. To re-discover from
+              the LLM later, clear your uploads and run{" "}
+              <span className="font-semibold text-forge-ink">
+                Regenerate AI guidance
+              </span>
+              .
             </p>
           </div>
         }
@@ -483,19 +615,12 @@ function PreviewModal({
   parsed,
   fileLabel,
   l3Roster,
-  existingCardCount,
   onConfirm,
   onClose,
 }: {
   parsed: ParsedInitiativeUploadFile;
   fileLabel: string;
   l3Roster: ReadonlyArray<L3WorkforceRowV6>;
-  /**
-   * Total cards (LLM-discovered + fallback + manual) currently on the
-   * tower. The upload will wipe all of them. Drives the destructive
-   * confirmation banner above the preview table.
-   */
-  existingCardCount: number;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -640,31 +765,6 @@ function PreviewModal({
           </div>
         ) : null}
 
-        {existingCardCount > 0 ? (
-          <div className="flex items-start gap-2.5 border-b border-accent-red/30 bg-accent-red/5 px-5 py-3 text-[12px] leading-relaxed">
-            <AlertTriangle
-              className="mt-0.5 h-4 w-4 shrink-0 text-accent-red"
-              aria-hidden
-            />
-            <div className="min-w-0">
-              <div className="font-semibold text-accent-red">
-                This will replace every existing initiative card on{" "}
-                <span className="font-mono">{l3Roster.length}</span>{" "}
-                Job Famil{l3Roster.length === 1 ? "y" : "ies"}.
-              </div>
-              <div className="mt-0.5 text-forge-body">
-                <span className="font-mono text-accent-red">
-                  {existingCardCount}
-                </span>{" "}
-                card{existingCardCount === 1 ? "" : "s"} on this tower (LLM-discovered, fallback, and prior uploads) will be wiped before your{" "}
-                <span className="font-mono">{parsed.rows.length}</span>{" "}
-                uploaded row{parsed.rows.length === 1 ? "" : "s"} are stamped.
-                Cached briefs are kept for same-name re-uploads.
-              </div>
-            </div>
-          </div>
-        ) : null}
-
         <div className="flex-1 overflow-auto">
           <table className="w-full text-left text-xs">
             <thead className="sticky top-0 bg-forge-surface/95 backdrop-blur">
@@ -697,21 +797,12 @@ function PreviewModal({
             onClick={onConfirm}
             disabled={parsed.rows.length === 0}
             className={cn(
-              "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition",
-              existingCardCount > 0
-                ? "bg-accent-red text-white hover:bg-[#e23200]"
-                : "bg-accent-teal text-near-black hover:bg-accent-teal/85",
+              "inline-flex items-center gap-2 rounded-lg bg-accent-teal px-4 py-2 text-sm font-semibold text-near-black transition hover:bg-accent-teal/85",
               "disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            {existingCardCount > 0 ? (
-              <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-            ) : (
-              <Sparkles className="h-3.5 w-3.5" aria-hidden />
-            )}
-            {existingCardCount > 0
-              ? `Replace and enrich ${parsed.rows.length} initiative${parsed.rows.length === 1 ? "" : "s"}`
-              : `Enrich ${parsed.rows.length} initiative${parsed.rows.length === 1 ? "" : "s"}`}
+            <Sparkles className="h-3.5 w-3.5" aria-hidden />
+            Add {parsed.rows.length} initiative{parsed.rows.length === 1 ? "" : "s"}
           </button>
         </div>
         </div>

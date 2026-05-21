@@ -9,9 +9,16 @@
  *   3. Stream protocol     — encode + decode roundtrip
  *   4. Deterministic LLM   — `fallbackEnrichedInitiative` (passthrough)
  *   5. Orchestrator        — `runEnrichmentFromUpload` with a stubbed
- *                            fetch that emits NDJSON events
+ *                            fetch that emits NDJSON events. Incremental
+ *                            (no wipe) — uploads ADD to manual cards;
+ *                            fingerprint dedupe skips exact re-uploads.
  *   6. Discovery guardrail — `runForL3Rows` preserves `source: "manual"`
- *   7. Delete helpers      — count, delete-one, clear-all
+ *   7. Clear helpers       — count, delete-one, clear-manual, clear-LLM
+ *                            (each also clears associated reviews).
+ *   8. Route fallback drain — `buildPendingFallbackRows` covers the
+ *                             "47 of 49" prod silent-drop case.
+ *   9. Mode derivation     — `deriveTowerInitiativeMode` empty / manual /
+ *                            llm-discovered classification.
  *
  * Run: `npx tsx scripts/uploadInitiativesE2E.ts`
  */
@@ -64,6 +71,7 @@ import {
 } from "../src/lib/assess/curateL3InitiativesStreamProtocol";
 import { fallbackEnrichedInitiative } from "../src/lib/assess/enrichUploadedInitiativesLLM";
 import {
+  clearLLMInitiativesForTower,
   clearManualInitiativesForTower,
   countAllManualInitiatives,
   deleteManualInitiative,
@@ -77,6 +85,7 @@ import {
   setInitiativeReview,
 } from "../src/lib/localStore";
 import {
+  computeUploadFingerprint,
   defaultTowerBaseline,
   defaultTowerRates,
   type AssessProgramV2,
@@ -85,6 +94,7 @@ import {
   type L3WorkforceRowV6,
   type TowerId,
 } from "../src/data/assess/types";
+import { deriveTowerInitiativeMode } from "../src/lib/initiatives/towerMode";
 
 // ===========================================================================
 //   Test harness
@@ -115,6 +125,12 @@ type SeedInitiative = {
   withBrief?: boolean;
   /** Override id (default: `seeded-${i}`). */
   id?: string;
+  /**
+   * Stamp an `uploadFingerprint` on the seeded card. Mirrors the
+   * post-migration field stamped by `runEnrichmentFromUpload`. Tests
+   * that don't pass this exercise the legacy name-only-match fallback.
+   */
+  fingerprintTuple?: { description: string; tech: string };
 };
 
 function seedProgramWithFinanceTower(opts?: {
@@ -154,7 +170,18 @@ function seedProgramWithFinanceTower(opts?: {
         source: it.source,
         generatedAt: new Date().toISOString(),
       };
-      return it.withBrief ? { ...base, generatedProcess: briefStub } : base;
+      let result = it.withBrief ? { ...base, generatedProcess: briefStub } : base;
+      if (it.fingerprintTuple) {
+        result = {
+          ...result,
+          uploadFingerprint: computeUploadFingerprint(
+            it.name,
+            it.fingerprintTuple.description,
+            it.fingerprintTuple.tech,
+          ),
+        };
+      }
+      return result;
     });
 
   const l3Rows: L3WorkforceRowV6[] = [
@@ -671,151 +698,335 @@ async function runOrchestratorSuite(): Promise<void> {
     );
   });
 
-  await check("wipes every existing card before stamping new uploads", async () => {
-    seedProgramWithFinanceTower({
-      rowAInitiatives: [
-        { name: "Old LLM Card A1", source: "llm" },
-        { name: "Old LLM Card A2", source: "llm" },
-        { name: "Old Manual Card A3", source: "manual" },
-      ],
-      rowBInitiatives: [
-        { name: "Old LLM Card B1", source: "llm" },
-      ],
-    });
-    // sanity: 4 prior cards total, spread across 2 rows
-    {
-      const rows = getTowerRows();
-      const total = rows.reduce(
-        (acc, r) => acc + (r.l3Initiatives?.length ?? 0),
-        0,
+  await check(
+    "INCREMENTAL: existing manual cards are preserved; new uploads append",
+    async () => {
+      seedProgramWithFinanceTower({
+        rowAInitiatives: [
+          {
+            name: "Existing Manual Card",
+            source: "manual",
+            id: "finance::row-a::existing",
+            fingerprintTuple: {
+              description: "Already on tower.",
+              tech: "BlackLine",
+            },
+          },
+        ],
+      });
+      installFetchStub("ok-llm", 1);
+      const summary = await runEnrichmentFromUpload({
+        towerId: TOWER,
+        parsedRows: [
+          {
+            index: 2,
+            l3Raw: "Close and Consolidation",
+            solutionName: "Brand New Upload",
+            solutionDescription: "Net-new initiative.",
+            tech: "BlackLine",
+            diagnostics: [],
+          },
+        ],
+      });
+      assert.equal(summary.enriched, 1, "1 new card stamped");
+      assert.equal(summary.skippedDuplicates, 0, "nothing skipped");
+      assert.equal(summary.totalUploads, 1);
+      const rowA = getTowerRows().find(
+        (r) => r.id === "finance::corp-finance::close-and-consolidation",
+      )!;
+      assert.equal(
+        rowA.l3Initiatives!.length,
+        2,
+        "existing manual card was preserved, new one appended",
       );
-      assert.equal(total, 4, "precondition: 4 prior cards seeded");
-    }
-    installFetchStub("ok-llm", 1);
-    const summary = await runEnrichmentFromUpload({
-      towerId: TOWER,
-      parsedRows: [
-        {
-          index: 2,
-          l3Raw: "Close and Consolidation",
-          solutionName: "New Uploaded Solution",
-          solutionDescription: "Description.",
-          tech: "BlackLine",
-          diagnostics: [],
-        },
-      ],
-    });
-    assert.equal(summary.wipedCount, 4, "all 4 prior cards counted as wiped");
-    assert.equal(summary.enriched, 1);
-    assert.equal(summary.failed, 0);
-    assert.equal(summary.wipedButFailed, false);
-    const rows = getTowerRows();
-    const rowA = rows.find(
-      (r) => r.id === "finance::corp-finance::close-and-consolidation",
-    )!;
-    const rowB = rows.find(
-      (r) => r.id === "finance::treasury::cash-and-covenant",
-    )!;
-    assert.equal(rowA.l3Initiatives!.length, 1, "row A has only the new card");
-    assert.equal(
-      rowA.l3Initiatives![0]!.solutionName,
-      "New Uploaded Solution",
-    );
-    assert.equal(rowA.l3Initiatives![0]!.source, "manual");
-    assert.equal(rowB.l3Initiatives?.length ?? 0, 0, "row B was wiped");
-  });
+      const names = rowA.l3Initiatives!.map((it) => it.solutionName).sort();
+      assert.deepEqual(names, ["Brand New Upload", "Existing Manual Card"]);
+    },
+  );
 
-  await check("preserves cached briefs on same-name re-upload", async () => {
-    seedProgramWithFinanceTower({
-      rowAInitiatives: [
-        {
-          name: "Reconciliation Co-Pilot",
-          source: "llm",
-          withBrief: true,
-          id: "legacy::reconciliation-copilot",
-        },
-      ],
-    });
-    const seededBefore = getTowerRows().find(
-      (r) => r.id === "finance::corp-finance::close-and-consolidation",
-    )!.l3Initiatives![0]!;
-    assert.ok(
-      seededBefore.generatedProcess,
-      "precondition: seeded card has cached brief",
-    );
-    installFetchStub("ok-llm", 1);
-    const summary = await runEnrichmentFromUpload({
-      towerId: TOWER,
-      parsedRows: [
+  await check(
+    "IDEMPOTENT re-upload: same xlsx twice = 0 new, all skipped",
+    async () => {
+      seedProgramWithFinanceTower();
+      installFetchStub("ok-llm", 2);
+      const parsedRows = [
         {
           index: 2,
           l3Raw: "Close and Consolidation",
-          solutionName: "Reconciliation Co-Pilot",
-          solutionDescription: "Updated description from upload.",
-          tech: "BlackLine",
-          diagnostics: [],
-        },
-      ],
-    });
-    assert.equal(summary.enriched, 1);
-    assert.equal(summary.wipedCount, 1);
-    assert.equal(
-      summary.briefsPreservedCount,
-      1,
-      "brief should be reattached by name match",
-    );
-    const after = getTowerRows().find(
-      (r) => r.id === "finance::corp-finance::close-and-consolidation",
-    )!.l3Initiatives![0]!;
-    assert.equal(
-      after.id,
-      "legacy::reconciliation-copilot",
-      "id reused from pre-wipe snapshot",
-    );
-    // Deep-equality, not reference-equality: the brief travels through
-    // the localStorage polyfill (JSON round-trip) so the post-wipe
-    // object identity is fresh on each read.
-    assert.deepEqual(
-      after.generatedProcess,
-      seededBefore.generatedProcess,
-      "generatedProcess carried forward structurally",
-    );
-    assert.match(after.tagline, /Mocked tagline/, "new tagline from upload");
-    assert.equal(after.source, "manual", "now stamped as manual");
-  });
-
-  await check("within-file duplicate gets a (2) suffix automatically", async () => {
-    seedProgramWithFinanceTower();
-    installFetchStub("ok-llm", 2);
-    const summary = await runEnrichmentFromUpload({
-      towerId: TOWER,
-      parsedRows: [
-        {
-          index: 2,
-          l3Raw: "Close and Consolidation",
-          solutionName: "Same Solution Name",
-          solutionDescription: "First.",
+          solutionName: "Solution Alpha",
+          solutionDescription: "First initiative.",
           tech: "BlackLine",
           diagnostics: [],
         },
         {
           index: 3,
           l3Raw: "Close and Consolidation",
-          solutionName: "Same Solution Name",
-          solutionDescription: "Second.",
-          tech: "BlackLine",
+          solutionName: "Solution Beta",
+          solutionDescription: "Second initiative.",
+          tech: "FloQast",
           diagnostics: [],
         },
-      ],
-    });
-    assert.equal(summary.enriched, 2);
-    const row = getTowerRows().find(
-      (r) => r.id === "finance::corp-finance::close-and-consolidation",
-    )!;
-    assert.equal(row.l3Initiatives!.length, 2);
-    const names = row.l3Initiatives!.map((it) => it.solutionName).sort();
-    assert.deepEqual(names, ["Same Solution Name", "Same Solution Name (2)"]);
-  });
+      ];
+      const first = await runEnrichmentFromUpload({
+        towerId: TOWER,
+        parsedRows,
+      });
+      assert.equal(first.enriched, 2, "first pass stamps both");
+      assert.equal(first.skippedDuplicates, 0);
+
+      const second = await runEnrichmentFromUpload({
+        towerId: TOWER,
+        parsedRows,
+      });
+      assert.equal(second.enriched, 0, "second pass stamps nothing new");
+      assert.equal(
+        second.skippedDuplicates,
+        2,
+        "both rows skipped on idempotent re-upload",
+      );
+      const total = getTowerRows().reduce(
+        (acc, r) => acc + (r.l3Initiatives?.length ?? 0),
+        0,
+      );
+      assert.equal(total, 2, "tower still has exactly 2 manual cards");
+    },
+  );
+
+  await check(
+    "EDIT-AND-RE-UPLOAD: changed description = new card (different fingerprint)",
+    async () => {
+      seedProgramWithFinanceTower();
+      installFetchStub("ok-llm", 1);
+      // First upload.
+      await runEnrichmentFromUpload({
+        towerId: TOWER,
+        parsedRows: [
+          {
+            index: 2,
+            l3Raw: "Close and Consolidation",
+            solutionName: "Reconciliation Agent",
+            solutionDescription: "Original description.",
+            tech: "BlackLine",
+            diagnostics: [],
+          },
+        ],
+      });
+
+      // Re-upload with the SAME name but EDITED description.
+      const second = await runEnrichmentFromUpload({
+        towerId: TOWER,
+        parsedRows: [
+          {
+            index: 2,
+            l3Raw: "Close and Consolidation",
+            solutionName: "Reconciliation Agent",
+            solutionDescription: "Revised description with more depth.",
+            tech: "BlackLine",
+            diagnostics: [],
+          },
+        ],
+      });
+      assert.equal(
+        second.enriched,
+        1,
+        "edited row should stamp a new card (fingerprint differs)",
+      );
+      assert.equal(second.skippedDuplicates, 0);
+
+      const rowA = getTowerRows().find(
+        (r) => r.id === "finance::corp-finance::close-and-consolidation",
+      )!;
+      assert.equal(rowA.l3Initiatives!.length, 2);
+      const names = rowA.l3Initiatives!.map((it) => it.solutionName).sort();
+      assert.deepEqual(
+        names,
+        ["Reconciliation Agent", "Reconciliation Agent (2)"],
+        "same-name disambiguation via (2) suffix",
+      );
+    },
+  );
+
+  await check(
+    "WITHIN-FILE dedupe: two identical fingerprint rows = 1 stamped + 1 skipped",
+    async () => {
+      seedProgramWithFinanceTower();
+      installFetchStub("ok-llm", 1);
+      const summary = await runEnrichmentFromUpload({
+        towerId: TOWER,
+        parsedRows: [
+          {
+            index: 2,
+            l3Raw: "Close and Consolidation",
+            solutionName: "Twin Solution",
+            solutionDescription: "Identical description.",
+            tech: "BlackLine",
+            diagnostics: [],
+          },
+          {
+            index: 3,
+            l3Raw: "Close and Consolidation",
+            solutionName: "Twin Solution",
+            solutionDescription: "Identical description.",
+            tech: "BlackLine",
+            diagnostics: [],
+          },
+        ],
+      });
+      assert.equal(summary.totalUploads, 2);
+      assert.equal(summary.enriched, 1, "exactly one twin landed");
+      assert.equal(
+        summary.skippedDuplicates,
+        1,
+        "second twin skipped within-file",
+      );
+      const row = getTowerRows().find(
+        (r) => r.id === "finance::corp-finance::close-and-consolidation",
+      )!;
+      assert.equal(row.l3Initiatives!.length, 1);
+    },
+  );
+
+  await check(
+    "WITHIN-FILE same-name different-fingerprint = 2 cards, (2) suffix",
+    async () => {
+      seedProgramWithFinanceTower();
+      installFetchStub("ok-llm", 2);
+      const summary = await runEnrichmentFromUpload({
+        towerId: TOWER,
+        parsedRows: [
+          {
+            index: 2,
+            l3Raw: "Close and Consolidation",
+            solutionName: "Same Solution Name",
+            solutionDescription: "First.",
+            tech: "BlackLine",
+            diagnostics: [],
+          },
+          {
+            index: 3,
+            l3Raw: "Close and Consolidation",
+            solutionName: "Same Solution Name",
+            solutionDescription: "Second.",
+            tech: "BlackLine",
+            diagnostics: [],
+          },
+        ],
+      });
+      assert.equal(summary.enriched, 2);
+      assert.equal(summary.skippedDuplicates, 0);
+      const row = getTowerRows().find(
+        (r) => r.id === "finance::corp-finance::close-and-consolidation",
+      )!;
+      assert.equal(row.l3Initiatives!.length, 2);
+      const names = row.l3Initiatives!.map((it) => it.solutionName).sort();
+      assert.deepEqual(names, ["Same Solution Name", "Same Solution Name (2)"]);
+    },
+  );
+
+  await check(
+    "LEGACY name-only fallback: pre-migration manual cards skip by name",
+    async () => {
+      seedProgramWithFinanceTower({
+        rowAInitiatives: [
+          {
+            // Legacy seed: no `fingerprintTuple` → no `uploadFingerprint` on
+            // the stored card. Mimics manual cards stamped before this
+            // migration shipped. The orchestrator must still skip a
+            // re-upload of the same name.
+            name: "Pre-migration Manual Card",
+            source: "manual",
+            id: "finance::row-a::legacy",
+          },
+        ],
+      });
+      installFetchStub("ok-llm", 1);
+      const summary = await runEnrichmentFromUpload({
+        towerId: TOWER,
+        parsedRows: [
+          {
+            index: 2,
+            l3Raw: "Close and Consolidation",
+            solutionName: "Pre-migration Manual Card",
+            solutionDescription: "Same name, fresh upload.",
+            tech: "BlackLine",
+            diagnostics: [],
+          },
+        ],
+      });
+      assert.equal(summary.enriched, 0);
+      assert.equal(
+        summary.skippedDuplicates,
+        1,
+        "name-only fallback should skip the legacy card",
+      );
+      const row = getTowerRows().find(
+        (r) => r.id === "finance::corp-finance::close-and-consolidation",
+      )!;
+      assert.equal(
+        row.l3Initiatives!.length,
+        1,
+        "tower still has just the legacy card",
+      );
+    },
+  );
+
+  await check(
+    "TOWER-WIDE id-collision suffix: two distinct long names with same first-48 slug",
+    async () => {
+      seedProgramWithFinanceTower();
+      installFetchStub("ok-llm", 2);
+      // The stub computes the payload id from
+      // `mocked::{matchedRowId}::{lowercase-name-with-dashes}`. The
+      // orchestrator's defensive collision suffix protects against the
+      // payload id colliding with an EXISTING tower id, not against
+      // within-payload collisions (those rely on the route-side
+      // truncation logic). To exercise the collision path here, we
+      // pre-seed a card with the exact id the second upload would
+      // otherwise produce.
+      const collidingId =
+        "mocked::finance::corp-finance::close-and-consolidation::distinct-long-solution-name-alpha";
+      const prog = getAssessProgram();
+      const targetRow = prog.towers[TOWER]!.l3Rows!.find(
+        (r) => r.id === "finance::corp-finance::close-and-consolidation",
+      )!;
+      targetRow.l3Initiatives!.push({
+        id: collidingId,
+        solutionName: "Pre-existing card with conflicting id",
+        tagline: "Stub.",
+        aiRationale: "Stub.",
+        feasibility: "Low",
+        source: "manual",
+        generatedAt: new Date().toISOString(),
+        uploadFingerprint: "different|fingerprint|tuple",
+      });
+      setAssessProgram(prog);
+
+      const summary = await runEnrichmentFromUpload({
+        towerId: TOWER,
+        parsedRows: [
+          {
+            index: 2,
+            l3Raw: "Close and Consolidation",
+            solutionName: "Distinct Long Solution Name Alpha",
+            solutionDescription: "Fresh upload that would collide on id.",
+            tech: "BlackLine",
+            diagnostics: [],
+          },
+        ],
+      });
+      assert.equal(summary.enriched, 1);
+      const row = getTowerRows().find(
+        (r) => r.id === "finance::corp-finance::close-and-consolidation",
+      )!;
+      const ids = row.l3Initiatives!.map((it) => it.id);
+      const uniqueIds = new Set(ids);
+      assert.equal(
+        uniqueIds.size,
+        ids.length,
+        "every stored id must be unique — collision suffix applied",
+      );
+    },
+  );
 
   await check("server emits 'fallback' source → orchestrator marks summary.failed", async () => {
     seedProgramWithFinanceTower();
@@ -845,45 +1056,53 @@ async function runOrchestratorSuite(): Promise<void> {
     );
   });
 
-  await check("network error after wipe leaves tower empty + sets wipedButFailed", async () => {
-    seedProgramWithFinanceTower({
-      rowAInitiatives: [
-        { name: "Will Be Wiped 1", source: "llm" },
-        { name: "Will Be Wiped 2", source: "manual" },
-      ],
-    });
-    installFetchStub("network-error", 1);
-    const summary = await runEnrichmentFromUpload({
-      towerId: TOWER,
-      parsedRows: [
-        {
-          index: 2,
-          l3Raw: "Close and Consolidation",
-          solutionName: "Network Error Solution",
-          solutionDescription: "Description.",
-          tech: "BlackLine",
-          diagnostics: [],
-        },
-      ],
-    });
-    assert.equal(summary.enriched, 0);
-    assert.ok(
-      summary.failed >= 1,
-      "failed count should be at least the chunk size on hard network error",
-    );
-    assert.equal(summary.wipedCount, 2, "both prior cards counted as wiped");
-    assert.equal(
-      summary.wipedButFailed,
-      true,
-      "flag set so UI can surface recovery hint",
-    );
-    assert.match(summary.warning ?? "", /Simulated network failure/);
-    const totalAfter = getTowerRows().reduce(
-      (acc, r) => acc + (r.l3Initiatives?.length ?? 0),
-      0,
-    );
-    assert.equal(totalAfter, 0, "tower is empty after a wiped-but-failed run");
-  });
+  await check(
+    "INCREMENTAL: network error preserves existing manual cards on the tower",
+    async () => {
+      seedProgramWithFinanceTower({
+        rowAInitiatives: [
+          {
+            name: "Pre-existing Manual Card",
+            source: "manual",
+            id: "finance::row-a::preexisting",
+            fingerprintTuple: { description: "Already here.", tech: "BlackLine" },
+          },
+        ],
+      });
+      installFetchStub("network-error", 1);
+      const summary = await runEnrichmentFromUpload({
+        towerId: TOWER,
+        parsedRows: [
+          {
+            index: 2,
+            l3Raw: "Close and Consolidation",
+            solutionName: "Network Error Solution",
+            solutionDescription: "Description.",
+            tech: "BlackLine",
+            diagnostics: [],
+          },
+        ],
+      });
+      assert.equal(summary.enriched, 0);
+      assert.ok(
+        summary.failed >= 1,
+        "failed count should be at least the chunk size on hard network error",
+      );
+      assert.match(summary.warning ?? "", /Simulated network failure/);
+      const rowA = getTowerRows().find(
+        (r) => r.id === "finance::corp-finance::close-and-consolidation",
+      )!;
+      assert.equal(
+        rowA.l3Initiatives!.length,
+        1,
+        "pre-existing manual card survived the failed run",
+      );
+      assert.equal(
+        rowA.l3Initiatives![0]!.solutionName,
+        "Pre-existing Manual Card",
+      );
+    },
+  );
 
   await check("flushSave callback is invoked once after a successful run", async () => {
     seedProgramWithFinanceTower();
@@ -908,171 +1127,6 @@ async function runOrchestratorSuite(): Promise<void> {
     assert.equal(flushed, 1, "flushSave should be called exactly once");
   });
 
-  await check(
-    "wipe clears stale rejected reviews so re-uploaded names aren't hidden",
-    async () => {
-      // Scenario that broke the Finance tower on the user's 49-row xlsx:
-      //   1. Prior discovery seeded LLM cards on the tower.
-      //   2. Tower lead rejected some of them via the gallery's Reject
-      //      button — `initiativeReviews` map gets `status: "rejected"`
-      //      entries keyed by the LLM card's `id`.
-      //   3. User uploads a list with the SAME solution names.
-      //   4. The upload orchestrator wipes the LLM cards, then re-stamps
-      //      new uploaded cards. The brief-cache reattach (which exists
-      //      to preserve the cached six-section brief on re-upload by
-      //      exact-name match) reuses the wiped card's `id`.
-      //   5. Without the wipe-clears-reviews fix, the stale rejection
-      //      still applies to the new id and `useInitiativeReviewsV6`
-      //      silently filters the new card out of the gallery — leaving
-      //      the user with "49 enriched, 44 visible".
-      const sharedName = "Intercompany Reconciliation Co-Pilot";
-      seedProgramWithFinanceTower({
-        rowAInitiatives: [
-          { name: sharedName, source: "llm", id: "legacy::shared-id" },
-          { name: "Another Discovery Card", source: "llm", id: "legacy::other-id" },
-        ],
-      });
-
-      // Stamp a rejection against the FIRST card's id. This matches what
-      // the gallery's Reject button does in production.
-      setInitiativeReview(
-        TOWER,
-        "legacy::shared-id",
-        "rejected",
-        {
-          name: sharedName,
-          l2Name: "Corporate Finance",
-          l3Name: "Close and Consolidation",
-          l4Name: "covers full Job Family",
-          rowId: "finance::corp-finance::close-and-consolidation",
-        },
-        "test-rejecter",
-      );
-      assert.equal(
-        getInitiativeReviews(TOWER)["legacy::shared-id"]?.status,
-        "rejected",
-        "rejection should be persisted before the upload",
-      );
-
-      installFetchStub("ok-llm", 1);
-      const summary = await runEnrichmentFromUpload({
-        towerId: TOWER,
-        parsedRows: [
-          {
-            index: 2,
-            l3Raw: "Close and Consolidation",
-            // Same name → brief-cache reattaches the wiped id and the
-            // new card reuses `legacy::shared-id`.
-            solutionName: sharedName,
-            solutionDescription: "Re-uploaded version from the user's list.",
-            tech: "BlackLine",
-            diagnostics: [],
-          },
-        ],
-      });
-
-      assert.equal(summary.enriched, 1);
-      assert.equal(summary.wipedCount, 2);
-      assert.equal(
-        summary.briefsPreservedCount,
-        1,
-        "the same-name upload should reuse the wiped id via brief cache",
-      );
-
-      const reviewsAfter = getInitiativeReviews(TOWER);
-      assert.equal(
-        reviewsAfter["legacy::shared-id"],
-        undefined,
-        "stale rejection on a wiped id must be cleared so the new card surfaces",
-      );
-
-      const row = getTowerRows().find(
-        (r) => r.id === "finance::corp-finance::close-and-consolidation",
-      )!;
-      assert.equal(
-        row.l3Initiatives?.length,
-        1,
-        "row holds exactly the re-uploaded card",
-      );
-      const stamped = row.l3Initiatives![0]!;
-      assert.equal(stamped.id, "legacy::shared-id");
-      assert.equal(stamped.source, "manual");
-      // The selector + reviews filter MUST agree the card is visible.
-      // We replicate the `useInitiativeReviewsV6` filter inline because
-      // this is a Node test — no React.
-      const wouldBeHidden =
-        reviewsAfter[stamped.id]?.status === "rejected";
-      assert.equal(
-        wouldBeHidden,
-        false,
-        "the re-uploaded card must not be hidden by a stale rejection",
-      );
-    },
-  );
-
-  await check(
-    "wipe preserves reviews whose ids do NOT collide with wiped initiatives",
-    async () => {
-      // A separate review against an id that wasn't on the tower at wipe
-      // time (e.g., a review carrying over from a different L3 row or a
-      // stale orphan) should survive. The fix is surgical to wiped ids
-      // only — it must not nuke unrelated reviews.
-      seedProgramWithFinanceTower({
-        rowAInitiatives: [{ name: "Card A", source: "llm", id: "wiped::row-a::card-a" }],
-      });
-      setInitiativeReview(
-        TOWER,
-        "wiped::row-a::card-a",
-        "rejected",
-        {
-          name: "Card A",
-          l2Name: "Corporate Finance",
-          l3Name: "Close and Consolidation",
-          l4Name: "covers full Job Family",
-          rowId: "finance::corp-finance::close-and-consolidation",
-        },
-      );
-      setInitiativeReview(
-        TOWER,
-        "unrelated::id::never-wiped",
-        "approved",
-        {
-          name: "Some Approved Card",
-          l2Name: "Corporate Finance",
-          l3Name: "Close and Consolidation",
-          l4Name: "covers full Job Family",
-          rowId: "finance::corp-finance::close-and-consolidation",
-        },
-      );
-
-      installFetchStub("ok-llm", 1);
-      await runEnrichmentFromUpload({
-        towerId: TOWER,
-        parsedRows: [
-          {
-            index: 2,
-            l3Raw: "Close and Consolidation",
-            solutionName: "Brand-New Upload (no name collision)",
-            solutionDescription: "Fresh upload.",
-            tech: "BlackLine",
-            diagnostics: [],
-          },
-        ],
-      });
-
-      const reviewsAfter = getInitiativeReviews(TOWER);
-      assert.equal(
-        reviewsAfter["wiped::row-a::card-a"],
-        undefined,
-        "review for wiped id must be cleared",
-      );
-      assert.equal(
-        reviewsAfter["unrelated::id::never-wiped"]?.status,
-        "approved",
-        "unrelated review must survive untouched",
-      );
-    },
-  );
 }
 
 // ===========================================================================
@@ -1145,11 +1199,13 @@ async function runRegenGuardrailSuite(): Promise<void> {
 }
 
 // ===========================================================================
-//   7. DELETE HELPERS — count, delete-one, clear-all
+//   7. CLEAR HELPERS — count, delete-one, clear-manual, clear-LLM (each
+//      with associated-review cleanup so stale rejections can't hide
+//      future re-stamps of the same id, the Finance 49→44 bug)
 // ===========================================================================
 
-async function runDeleteSuite(): Promise<void> {
-  console.log("\n7. Delete helpers");
+async function runClearHelpersSuite(): Promise<void> {
+  console.log("\n7. Clear helpers");
 
   await check("countAllManualInitiatives sums across rows", () => {
     seedProgramWithFinanceTower({ initialManualNames: ["A", "B"] });
@@ -1224,6 +1280,117 @@ async function runDeleteSuite(): Promise<void> {
     assert.equal(row.l3Initiatives!.length, 1);
     assert.equal(row.l3Initiatives![0]!.solutionName, "Discovery Survives");
   });
+
+  await check(
+    "clearManualInitiativesForTower also clears reviews on removed cards",
+    () => {
+      seedProgramWithFinanceTower({
+        rowAInitiatives: [
+          {
+            name: "Card A",
+            source: "manual",
+            id: "manual::row-a::card-a",
+          },
+          {
+            name: "Card B",
+            source: "manual",
+            id: "manual::row-a::card-b",
+          },
+        ],
+      });
+      setInitiativeReview(TOWER, "manual::row-a::card-a", "rejected", {
+        name: "Card A",
+        l2Name: "Corporate Finance",
+        l3Name: "Close and Consolidation",
+        l4Name: "covers full Job Family",
+        rowId: "finance::corp-finance::close-and-consolidation",
+      });
+      setInitiativeReview(TOWER, "unrelated::keep-me", "approved", {
+        name: "Unrelated",
+        l2Name: "Corporate Finance",
+        l3Name: "Close and Consolidation",
+        l4Name: "covers full Job Family",
+        rowId: "finance::corp-finance::close-and-consolidation",
+      });
+
+      const removed = clearManualInitiativesForTower(TOWER);
+      assert.equal(removed, 2);
+      const reviewsAfter = getInitiativeReviews(TOWER);
+      assert.equal(
+        reviewsAfter["manual::row-a::card-a"],
+        undefined,
+        "review on removed manual card must be cleared",
+      );
+      assert.equal(
+        reviewsAfter["unrelated::keep-me"]?.status,
+        "approved",
+        "unrelated review must survive untouched",
+      );
+    },
+  );
+
+  await check(
+    "clearLLMInitiativesForTower removes only llm + fallback entries",
+    () => {
+      seedProgramWithFinanceTower({
+        rowAInitiatives: [
+          {
+            name: "Manual Stays",
+            source: "manual",
+            id: "manual::row-a::stays",
+            fingerprintTuple: { description: "x", tech: "y" },
+          },
+          { name: "LLM Goes", source: "llm", id: "llm::row-a::goes" },
+          {
+            name: "Fallback Also Goes",
+            source: "fallback",
+            id: "fallback::row-a::goes",
+          },
+        ],
+      });
+
+      const removed = clearLLMInitiativesForTower(TOWER);
+      assert.equal(removed, 2, "removes 1 llm + 1 fallback");
+      const row = getTowerRows().find(
+        (r) => r.id === "finance::corp-finance::close-and-consolidation",
+      )!;
+      assert.equal(row.l3Initiatives!.length, 1);
+      assert.equal(row.l3Initiatives![0]!.solutionName, "Manual Stays");
+      assert.equal(row.l3Initiatives![0]!.source, "manual");
+    },
+  );
+
+  await check(
+    "clearLLMInitiativesForTower also clears reviews on removed LLM cards",
+    () => {
+      seedProgramWithFinanceTower({
+        rowAInitiatives: [
+          { name: "LLM A", source: "llm", id: "llm::row-a::a" },
+          { name: "LLM B", source: "llm", id: "llm::row-a::b" },
+        ],
+      });
+      setInitiativeReview(TOWER, "llm::row-a::a", "approved", {
+        name: "LLM A",
+        l2Name: "Corporate Finance",
+        l3Name: "Close and Consolidation",
+        l4Name: "covers full Job Family",
+        rowId: "finance::corp-finance::close-and-consolidation",
+      });
+      setInitiativeReview(TOWER, "llm::row-a::b", "rejected", {
+        name: "LLM B",
+        l2Name: "Corporate Finance",
+        l3Name: "Close and Consolidation",
+        l4Name: "covers full Job Family",
+        rowId: "finance::corp-finance::close-and-consolidation",
+      });
+
+      const removed = clearLLMInitiativesForTower(TOWER);
+      assert.equal(removed, 2);
+      const reviewsAfter = getInitiativeReviews(TOWER);
+      assert.equal(reviewsAfter["llm::row-a::a"], undefined);
+      assert.equal(reviewsAfter["llm::row-a::b"], undefined);
+    },
+  );
 }
 
 // ===========================================================================
@@ -1395,6 +1562,89 @@ async function runRouteFallbackDrainSuite(): Promise<void> {
 }
 
 // ===========================================================================
+//   9. MODE DERIVATION — `deriveTowerInitiativeMode` pure derivation
+// ===========================================================================
+
+async function runModeDerivationSuite(): Promise<void> {
+  console.log("\n9. Tower initiative mode derivation");
+
+  await check("empty initiatives → empty", () => {
+    assert.equal(deriveTowerInitiativeMode([]), "empty");
+    assert.equal(deriveTowerInitiativeMode(undefined), "empty");
+  });
+
+  await check("only llm/fallback initiatives → llm-discovered", () => {
+    const initiatives: L3Initiative[] = [
+      {
+        id: "a",
+        solutionName: "A",
+        tagline: "t",
+        aiRationale: "r",
+        feasibility: "Low",
+        source: "llm",
+        generatedAt: new Date().toISOString(),
+      },
+      {
+        id: "b",
+        solutionName: "B",
+        tagline: "t",
+        aiRationale: "r",
+        feasibility: "Low",
+        source: "fallback",
+        generatedAt: new Date().toISOString(),
+      },
+    ];
+    assert.equal(deriveTowerInitiativeMode(initiatives), "llm-discovered");
+  });
+
+  await check("any manual initiative → user-uploaded", () => {
+    const initiatives: L3Initiative[] = [
+      {
+        id: "a",
+        solutionName: "A",
+        tagline: "t",
+        aiRationale: "r",
+        feasibility: "Low",
+        source: "manual",
+        generatedAt: new Date().toISOString(),
+      },
+    ];
+    assert.equal(deriveTowerInitiativeMode(initiatives), "user-uploaded");
+  });
+
+  await check(
+    "mixed (defensive): manual wins so uploads aren't silently hidden",
+    () => {
+      // By construction the orchestrator + clear helpers never produce
+      // a mixed slate, but if upstream state ever lands mixed (bug, dev
+      // tools, partial migration), manual wins so the user's upload
+      // doesn't disappear behind LLM cards.
+      const initiatives: L3Initiative[] = [
+        {
+          id: "a",
+          solutionName: "A",
+          tagline: "t",
+          aiRationale: "r",
+          feasibility: "Low",
+          source: "llm",
+          generatedAt: new Date().toISOString(),
+        },
+        {
+          id: "b",
+          solutionName: "B",
+          tagline: "t",
+          aiRationale: "r",
+          feasibility: "Low",
+          source: "manual",
+          generatedAt: new Date().toISOString(),
+        },
+      ];
+      assert.equal(deriveTowerInitiativeMode(initiatives), "user-uploaded");
+    },
+  );
+}
+
+// ===========================================================================
 //   Run everything
 // ===========================================================================
 
@@ -1407,8 +1657,9 @@ async function main(): Promise<void> {
   await runFallbackSuite();
   await runOrchestratorSuite();
   await runRegenGuardrailSuite();
-  await runDeleteSuite();
+  await runClearHelpersSuite();
   await runRouteFallbackDrainSuite();
+  await runModeDerivationSuite();
 
   console.log();
   if (failures > 0) {

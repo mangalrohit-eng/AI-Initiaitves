@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { useToast } from "@/components/feedback/ToastProvider";
+import { useAssessSync } from "@/components/assess/AssessSyncProvider";
 import {
   getAssessProgram,
   getAssessProgramHydrationSnapshot,
@@ -12,6 +13,8 @@ import {
 } from "@/lib/localStore";
 import { hasInFlightRows } from "@/lib/initiatives/curationHash";
 import {
+  clearManualInitiativesForTower,
+  countAllManualInitiatives,
   countManualInitiativesForRows,
   runForL3Rows,
   unstickInterruptedCurationRows,
@@ -23,6 +26,7 @@ import type {
   L3WorkforceRowV6,
   TowerId,
 } from "@/data/assess/types";
+import type { TowerInitiativeMode } from "@/lib/initiatives/towerMode";
 import { getTowerHref } from "@/lib/towerHref";
 import { cn } from "@/lib/utils";
 import { curationProgressLine, llmLoadingCopy } from "@/lib/llm/loadingCopy";
@@ -59,8 +63,22 @@ function legacyPromptVersionRowCount(
  * rows-per-tower is small enough (~3-30) that a single streaming request
  * is the right granularity.
  */
-export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
+export function RegenerateAiGuidanceToolbar({
+  towerId,
+  initiativeMode = "empty",
+}: {
+  towerId: TowerId;
+  /**
+   * Source-exclusivity mode for the tower. When `"user-uploaded"`,
+   * the Regenerate button is hard-greyed and a "Clear uploaded"
+   * affordance is surfaced so the lead can switch into discovery
+   * mode explicitly. Defaults to `"empty"` so the toolbar still
+   * works when rendered outside the WorkshopToolsDrawer.
+   */
+  initiativeMode?: TowerInitiativeMode;
+}) {
   const toast = useToast();
+  const sync = useAssessSync();
   const [program, setProgram] = React.useState<AssessProgramV2>(() =>
     getAssessProgramHydrationSnapshot(),
   );
@@ -113,9 +131,20 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
     () => countManualInitiativesForRows(towerId, rowIds),
     [towerId, rowIds],
   );
+  // Total manual cards on the tower (across every L3 row, not just
+  // eligible ones). Used by the user-uploaded-mode banner so the
+  // count there matches `UploadInitiativesPanel.manualCount`.
+  const towerManualCount = React.useMemo(() => {
+    void program;
+    return countAllManualInitiatives(towerId);
+  }, [program, towerId]);
 
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [clearUploadedOpen, setClearUploadedOpen] = React.useState(false);
+  const [clearingUploaded, setClearingUploaded] = React.useState(false);
   const [running, setRunning] = React.useState(false);
+
+  const modeBlocked = initiativeMode === "user-uploaded";
   // Streaming progress tracker: increments once per row as the curation
   // route emits its `done` / `failed` events. Drives the inline "Scoring
   // X of Y" status line below the button.
@@ -125,8 +154,39 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
 
   const impactLeversHref = getTowerHref(towerId, "impact-levers");
 
+  const onClearUploaded = React.useCallback(async () => {
+    setClearingUploaded(true);
+    let removed = 0;
+    try {
+      removed = clearManualInitiativesForTower(towerId);
+      if (sync?.flushSave) {
+        try {
+          await sync.flushSave();
+        } catch {
+          // best-effort; debounce will retry.
+        }
+      }
+    } finally {
+      setClearingUploaded(false);
+      setClearUploadedOpen(false);
+    }
+    if (removed > 0) {
+      toast.success({
+        title: `${removed} uploaded card${removed === 1 ? "" : "s"} cleared`,
+        description:
+          "Tower is now empty. Click Regenerate AI guidance to discover a fresh slate from the LLM.",
+        durationMs: 8000,
+      });
+    } else {
+      toast.info({
+        title: "Nothing to clear",
+        description: "This tower has no uploaded initiatives.",
+      });
+    }
+  }, [towerId, sync, toast]);
+
   const onRegenerate = React.useCallback(async () => {
-    if (running || inFlight) return;
+    if (running || inFlight || modeBlocked) return;
     const fresh = getAssessProgram();
     const t = fresh.towers[towerId];
     if (!t || !t.l3Rows) {
@@ -203,11 +263,11 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
         (summary.warning ? ` ${summary.warning}` : ""),
       durationMs: 8000,
     });
-  }, [running, inFlight, toast, towerId]);
+  }, [running, inFlight, modeBlocked, toast, towerId]);
 
   if (rowIds.length === 0) return null;
 
-  const disabled = running || inFlight;
+  const disabled = running || inFlight || modeBlocked;
 
   const curateCopy = llmLoadingCopy("curate-initiatives");
 
@@ -222,7 +282,9 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
             title={
               inFlight
                 ? "Curation in progress"
-                : `Re-run Versant-grounded AI scoring for the eligible Job Families (typically ${curateCopy.timeWindow} for a tower)`
+                : modeBlocked
+                  ? `Disabled — tower has ${towerManualCount} uploaded card${towerManualCount === 1 ? "" : "s"}. Clear uploads first to switch into LLM-discovered mode.`
+                  : `Re-run Versant-grounded AI scoring for the eligible Job Families (typically ${curateCopy.timeWindow} for a tower)`
             }
             className={cn(
               "inline-flex items-center gap-2 rounded-lg border border-accent-purple/50 bg-transparent px-4 py-2 text-sm font-semibold text-forge-body transition",
@@ -241,6 +303,44 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
               : "Regenerate AI guidance"}
           </button>
         </div>
+        {modeBlocked && !running ? (
+          <div
+            className="flex max-w-md items-start gap-2.5 rounded-lg border border-accent-amber/40 bg-accent-amber/5 px-3 py-2 text-[11px] leading-relaxed text-forge-body"
+            role="status"
+          >
+            <AlertTriangle
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-amber"
+              aria-hidden
+            />
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-forge-ink">
+                Regenerate disabled — tower is in user-uploaded mode
+              </div>
+              <div className="mt-0.5 text-forge-subtle">
+                <span className="font-mono text-forge-body">{towerManualCount}</span>{" "}
+                uploaded card{towerManualCount === 1 ? "" : "s"} on this tower.
+                LLM-discovered and uploaded initiatives can&rsquo;t coexist —
+                clear the uploads first to switch modes.
+              </div>
+              <button
+                type="button"
+                onClick={() => setClearUploadedOpen(true)}
+                disabled={clearingUploaded}
+                className="mt-1.5 inline-flex items-center gap-1.5 rounded-md border border-accent-amber/50 bg-accent-amber/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-accent-amber transition hover:border-accent-amber hover:bg-accent-amber/15 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {clearingUploaded ? (
+                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                ) : (
+                  <Trash2 className="h-3 w-3" aria-hidden />
+                )}
+                Clear uploaded
+                <span className="ml-0.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent-amber/20 px-1 font-mono text-[10px] text-accent-amber">
+                  {towerManualCount}
+                </span>
+              </button>
+            </div>
+          </div>
+        ) : null}
         {!running && interruptedRecovered > 0 ? (
           <div
             className="flex max-w-md items-start gap-2 rounded-lg border border-accent-amber/40 bg-accent-amber/5 px-3 py-2 text-[11px] leading-relaxed text-forge-body"
@@ -335,6 +435,36 @@ export function RegenerateAiGuidanceToolbar({ towerId }: { towerId: TowerId }) {
                 Configure Impact Levers
               </Link>{" "}
               to raise the dial.
+            </p>
+          </div>
+        }
+      />
+
+      <ConfirmDialog
+        open={clearUploadedOpen}
+        onClose={() => setClearUploadedOpen(false)}
+        onConfirm={onClearUploaded}
+        title="Clear all uploaded initiatives on this tower?"
+        confirmLabel="Clear uploaded"
+        cancelLabel="Cancel"
+        variant="destructive"
+        busy={clearingUploaded}
+        description={
+          <div className="space-y-2 text-sm leading-relaxed text-forge-body">
+            <p>
+              This hard-deletes{" "}
+              <span className="font-mono text-accent-red">{towerManualCount}</span>{" "}
+              uploaded initiative{towerManualCount === 1 ? "" : "s"} across
+              every Job Family on this tower, along with any approve/reject
+              decisions on those cards.
+            </p>
+            <p className="text-xs text-forge-subtle">
+              Use this to switch the tower into LLM-discovered mode. After
+              clearing, click{" "}
+              <span className="font-semibold text-forge-ink">
+                Regenerate AI guidance
+              </span>{" "}
+              to populate a fresh slate from the LLM.
             </p>
           </div>
         }

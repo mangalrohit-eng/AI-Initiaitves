@@ -11,13 +11,13 @@
  *      doesn't artificially collapse every row to one L3).
  *   4. Stubs fetch with a deterministic NDJSON stream that emits one
  *      `row` event per upload (no LLM, no skipped rows by construction).
- *   5. Runs the orchestrator under `DEBUG_UPLOAD_ENRICH=1` and dumps the
- *      summary + the actual storage state.
- *   6. Asserts storage card count == parsed upload count, then runs a
- *      second pass with 5 pre-existing rejected reviews seeded on the
- *      first 5 upload names to validate the "wipe clears stale reviews"
- *      semantics. If the gallery-side filter would hide any card, the
- *      script flags it.
+ *   5. PASS 1 — runs the orchestrator under `DEBUG_UPLOAD_ENRICH=1` and
+ *      asserts `storage card count == parsed upload count` (every row
+ *      stamped, none silently dropped).
+ *   6. PASS 2 — re-runs the orchestrator with the SAME xlsx and asserts
+ *      `summary.skippedDuplicates == parsed.length` AND
+ *      `summary.enriched == 0` (idempotent re-upload, the new
+ *      incremental contract).
  *
  * Run: `npx tsx scripts/diagUploadFromXlsx.ts <path/to/initiatives.xlsx>`
  */
@@ -60,7 +60,6 @@ import {
 import {
   getAssessProgram,
   setAssessProgram,
-  setInitiativeReview,
 } from "../src/lib/localStore";
 import {
   defaultTowerBaseline,
@@ -277,138 +276,50 @@ async function main(): Promise<void> {
   }
 
   // ===========================================================================
-  // Second pass: replay the upload but with 5 PRE-EXISTING REJECTED reviews
-  // that name-match cards in the user's xlsx. This tests the "stale rejection
-  // survives wipe" hypothesis — the gallery's `useInitiativeReviewsV6` filter
-  // could quietly hide newly uploaded cards if their `id` collides with a
-  // rejected entry (possible via the brief-cache id-reuse path).
+  // Pass 2: re-upload the SAME xlsx and assert idempotency.
+  //
+  // The incremental contract: every row in the new upload whose
+  // `(name | description | tech)` fingerprint already lives on the
+  // tower is skipped. So passing the same parsed rows again must yield
+  // `enriched = 0`, `skippedDuplicates = total`, and no change to
+  // storage card count.
   // ===========================================================================
-  console.log("\n=== Second pass: simulate 5 pre-existing rejected reviews ===");
+  console.log("\n=== Pass 2: re-upload the SAME xlsx (idempotent re-upload) ===");
   // Silence per-row breadcrumbs during the second pass — we only care
   // about the final tally here.
   (globalThis as { __DEBUG_UPLOAD_ENRICH?: boolean }).__DEBUG_UPLOAD_ENRICH = false;
-  buildSyntheticFinanceTower(uniqueL3Labels);
-
-  // Reach in and stamp 5 LLM-discovered cards directly on the tower, with
-  // the EXACT names + ids the orchestrator would derive on the first 5
-  // user uploads — then reject them via the same code path the UI uses.
-  // This is the cleanest way to seed a "user rejected, then re-uploads
-  // with the same name" scenario.
-  const first5 = finalParsed.rows.slice(0, 5);
-  const program = getAssessProgram();
-  const tower = program.towers[TOWER]!;
-  const newL3Rows = tower.l3Rows!.map((r) => ({ ...r }));
-  function slug(s: string): string {
-    return s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 48);
-  }
-  for (const u of first5) {
-    const rowSlug = u.l3Raw
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-    const rowId = `finance::${rowSlug}`;
-    const row = newL3Rows.find((r) => r.id === rowId);
-    if (!row) {
-      console.log(`(no matching synthetic row for ${u.l3Raw} — skipping seed)`);
-      continue;
-    }
-    const id = `mocked::${rowId}::${slug(u.solutionName)}`;
-    const seed = {
-      id,
-      solutionName: u.solutionName,
-      tagline: "Old discovery card.",
-      aiRationale: "Old discovery card.",
-      feasibility: "Low" as const,
-      source: "llm" as const,
-      generatedAt: "2026-04-01T00:00:00.000Z",
-    };
-    row.l3Initiatives = [...(row.l3Initiatives ?? []), seed];
-  }
-  setAssessProgram({
-    ...program,
-    towers: { ...program.towers, [TOWER]: { ...tower, l3Rows: newL3Rows } },
-  });
-  for (const u of first5) {
-    const rowSlug = u.l3Raw
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-    const id = `mocked::finance::${rowSlug}::${slug(u.solutionName)}`;
-    setInitiativeReview(
-      TOWER,
-      id,
-      "rejected",
-      {
-        name: u.solutionName,
-        l2Name: "Synthetic",
-        l3Name: u.l3Raw,
-        l4Name: "covers full Job Family",
-        rowId: `finance::${rowSlug}`,
-      },
-      "diagnostic",
-    );
-  }
-  const reviewsBeforeUpload = getAssessProgram().towers[TOWER]!.initiativeReviews ?? {};
-  console.log(`Seeded ${Object.keys(reviewsBeforeUpload).length} rejected reviews.`);
-
+  const storedBeforePass2 = countStoredCards().total;
   installFetchStub("llm");
   const summary2 = await runEnrichmentFromUpload({
     towerId: TOWER,
     parsedRows: finalParsed.rows,
   });
-  console.log(`\nsecond-pass summary: enriched=${summary2.enriched} failed=${summary2.failed} wipedCount=${summary2.wipedCount} briefsPreserved=${summary2.briefsPreservedCount}`);
-
-  const after = getAssessProgram().towers[TOWER]!;
-  const stored2Total = (after.l3Rows ?? []).reduce(
-    (acc, r) => acc + (r.l3Initiatives?.length ?? 0),
-    0,
+  console.log(
+    `\nsecond-pass summary: enriched=${summary2.enriched} failed=${summary2.failed} skippedDuplicates=${summary2.skippedDuplicates} total=${summary2.totalUploads}`,
   );
-  const reviewsAfter = after.initiativeReviews ?? {};
-  const rejectedIdsAfter = Object.entries(reviewsAfter)
-    .filter(([, r]) => r.status === "rejected")
-    .map(([k]) => k);
-  // Simulate the gallery filter — count cards that SURVIVE the rejection
-  // filter (i.e., what the user would actually see).
-  let visibleCards = 0;
-  const hiddenByRejection: string[] = [];
-  for (const r of after.l3Rows ?? []) {
-    for (const it of r.l3Initiatives ?? []) {
-      if (reviewsAfter[it.id]?.status === "rejected") {
-        hiddenByRejection.push(it.solutionName + " | " + it.id);
-        continue;
-      }
-      visibleCards += 1;
-    }
-  }
-  console.log(`\nstored cards: ${stored2Total}`);
-  console.log(`rejected review entries surviving wipe: ${rejectedIdsAfter.length}`);
-  console.log(`visible cards (after rejection filter): ${visibleCards}`);
-  console.log(`hidden by stale rejection:`);
-  for (const h of hiddenByRejection) console.log(`  • ${h}`);
+  const storedAfterPass2 = countStoredCards().total;
+  console.log(
+    `stored cards before/after pass 2: ${storedBeforePass2} / ${storedAfterPass2}`,
+  );
 
-  const hypothesisConfirmed =
-    stored2Total === finalParsed.rows.length &&
-    visibleCards < finalParsed.rows.length &&
-    hiddenByRejection.length > 0;
+  const pass2Ok =
+    summary2.enriched === 0 &&
+    summary2.skippedDuplicates === finalParsed.rows.length &&
+    storedAfterPass2 === storedBeforePass2;
 
-  if (hypothesisConfirmed) {
+  if (pass2Ok) {
     console.log(
-      "\nHYPOTHESIS CONFIRMED: stale rejected reviews hide newly uploaded cards.",
-    );
-    console.log(
-      `  ${stored2Total} cards in storage, but only ${visibleCards} visible. ${hiddenByRejection.length} hidden by rejection filter.`,
+      `\nPASS 2: idempotent re-upload — all ${finalParsed.rows.length} rows skipped, storage unchanged.`,
     );
   } else {
+    console.log(`\nFAIL PASS 2: incremental contract broken.`);
+    console.log(`  expected enriched=0, skipped=${finalParsed.rows.length}, stored unchanged at ${storedBeforePass2}`);
     console.log(
-      "\nHypothesis NOT confirmed by this synthetic — visible cards match stored count.",
+      `  got      enriched=${summary2.enriched}, skipped=${summary2.skippedDuplicates}, stored=${storedAfterPass2}`,
     );
   }
 
-  process.exit(ok ? 0 : 1);
+  process.exit(ok && pass2Ok ? 0 : 1);
 }
 
 void main().catch((e) => {

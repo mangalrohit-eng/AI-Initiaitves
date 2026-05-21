@@ -20,6 +20,7 @@ import type {
   L3WorkforceRowV6,
   TowerId,
 } from "@/data/assess/types";
+import { deriveTowerInitiativeMode } from "@/lib/initiatives/towerMode";
 import { cn } from "@/lib/utils";
 import { curationProgressLine, llmLoadingCopy } from "@/lib/llm/loadingCopy";
 
@@ -75,7 +76,19 @@ export function StaleCurationBanner({
     () => getTowerStaleState(program.towers[towerId]),
     [program, towerId],
   );
-  const visible = stale.initiativesStale;
+  // Source-exclusivity: when the tower is in user-uploaded mode, the
+  // stale-curation banner is irrelevant — Regenerate AI guidance is
+  // hard-greyed in `RegenerateAiGuidanceToolbar` and clicking through
+  // here would just produce a noop. Suppress the banner so the
+  // facilitator isn't nagged about a flow they explicitly opted out of.
+  const initiativeMode = React.useMemo(
+    () =>
+      deriveTowerInitiativeMode(
+        v6Rows.flatMap((r) => r.l3Initiatives ?? []),
+      ),
+    [v6Rows],
+  );
+  const visible = stale.initiativesStale && initiativeMode !== "user-uploaded";
   const intakeStaleCopy = shouldShowIntakeStaleBannerCopy(program.towers[towerId]);
 
   const [showDiff, setShowDiff] = React.useState(false);

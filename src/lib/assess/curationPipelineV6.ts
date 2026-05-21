@@ -45,6 +45,30 @@ import type { CurateL3OverallSource } from "@/lib/assess/curateL3InitiativesStre
 import { normalizeL3ForMatch } from "@/lib/assess/parseInitiativeUploadFile";
 import type { ParsedInitiativeUploadRow } from "@/lib/assess/parseInitiativeUploadFile";
 
+/**
+ * Diagnostic logging for the Step 4 upload-enrichment path. Off by default
+ * in production. Enable with `DEBUG_UPLOAD_ENRICH=1` (Node) or
+ * `window.__DEBUG_UPLOAD_ENRICH = true` (browser console) to trace every
+ * stampOne call, chunk boundary, wipe, and final storage tally.
+ */
+function uploadEnrichDebugEnabled(): boolean {
+  if (typeof process !== "undefined" && process.env?.DEBUG_UPLOAD_ENRICH === "1") {
+    return true;
+  }
+  if (
+    typeof globalThis !== "undefined" &&
+    (globalThis as { __DEBUG_UPLOAD_ENRICH?: boolean }).__DEBUG_UPLOAD_ENRICH === true
+  ) {
+    return true;
+  }
+  return false;
+}
+function uploadEnrichLog(label: string, payload?: Record<string, unknown>): void {
+  if (!uploadEnrichDebugEnabled()) return;
+  // eslint-disable-next-line no-console
+  console.log(`[upload-enrich] ${label}`, payload ?? "");
+}
+
 export type RunV6Options = {
   towerId: TowerId;
   /** L3 row ids to curate. Typically every row whose `curationStage === "queued"`. */
@@ -635,10 +659,12 @@ export async function runEnrichmentFromUpload(
     generatedProcess?: L3Initiative["generatedProcess"];
   };
   const briefCacheByName = new Map<string, BriefSnapshot>();
+  const wipedInitiativeIds = new Set<string>();
   let wipedCount = 0;
   for (const r of towerState.l3Rows) {
     for (const it of r.l3Initiatives ?? []) {
       wipedCount += 1;
+      wipedInitiativeIds.add(it.id);
       const key = it.solutionName.trim().toLowerCase();
       if (!key) continue;
       // Prefer the entry that already has a cached brief; if multiple
@@ -654,27 +680,73 @@ export async function runEnrichmentFromUpload(
     }
   }
   summary.wipedCount = wipedCount;
+  // Drop any approve/reject reviews that pointed at wiped initiatives.
+  // The brief-cache reattach can give a fresh uploaded card the same `id`
+  // as a wiped LLM card on a name match — if a stale "rejected" review
+  // survives the wipe, `useInitiativeReviewsV6` silently hides the new
+  // card and the gallery shows N-rejected uploads (the symptom we saw on
+  // the Finance tower: 49 ingested, 44 visible after 5 prior rejections).
+  // Uploads are the new source of truth; reviews on wiped cards are stale
+  // by definition.
+  let staleReviewsCleared = 0;
+  let nextReviews: typeof towerState.initiativeReviews | undefined =
+    towerState.initiativeReviews;
+  if (
+    towerState.initiativeReviews &&
+    Object.keys(towerState.initiativeReviews).length > 0 &&
+    wipedInitiativeIds.size > 0
+  ) {
+    const surviving: Record<string, NonNullable<typeof towerState.initiativeReviews>[string]> = {};
+    for (const [id, review] of Object.entries(towerState.initiativeReviews)) {
+      if (wipedInitiativeIds.has(id)) {
+        staleReviewsCleared += 1;
+        continue;
+      }
+      surviving[id] = review;
+    }
+    nextReviews = Object.keys(surviving).length > 0 ? surviving : undefined;
+  }
   if (wipedCount > 0) {
     setTowerAssess(opts.towerId, {
       l3Rows: towerState.l3Rows.map(
         (r) =>
           ({ ...r, l3Initiatives: [] }) as L3WorkforceRowV6,
       ),
+      ...(staleReviewsCleared > 0 ? { initiativeReviews: nextReviews } : {}),
     });
   }
+  uploadEnrichLog("start", {
+    totalUploads: opts.parsedRows.length,
+    rosterSize: roster.length,
+    wipedCount,
+    briefCacheSize: briefCacheByName.size,
+    staleReviewsCleared,
+    llmMatchedL3Count: summary.llmMatchedL3Count,
+  });
 
   // Atomic per-row stamper. Within-file duplicates get a `(N)` suffix.
   // Cached briefs are re-attached by exact-name match against the
   // pre-wipe snapshot.
   const stampOne = (ev: StreamEnrichUploadRowEvent): void => {
     const fresh = getAssessProgram().towers[opts.towerId];
-    if (!fresh || !fresh.l3Rows) return;
+    if (!fresh || !fresh.l3Rows) {
+      uploadEnrichLog("stamp:abort", {
+        reason: "no tower/l3Rows in fresh program",
+        uploadRowId: ev.uploadRowId,
+      });
+      return;
+    }
 
     const generatedAt = new Date().toISOString();
     const targetRowId = ev.matchedRowId;
     const payload = ev.payload;
     const targetRow = fresh.l3Rows.find((r) => r.id === targetRowId);
     if (!targetRow) {
+      uploadEnrichLog("stamp:row-not-found", {
+        uploadRowId: ev.uploadRowId,
+        matchedRowId: targetRowId,
+        knownRowIds: fresh.l3Rows.map((r) => r.id),
+      });
       summary.failed += 1;
       return;
     }
@@ -738,6 +810,18 @@ export async function runEnrichmentFromUpload(
     } else {
       summary.enriched += 1;
     }
+    uploadEnrichLog("stamp:ok", {
+      uploadRowId: ev.uploadRowId,
+      matchedRowId: targetRowId,
+      finalId: newInitiative.id,
+      finalName: finalName.slice(0, 80),
+      source: ev.source,
+      reusedFromCache: !!cacheHit,
+      withinFileSuffix: finalName !== payload.solutionName,
+      rowCardCountAfter: existing.length + 1,
+      enriched: summary.enriched,
+      failed: summary.failed,
+    });
   };
 
   // Chunk + stream.
@@ -751,11 +835,18 @@ export async function runEnrichmentFromUpload(
   let lastWarning: string | undefined;
   let aborted = false;
 
-  for (const chunk of chunks) {
+  for (let cIdx = 0; cIdx < chunks.length; cIdx += 1) {
+    const chunk = chunks[cIdx]!;
     if (opts.signal?.aborted) {
       aborted = true;
+      uploadEnrichLog("chunk:abort-before-send", { chunkIdx: cIdx });
       break;
     }
+    uploadEnrichLog("chunk:send", {
+      chunkIdx: cIdx,
+      chunkSize: chunk.length,
+    });
+    let rowsReceivedThisChunk = 0;
     const apiRes = await streamEnrichInitiativesFromUpload(
       opts.towerId,
       chunk,
@@ -766,6 +857,7 @@ export async function runEnrichmentFromUpload(
         intakeImportedAt,
         signal: opts.signal,
         onRow: (ev) => {
+          rowsReceivedThisChunk += 1;
           stampOne(ev);
           if (ev.source === "llm") llmCount += 1;
           else fallbackCount += 1;
@@ -777,6 +869,14 @@ export async function runEnrichmentFromUpload(
         },
       },
     );
+    uploadEnrichLog("chunk:done", {
+      chunkIdx: cIdx,
+      chunkSize: chunk.length,
+      rowsReceivedThisChunk,
+      apiOk: apiRes.ok,
+      warning: apiRes.ok ? apiRes.result.warning : undefined,
+      error: apiRes.ok ? undefined : apiRes.error,
+    });
     if (!apiRes.ok) {
       summary.failed += chunk.length;
       summary.warning = apiRes.error;
@@ -798,6 +898,37 @@ export async function runEnrichmentFromUpload(
     } catch {
       // best-effort; debounce will retry.
     }
+  }
+
+  if (uploadEnrichDebugEnabled()) {
+    const finalState = getAssessProgram().towers[opts.towerId];
+    const storedTotal = (finalState?.l3Rows ?? []).reduce(
+      (acc, r) => acc + (r.l3Initiatives?.length ?? 0),
+      0,
+    );
+    const perRow = (finalState?.l3Rows ?? []).map((r) => ({
+      rowId: r.id,
+      cardCount: r.l3Initiatives?.length ?? 0,
+    }));
+    const allIds = (finalState?.l3Rows ?? []).flatMap(
+      (r) => (r.l3Initiatives ?? []).map((it) => it.id),
+    );
+    const uniqueIds = new Set(allIds);
+    const dupIdClusters: Record<string, number> = {};
+    if (allIds.length !== uniqueIds.size) {
+      for (const id of allIds) {
+        dupIdClusters[id] = (dupIdClusters[id] ?? 0) + 1;
+      }
+    }
+    uploadEnrichLog("done", {
+      summary,
+      llmCount,
+      fallbackCount,
+      aborted,
+      storedTotalInTower: storedTotal,
+      perRow,
+      duplicateIds: Object.entries(dupIdClusters).filter(([, c]) => c > 1),
+    });
   }
 
   return summary;

@@ -401,13 +401,28 @@ export async function streamEnrichInitiativesFromUpload(
   let warning: string | undefined;
   let serverError: { code: string; message: string } | undefined;
 
+  const debug =
+    (typeof process !== "undefined" && process.env?.DEBUG_UPLOAD_ENRICH === "1") ||
+    (typeof globalThis !== "undefined" &&
+      (globalThis as { __DEBUG_UPLOAD_ENRICH?: boolean }).__DEBUG_UPLOAD_ENRICH === true);
+  let startedCount = 0;
+  let rowEventCount = 0;
+  let doneCount = 0;
   try {
     for await (const ev of decodeEnrichUploadStreamEvents(
       res.body,
     ) as AsyncGenerator<EnrichUploadStreamEvent>) {
       if (ev.kind === "started") {
+        startedCount += 1;
+        if (debug) {
+          // eslint-disable-next-line no-console
+          console.log("[upload-enrich] stream:started", {
+            totalUploads: ev.totalUploads,
+          });
+        }
         opts.onStarted?.({ totalUploads: ev.totalUploads });
       } else if (ev.kind === "row") {
+        rowEventCount += 1;
         const rowEv: StreamEnrichUploadRowEvent = {
           uploadRowId: ev.uploadRowId,
           matchedRowId: ev.matchedRowId,
@@ -418,13 +433,44 @@ export async function streamEnrichInitiativesFromUpload(
             : {}),
           ...(ev.warning ? { warning: ev.warning } : {}),
         };
+        if (debug) {
+          // eslint-disable-next-line no-console
+          console.log("[upload-enrich] stream:row", {
+            seq: rowEventCount,
+            uploadRowId: ev.uploadRowId,
+            matchedRowId: ev.matchedRowId,
+            source: ev.source,
+            solutionName: ev.payload.solutionName.slice(0, 80),
+            payloadId: ev.payload.id,
+            warning: ev.warning,
+          });
+        }
         collected.push(rowEv);
         opts.onRow?.(rowEv);
       } else if (ev.kind === "done") {
+        doneCount += 1;
         finalSource = ev.source;
         if (ev.warning) warning = ev.warning;
+        if (debug) {
+          // eslint-disable-next-line no-console
+          console.log("[upload-enrich] stream:done", {
+            source: ev.source,
+            warning: ev.warning,
+            startedCount,
+            rowEventCount,
+            doneCount,
+          });
+        }
       } else if (ev.kind === "error") {
         serverError = { code: ev.code, message: ev.message };
+        if (debug) {
+          // eslint-disable-next-line no-console
+          console.log("[upload-enrich] stream:error", {
+            code: ev.code,
+            message: ev.message,
+            rowEventCount,
+          });
+        }
         break;
       }
     }

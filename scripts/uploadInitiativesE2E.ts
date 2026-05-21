@@ -67,7 +67,9 @@ import {
 } from "../src/lib/assess/curationPipelineV6";
 import {
   getAssessProgram,
+  getInitiativeReviews,
   setAssessProgram,
+  setInitiativeReview,
 } from "../src/lib/localStore";
 import {
   defaultTowerBaseline,
@@ -900,6 +902,172 @@ async function runOrchestratorSuite(): Promise<void> {
     });
     assert.equal(flushed, 1, "flushSave should be called exactly once");
   });
+
+  await check(
+    "wipe clears stale rejected reviews so re-uploaded names aren't hidden",
+    async () => {
+      // Scenario that broke the Finance tower on the user's 49-row xlsx:
+      //   1. Prior discovery seeded LLM cards on the tower.
+      //   2. Tower lead rejected some of them via the gallery's Reject
+      //      button — `initiativeReviews` map gets `status: "rejected"`
+      //      entries keyed by the LLM card's `id`.
+      //   3. User uploads a list with the SAME solution names.
+      //   4. The upload orchestrator wipes the LLM cards, then re-stamps
+      //      new uploaded cards. The brief-cache reattach (which exists
+      //      to preserve the cached six-section brief on re-upload by
+      //      exact-name match) reuses the wiped card's `id`.
+      //   5. Without the wipe-clears-reviews fix, the stale rejection
+      //      still applies to the new id and `useInitiativeReviewsV6`
+      //      silently filters the new card out of the gallery — leaving
+      //      the user with "49 enriched, 44 visible".
+      const sharedName = "Intercompany Reconciliation Co-Pilot";
+      seedProgramWithFinanceTower({
+        rowAInitiatives: [
+          { name: sharedName, source: "llm", id: "legacy::shared-id" },
+          { name: "Another Discovery Card", source: "llm", id: "legacy::other-id" },
+        ],
+      });
+
+      // Stamp a rejection against the FIRST card's id. This matches what
+      // the gallery's Reject button does in production.
+      setInitiativeReview(
+        TOWER,
+        "legacy::shared-id",
+        "rejected",
+        {
+          name: sharedName,
+          l2Name: "Corporate Finance",
+          l3Name: "Close and Consolidation",
+          l4Name: "covers full Job Family",
+          rowId: "finance::corp-finance::close-and-consolidation",
+        },
+        "test-rejecter",
+      );
+      assert.equal(
+        getInitiativeReviews(TOWER)["legacy::shared-id"]?.status,
+        "rejected",
+        "rejection should be persisted before the upload",
+      );
+
+      installFetchStub("ok-llm", 1);
+      const summary = await runEnrichmentFromUpload({
+        towerId: TOWER,
+        parsedRows: [
+          {
+            index: 2,
+            l3Raw: "Close and Consolidation",
+            // Same name → brief-cache reattaches the wiped id and the
+            // new card reuses `legacy::shared-id`.
+            solutionName: sharedName,
+            solutionDescription: "Re-uploaded version from the user's list.",
+            tech: "BlackLine",
+            diagnostics: [],
+          },
+        ],
+      });
+
+      assert.equal(summary.enriched, 1);
+      assert.equal(summary.wipedCount, 2);
+      assert.equal(
+        summary.briefsPreservedCount,
+        1,
+        "the same-name upload should reuse the wiped id via brief cache",
+      );
+
+      const reviewsAfter = getInitiativeReviews(TOWER);
+      assert.equal(
+        reviewsAfter["legacy::shared-id"],
+        undefined,
+        "stale rejection on a wiped id must be cleared so the new card surfaces",
+      );
+
+      const row = getTowerRows().find(
+        (r) => r.id === "finance::corp-finance::close-and-consolidation",
+      )!;
+      assert.equal(
+        row.l3Initiatives?.length,
+        1,
+        "row holds exactly the re-uploaded card",
+      );
+      const stamped = row.l3Initiatives![0]!;
+      assert.equal(stamped.id, "legacy::shared-id");
+      assert.equal(stamped.source, "manual");
+      // The selector + reviews filter MUST agree the card is visible.
+      // We replicate the `useInitiativeReviewsV6` filter inline because
+      // this is a Node test — no React.
+      const wouldBeHidden =
+        reviewsAfter[stamped.id]?.status === "rejected";
+      assert.equal(
+        wouldBeHidden,
+        false,
+        "the re-uploaded card must not be hidden by a stale rejection",
+      );
+    },
+  );
+
+  await check(
+    "wipe preserves reviews whose ids do NOT collide with wiped initiatives",
+    async () => {
+      // A separate review against an id that wasn't on the tower at wipe
+      // time (e.g., a review carrying over from a different L3 row or a
+      // stale orphan) should survive. The fix is surgical to wiped ids
+      // only — it must not nuke unrelated reviews.
+      seedProgramWithFinanceTower({
+        rowAInitiatives: [{ name: "Card A", source: "llm", id: "wiped::row-a::card-a" }],
+      });
+      setInitiativeReview(
+        TOWER,
+        "wiped::row-a::card-a",
+        "rejected",
+        {
+          name: "Card A",
+          l2Name: "Corporate Finance",
+          l3Name: "Close and Consolidation",
+          l4Name: "covers full Job Family",
+          rowId: "finance::corp-finance::close-and-consolidation",
+        },
+      );
+      setInitiativeReview(
+        TOWER,
+        "unrelated::id::never-wiped",
+        "approved",
+        {
+          name: "Some Approved Card",
+          l2Name: "Corporate Finance",
+          l3Name: "Close and Consolidation",
+          l4Name: "covers full Job Family",
+          rowId: "finance::corp-finance::close-and-consolidation",
+        },
+      );
+
+      installFetchStub("ok-llm", 1);
+      await runEnrichmentFromUpload({
+        towerId: TOWER,
+        parsedRows: [
+          {
+            index: 2,
+            l3Raw: "Close and Consolidation",
+            solutionName: "Brand-New Upload (no name collision)",
+            solutionDescription: "Fresh upload.",
+            tech: "BlackLine",
+            diagnostics: [],
+          },
+        ],
+      });
+
+      const reviewsAfter = getInitiativeReviews(TOWER);
+      assert.equal(
+        reviewsAfter["wiped::row-a::card-a"],
+        undefined,
+        "review for wiped id must be cleared",
+      );
+      assert.equal(
+        reviewsAfter["unrelated::id::never-wiped"]?.status,
+        "approved",
+        "unrelated review must survive untouched",
+      );
+    },
+  );
 }
 
 // ===========================================================================
